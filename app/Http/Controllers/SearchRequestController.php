@@ -93,6 +93,7 @@ class SearchRequestController extends Controller
             'can' => [
                 'update' => $request->user()->can('update', $search_request),
                 'assign' => $request->user()->can('assign', $search_request),
+                'delete' => $request->user()->can('delete', $search_request),
             ],
         ]);
     }
@@ -123,6 +124,15 @@ class SearchRequestController extends Controller
         $search_request->update($data);
 
         return redirect()->route('search-requests.show', $search_request);
+    }
+
+    public function destroy(Request $request, SearchRequest $search_request)
+    {
+        $this->authorize('delete', $search_request);
+
+        $search_request->delete();
+
+        return redirect()->route('search-requests.index');
     }
 
     // Optioneel (admin): assign endpoint via aparte route

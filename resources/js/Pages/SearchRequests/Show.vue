@@ -1,18 +1,20 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import DangerButton from "@/Components/DangerButton.vue";
 import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
+import Modal from "@/Components/Modal.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, useForm, usePage } from "@inertiajs/vue3";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 const props = defineProps({
     item: Object,
     can: {
         type: Object,
-        default: () => ({ update: false, assign: false }),
+        default: () => ({ update: false, assign: false, delete: false }),
     },
 });
 
@@ -36,6 +38,9 @@ const statusForm = useForm({
 const assignForm = useForm({
     assigned_to: props.item.assigned_to,
 });
+
+const deleteForm = useForm({});
+const showDeleteModal = ref(false);
 
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
@@ -89,6 +94,27 @@ function assignToSelf() {
 function clearAssignment() {
     assignForm.assigned_to = null;
     submitAssignment();
+}
+
+function confirmDelete() {
+    if (deleteForm.processing) return;
+    showDeleteModal.value = true;
+}
+
+function cancelDelete() {
+    showDeleteModal.value = false;
+}
+
+function destroyRequest() {
+    deleteForm.delete(route("search-requests.destroy", props.item.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showDeleteModal.value = false;
+        },
+        onFinish: () => {
+            showDeleteModal.value = false;
+        },
+    });
 }
 
 function formatDate(value) {
@@ -202,6 +228,14 @@ function formatDate(value) {
                             >
                                 Bewerk
                             </Link>
+                            <DangerButton
+                                v-if="can.delete"
+                                type="button"
+                                @click="confirmDelete"
+                                :disabled="deleteForm.processing"
+                            >
+                                Verwijderen
+                            </DangerButton>
                         </div>
                     </div>
 
@@ -326,5 +360,33 @@ function formatDate(value) {
                 </div>
             </div>
         </div>
+
+        <Modal :show="showDeleteModal" @close="cancelDelete">
+            <div class="p-6">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    Weet je het zeker?
+                </h2>
+                <p class="mt-2 text-sm text-gray-600">
+                    Deze aanvraag wordt verwijderd (soft delete) en verdwijnt uit het overzicht.
+                </p>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <SecondaryButton
+                        type="button"
+                        :disabled="deleteForm.processing"
+                        @click="cancelDelete"
+                    >
+                        Annuleren
+                    </SecondaryButton>
+                    <DangerButton
+                        :class="{ 'opacity-25': deleteForm.processing }"
+                        :disabled="deleteForm.processing"
+                        @click="destroyRequest"
+                    >
+                        Verwijderen
+                    </DangerButton>
+                </div>
+            </div>
+        </Modal>
     </AuthenticatedLayout>
 </template>

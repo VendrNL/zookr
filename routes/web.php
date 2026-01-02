@@ -40,8 +40,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
 
     // Search Requests (core functionaliteit)
-    Route::resource('search-requests', SearchRequestController::class)
-        ->except(['destroy']); // destroy later indien nodig
+    Route::resource('search-requests', SearchRequestController::class);
 
     // Extra domeinacties (policy-first)
     Route::patch(
