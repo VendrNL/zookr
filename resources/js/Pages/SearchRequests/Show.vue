@@ -16,6 +16,12 @@ const props = defineProps({
     },
 });
 
+const placeholderUsers = [
+    { id: 1, name: "Demo Admin" },
+    { id: 2, name: "Demo Member" },
+    { id: 3, name: "Demo Assignee" },
+];
+
 const statusOptions = [
     { value: "open", label: "Open" },
     { value: "in_behandeling", label: "In behandeling" },
@@ -66,9 +72,12 @@ function updateStatus() {
 }
 
 function submitAssignment() {
-    assignForm.patch(route("search-requests.assign", props.item.id), {
-        preserveScroll: true,
-    });
+    assignForm.patch(
+        route("search-requests.assign", props.item.id),
+        {
+            preserveScroll: true,
+        }
+    );
 }
 
 function assignToSelf() {
@@ -217,6 +226,7 @@ function formatDate(value) {
                                         id="status"
                                         v-model="statusForm.status"
                                         class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                        :disabled="statusForm.processing"
                                     >
                                         <option
                                             v-for="option in statusOptions"
@@ -263,16 +273,24 @@ function formatDate(value) {
                                 <div>
                                     <InputLabel
                                         for="assigned_to"
-                                        value="Gebruiker ID"
+                                        value="Toegewezen aan"
                                     />
-                                    <TextInput
+                                    <select
                                         id="assigned_to"
                                         v-model.number="assignForm.assigned_to"
-                                        type="number"
-                                        class="mt-1 block w-full"
-                                        inputmode="numeric"
-                                        min="1"
-                                    />
+                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                    >
+                                        <option :value="null">
+                                            Geen toewijzing
+                                        </option>
+                                        <option
+                                            v-for="user in placeholderUsers"
+                                            :key="user.id"
+                                            :value="user.id"
+                                        >
+                                            {{ user.name }}
+                                        </option>
+                                    </select>
                                     <InputError
                                         class="mt-2"
                                         :message="assignForm.errors.assigned_to"
