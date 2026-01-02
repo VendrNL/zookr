@@ -2,13 +2,17 @@
 
 namespace App\Providers;
 
-use App\Models\SearchRequest;
-use App\Policies\SearchRequestPolicy;
-use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\ServiceProvider;
 
-class AuthServiceProvider extends ServiceProvider
+class AppServiceProvider extends ServiceProvider
 {
-    protected $policies = [
-        SearchRequest::class => SearchRequestPolicy::class,
-    ];
+    public function register(): void
+    {
+        //
+    }
+
+    public function boot(): void
+    {
+        //
+    }
 }
