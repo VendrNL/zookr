@@ -2,8 +2,12 @@
 
 use App\Http\Controllers\SearchRequestController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\SpecialismController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +38,16 @@ Route::middleware('auth')->group(function () {
         ->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])
         ->name('profile.destroy');
+
+    Route::get('/organization', [OrganizationController::class, 'edit'])
+        ->name('organization.edit');
+    Route::post('/organization', [OrganizationController::class, 'update'])
+        ->name('organization.update');
+
+    Route::get('/specialism', [SpecialismController::class, 'edit'])
+        ->name('specialism.edit');
+    Route::post('/specialism', [SpecialismController::class, 'update'])
+        ->name('specialism.update');
 });
 
 // Beveiligde applicatie-routes
@@ -56,6 +70,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     )
         ->name('search-requests.status')
         ->middleware('can:update,search_request');
+
+    Route::get('/admin/organizations', [AdminOrganizationController::class, 'index'])
+        ->name('admin.organizations.index')
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::get('/admin/organizations/{user}', [AdminOrganizationController::class, 'edit'])
+        ->name('admin.organizations.edit')
+        ->middleware('can:manageOrganizations,user');
+    Route::patch('/admin/organizations/{user}', [AdminOrganizationController::class, 'update'])
+        ->name('admin.organizations.update')
+        ->middleware('can:manageOrganizations,user');
+
+    Route::get('/admin/users/{user}', [AdminUserController::class, 'edit'])
+        ->name('admin.users.edit')
+        ->middleware('can:manageUsers,user');
+    Route::patch('/admin/users/{user}', [AdminUserController::class, 'update'])
+        ->name('admin.users.update')
+        ->middleware('can:manageUsers,user');
+    Route::patch('/admin/users/{user}/specialism', [AdminUserController::class, 'updateSpecialism'])
+        ->name('admin.users.specialism.update')
+        ->middleware('can:manageUsers,user');
 });
 
 // Auth routes (login, register, email verification, etc.)

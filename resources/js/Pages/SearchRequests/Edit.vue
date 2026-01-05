@@ -5,6 +5,7 @@ import InputLabel from "@/Components/InputLabel.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, useForm } from "@inertiajs/vue3";
+import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const props = defineProps({ item: Object });
 
@@ -24,6 +25,8 @@ const form = useForm({
     due_date: props.item.due_date ?? "",
     status: props.item.status ?? "open",
 });
+
+useDirtyConfirm(form);
 
 function submit() {
     form.put(route("search-requests.update", props.item.id));

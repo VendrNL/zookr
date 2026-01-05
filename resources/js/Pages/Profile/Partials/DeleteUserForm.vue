@@ -7,6 +7,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useForm } from '@inertiajs/vue3';
 import { nextTick, ref } from 'vue';
+import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const confirmingUserDeletion = ref(false);
 const passwordInput = ref(null);
@@ -14,6 +15,8 @@ const passwordInput = ref(null);
 const form = useForm({
     password: '',
 });
+
+useDirtyConfirm(form);
 
 const confirmUserDeletion = () => {
     confirmingUserDeletion.value = true;

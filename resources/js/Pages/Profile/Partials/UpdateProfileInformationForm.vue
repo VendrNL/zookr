@@ -1,9 +1,12 @@
 <script setup>
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
-import { Link, useForm, usePage } from '@inertiajs/vue3';
+import InputError from "@/Components/InputError.vue";
+import InputLabel from "@/Components/InputLabel.vue";
+import PrimaryButton from "@/Components/PrimaryButton.vue";
+import SecondaryButton from "@/Components/SecondaryButton.vue";
+import TextInput from "@/Components/TextInput.vue";
+import { Link, useForm, usePage } from "@inertiajs/vue3";
+import { ref } from "vue";
+import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 defineProps({
     mustVerifyEmail: {
@@ -19,32 +22,120 @@ const user = usePage().props.auth.user;
 const form = useForm({
     name: user.name,
     email: user.email,
+    phone: user.phone ?? "",
+    linkedin_url: user.linkedin_url ?? "",
+    avatar: null,
+    remove_avatar: false,
 });
+
+useDirtyConfirm(form);
+
+const avatarPreview = ref(null);
+const LINKEDIN_PREFIX = "https://www.linkedin.com/in/";
+const linkedinHandle = ref(
+    form.linkedin_url?.startsWith(LINKEDIN_PREFIX)
+        ? form.linkedin_url.replace(LINKEDIN_PREFIX, "")
+        : form.linkedin_url?.replace("linkedin.com/in/", "") || ""
+);
+const avatarInput = ref(null);
+
+const submit = () => {
+    form
+        .transform((data) => ({
+            ...data,
+            linkedin_url: linkedinHandle.value
+                ? `${LINKEDIN_PREFIX}${linkedinHandle.value}`
+                : null,
+            _method: "patch",
+        }))
+        .post(route("profile.update"), {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => {
+                form.remove_avatar = false;
+            },
+            onFinish: () => form.reset("avatar"),
+        });
+};
+
+const handleAvatar = (event) => {
+    const file = event.target.files[0] ?? null;
+    form.avatar = file;
+    form.remove_avatar = false;
+    avatarPreview.value = file ? URL.createObjectURL(file) : null;
+};
+
+const openAvatarPicker = () => {
+    avatarInput.value?.click();
+};
+
+const clearAvatar = () => {
+    form.avatar = null;
+    form.remove_avatar = true;
+    avatarPreview.value = null;
+    submit();
+};
 </script>
 
 <template>
-    <section>
-        <header>
-            <h2 class="text-lg font-medium text-gray-900">
-                Profile Information
-            </h2>
+<section>
+    <header>
+        <h2 class="text-lg font-medium text-gray-900">
+            Profielgegevens
+        </h2>
 
-            <p class="mt-1 text-sm text-gray-600">
-                Update your account's profile information and email address.
-            </p>
-        </header>
+        <p class="mt-1 text-sm text-gray-600">
+            Werk je profielgegevens, e-mail en avatar bij.
+        </p>
+    </header>
 
-        <form
-            @submit.prevent="form.patch(route('profile.update'))"
-            class="mt-6 space-y-6"
-        >
-            <div>
-                <InputLabel for="name" value="Name" />
+    <form
+        @submit.prevent="submit"
+        class="mt-6 space-y-6"
+    >
+        <div class="flex items-center gap-4">
+            <div
+                class="h-20 w-20 overflow-hidden rounded-full border border-gray-200 bg-gray-50 shadow-sm"
+                @click="openAvatarPicker"
+                role="button"
+                tabindex="0"
+                @keydown.enter.space.prevent="openAvatarPicker"
+            >
+                <img
+                    v-if="avatarPreview || user.avatar_url"
+                    :src="avatarPreview || user.avatar_url"
+                    alt="Avatar"
+                    class="h-full w-full object-cover"
+                />
+                <div
+                    v-else
+                    class="flex h-full w-full items-center justify-center text-sm text-gray-500 cursor-pointer"
+                >
+                    Kies foto
+                </div>
+            </div>
+            <div class="space-y-2">
+                <input
+                    ref="avatarInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handleAvatar"
+                />
+                <p class="text-sm text-gray-500">
+                    Klik op de cirkel om een avatar te kiezen.
+                </p>
+                <InputError class="mt-1" :message="form.errors.avatar" />
+            </div>
+        </div>
 
-                <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
+        <div>
+            <InputLabel for="name" value="Naam" />
+
+            <TextInput
+                id="name"
+                type="text"
+                class="mt-1 block w-full"
                     v-model="form.name"
                     required
                     autofocus
@@ -52,61 +143,95 @@ const form = useForm({
                 />
 
                 <InputError class="mt-2" :message="form.errors.name" />
-            </div>
+        </div>
 
-            <div>
-                <InputLabel for="email" value="Email" />
+        <div>
+            <InputLabel for="email" value="E-mail" />
 
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
-                    required
-                    autocomplete="username"
+            <TextInput
+                id="email"
+                type="email"
+                class="mt-1 block w-full"
+                v-model="form.email"
+                required
+                autocomplete="username"
+            />
+
+            <InputError class="mt-2" :message="form.errors.email" />
+        </div>
+
+        <div>
+            <InputLabel for="phone" value="Telefoonnummer" />
+
+            <TextInput
+                id="phone"
+                type="text"
+                class="mt-1 block w-full"
+                v-model="form.phone"
+                autocomplete="tel"
+            />
+
+            <InputError class="mt-2" :message="form.errors.phone" />
+        </div>
+
+        <div>
+            <InputLabel for="linkedin_url" value="LinkedIn-profiel" />
+            <div
+                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+            >
+                <span class="select-none pr-0 pl-2 py-2 text-base text-gray-500">
+                    {{ LINKEDIN_PREFIX }}
+                </span>
+                <input
+                    id="linkedin_url"
+                    type="text"
+                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                    v-model="linkedinHandle"
+                    autocomplete="url"
+                    placeholder="gebruikersnaam"
                 />
-
-                <InputError class="mt-2" :message="form.errors.email" />
             </div>
+            <InputError class="mt-2" :message="form.errors.linkedin_url" />
+        </div>
 
-            <div v-if="mustVerifyEmail && user.email_verified_at === null">
-                <p class="mt-2 text-sm text-gray-800">
-                    Your email address is unverified.
-                    <Link
-                        :href="route('verification.send')"
-                        method="post"
-                        as="button"
-                        class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Click here to re-send the verification email.
-                    </Link>
+        <div v-if="mustVerifyEmail && user.email_verified_at === null">
+            <p class="mt-2 text-sm text-gray-800">
+                Je e-mailadres is niet geverifieerd.
+                <Link
+                    :href="route('verification.send')"
+                    method="post"
+                    as="button"
+                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                >
+                    Klik hier om opnieuw een verificatie-mail te sturen.
+                </Link>
+            </p>
+
+            <div
+                v-show="status === 'verification-link-sent'"
+                class="mt-2 text-sm font-medium text-green-600"
+            >
+                Er is een nieuwe verificatielink verzonden naar je e-mailadres.
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <PrimaryButton :disabled="form.processing">Opslaan</PrimaryButton>
+
+            <Transition
+                enter-active-class="transition ease-in-out"
+                enter-from-class="opacity-0"
+                leave-active-class="transition ease-in-out"
+                leave-to-class="opacity-0"
+            >
+                <p
+                    v-if="form.recentlySuccessful"
+                    class="text-sm text-gray-600"
+                >
+                    Opgeslagen.
                 </p>
-
-                <div
-                    v-show="status === 'verification-link-sent'"
-                    class="mt-2 text-sm font-medium text-green-600"
-                >
-                    A new verification link has been sent to your email address.
-                </div>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <PrimaryButton :disabled="form.processing">Save</PrimaryButton>
-
-                <Transition
-                    enter-active-class="transition ease-in-out"
-                    enter-from-class="opacity-0"
-                    leave-active-class="transition ease-in-out"
-                    leave-to-class="opacity-0"
-                >
-                    <p
-                        v-if="form.recentlySuccessful"
-                        class="text-sm text-gray-600"
-                    >
-                        Saved.
-                    </p>
-                </Transition>
-            </div>
-        </form>
-    </section>
+            </Transition>
+        </div>
+    </form>
+</section>
 </template>

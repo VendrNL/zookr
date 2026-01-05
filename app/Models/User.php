@@ -15,7 +15,18 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $fillable = [
         'name',
         'email',
+        'phone',
         'password',
+        'is_active',
+        'organization_name',
+        'organization_phone',
+        'organization_email',
+        'organization_website',
+        'organization_logo_path',
+        'specialism_types',
+        'specialism_provinces',
+        'avatar_path',
+        'linkedin_url',
     ];
 
     protected $hidden = [
@@ -28,7 +39,21 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'specialism_types' => 'array',
+            'specialism_provinces' => 'array',
+            'is_active' => 'boolean',
         ];
+    }
+
+    protected $appends = [
+        'avatar_url',
+    ];
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar_path
+            ? \Storage::disk('public')->url($this->avatar_path)
+            : null;
     }
 
     public function createdSearchRequests(): HasMany

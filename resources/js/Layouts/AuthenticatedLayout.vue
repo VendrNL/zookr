@@ -39,6 +39,24 @@ const showingNavigationDropdown = ref(false);
                                 >
                                     Dashboard
                                 </NavLink>
+                                <NavLink
+                                    :href="route('profile.edit')"
+                                    :active="route().current('profile.edit')"
+                                >
+                                    Mijn profiel
+                                </NavLink>
+                                <NavLink
+                                    :href="route('organization.edit')"
+                                    :active="route().current('organization.edit')"
+                                >
+                                    Mijn organisatie
+                                </NavLink>
+                                <NavLink
+                                    :href="route('specialism.edit')"
+                                    :active="route().current('specialism.edit')"
+                                >
+                                    Mijn specialisme
+                                </NavLink>
                             </div>
                         </div>
 
@@ -74,7 +92,17 @@ const showingNavigationDropdown = ref(false);
                                         <DropdownLink
                                             :href="route('profile.edit')"
                                         >
-                                            Profile
+                                            Mijn profiel
+                                        </DropdownLink>
+                                        <DropdownLink
+                                            :href="route('organization.edit')"
+                                        >
+                                            Mijn organisatie
+                                        </DropdownLink>
+                                        <DropdownLink
+                                            :href="route('specialism.edit')"
+                                        >
+                                            Mijn specialisme
                                         </DropdownLink>
                                         <DropdownLink
                                             :href="route('logout')"
@@ -146,6 +174,24 @@ const showingNavigationDropdown = ref(false);
                         >
                             Dashboard
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('profile.edit')"
+                            :active="route().current('profile.edit')"
+                        >
+                            Mijn profiel
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('organization.edit')"
+                            :active="route().current('organization.edit')"
+                        >
+                            Mijn organisatie
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('specialism.edit')"
+                            :active="route().current('specialism.edit')"
+                        >
+                            Mijn specialisme
+                        </ResponsiveNavLink>
                     </div>
 
                     <!-- Responsive Settings Options -->
@@ -165,7 +211,13 @@ const showingNavigationDropdown = ref(false);
 
                         <div class="mt-3 space-y-1">
                             <ResponsiveNavLink :href="route('profile.edit')">
-                                Profile
+                                Mijn profiel
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink :href="route('organization.edit')">
+                                Mijn organisatie
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink :href="route('specialism.edit')">
+                                Mijn specialisme
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 :href="route('logout')"

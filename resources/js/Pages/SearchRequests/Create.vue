@@ -5,6 +5,7 @@ import InputLabel from "@/Components/InputLabel.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, useForm } from "@inertiajs/vue3";
+import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const form = useForm({
     title: "",
@@ -14,6 +15,8 @@ const form = useForm({
     budget_max: null,
     due_date: "",
 });
+
+useDirtyConfirm(form);
 
 function submit() {
     form.post(route("search-requests.store"));

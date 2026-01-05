@@ -4,6 +4,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useForm } from '@inertiajs/vue3';
+import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 import { ref } from 'vue';
 
 const passwordInput = ref(null);
@@ -14,6 +15,8 @@ const form = useForm({
     password: '',
     password_confirmation: '',
 });
+
+useDirtyConfirm(form);
 
 const updatePassword = () => {
     form.put(route('password.update'), {
