@@ -33,6 +33,15 @@ const statuses = [
 
 const hasFilters = computed(() => Boolean(form.status || form.q));
 
+function formatDate(value) {
+    if (!value) return "-";
+    return new Intl.DateTimeFormat("nl-NL", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    }).format(new Date(value));
+}
+
 function applyFilters() {
     router.get(
         route("search-requests.index"),
@@ -45,6 +54,10 @@ function resetFilters() {
     form.status = "";
     form.q = "";
     applyFilters();
+}
+
+function openItem(id) {
+    router.visit(route("search-requests.show", id));
 }
 
 function statusBadgeClass(status) {
@@ -186,7 +199,7 @@ function statusLabel(status) {
                                     <th
                                         class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600"
                                     >
-                                        Status
+                                        Type vastgoed
                                     </th>
                                     <th
                                         class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600"
@@ -194,11 +207,10 @@ function statusLabel(status) {
                                         Aangemaakt
                                     </th>
                                     <th
-                                        class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600"
+                                        class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-600"
                                     >
-                                        Toegewezen
+                                        Status
                                     </th>
-                                    <th class="px-4 py-3"></th>
                                 </tr>
                             </thead>
 
@@ -206,7 +218,7 @@ function statusLabel(status) {
                                 <tr v-if="items.data?.length === 0">
                                     <td
                                         class="px-4 py-6 text-sm text-gray-600"
-                                        colspan="6"
+                                        colspan="5"
                                     >
                                         Geen aanvragen gevonden.
                                     </td>
@@ -215,7 +227,12 @@ function statusLabel(status) {
                                 <tr
                                     v-for="item in items.data"
                                     :key="item.id"
-                                    class="hover:bg-gray-50"
+                                    class="cursor-pointer hover:bg-gray-50 focus-within:bg-gray-50"
+                                    role="link"
+                                    tabindex="0"
+                                    @click="openItem(item.id)"
+                                    @keydown.enter.prevent="openItem(item.id)"
+                                    @keydown.space.prevent="openItem(item.id)"
                                 >
                                     <td class="px-4 py-3">
                                         <div
@@ -227,18 +244,26 @@ function statusLabel(status) {
                                             class="text-xs text-gray-500"
                                             v-if="item.creator"
                                         >
-                                            Door: {{ item.creator.name
-                                            }}<span v-if="can.is_admin">
-                                                ({{ item.creator.email }})</span
-                                            >
+                                            {{ item.creator.organization_name || "-" }}
+                                            ({{ item.creator.name }})
                                         </div>
                                     </td>
 
                                     <td class="px-4 py-3 text-sm text-gray-700">
-                                        {{ item.location || "—" }}
+                                        {{ item.location || "-" }}
                                     </td>
 
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 text-sm text-gray-700">
+                                        {{ item.property_type || "-" }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-sm text-gray-700">
+                                        {{
+                                            formatDate(item.created_at)
+                                        }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right">
                                         <span
                                             class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset"
                                             :class="
@@ -247,44 +272,6 @@ function statusLabel(status) {
                                         >
                                             {{ statusLabel(item.status) }}
                                         </span>
-                                    </td>
-
-                                    <td class="px-4 py-3 text-sm text-gray-700">
-                                        {{
-                                            item.created_at
-                                                ? new Date(
-                                                      item.created_at
-                                                  ).toLocaleString("nl-NL")
-                                                : "—"
-                                        }}
-                                    </td>
-
-                                    <td class="px-4 py-3 text-sm text-gray-700">
-                                        <div v-if="item.assignee">
-                                            {{ item.assignee.name
-                                            }}<span v-if="can.is_admin">
-                                                ({{
-                                                    item.assignee.email
-                                                }})</span
-                                            >
-                                        </div>
-                                        <div v-else class="text-gray-400">
-                                            —
-                                        </div>
-                                    </td>
-
-                                    <td class="px-4 py-3 text-right">
-                                        <Link
-                                            :href="
-                                                route(
-                                                    'search-requests.show',
-                                                    item.id
-                                                )
-                                            "
-                                            class="text-sm font-semibold text-gray-900 hover:underline"
-                                        >
-                                            Open
-                                        </Link>
                                     </td>
                                 </tr>
                             </tbody>

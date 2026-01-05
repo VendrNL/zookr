@@ -5,8 +5,8 @@ import InputLabel from "@/Components/InputLabel.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
-import { Head, router, useForm } from "@inertiajs/vue3";
-import { ref } from "vue";
+import { Head, router, useForm, usePage } from "@inertiajs/vue3";
+import { computed, ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const props = defineProps({
@@ -32,6 +32,7 @@ const form = useForm({
     avatar: null,
     remove_avatar: false,
     is_active: props.user.is_active ?? true,
+    is_admin: props.user.is_admin ?? false,
     return_to: props.return_to,
 });
 
@@ -51,6 +52,8 @@ const linkedinHandle = ref(
 const avatarInput = ref(null);
 
 const { confirmLeave } = useDirtyConfirm([form, specialismForm]);
+const page = usePage();
+const isSelf = computed(() => page.props.auth?.user?.id === props.user.id);
 
 const submit = () => {
     form
@@ -146,7 +149,7 @@ const provinceFill = (key) =>
                                 Werk profielgegevens, e-mail en avatar bij.
                             </p>
                         </div>
-                        <div class="flex items-center gap-3 text-sm text-gray-700">
+                        <div class="flex flex-wrap items-center gap-6 text-sm text-gray-700">
                             <span>Actief</span>
                             <button
                                 type="button"
@@ -163,6 +166,24 @@ const provinceFill = (key) =>
                                     :class="form.is_active ? 'translate-x-5' : 'translate-x-1'"
                                 />
                             </button>
+                            <template v-if="!isSelf">
+                                <span>Admin</span>
+                                <button
+                                    type="button"
+                                    class="relative inline-flex h-6 w-11 items-center rounded-full transition"
+                                    :class="form.is_admin ? 'bg-gray-900' : 'bg-gray-300'"
+                                    role="switch"
+                                    :aria-checked="form.is_admin"
+                                    tabindex="0"
+                                    @click="form.is_admin = !form.is_admin"
+                                    @keydown.enter.space.prevent="form.is_admin = !form.is_admin"
+                                >
+                                    <span
+                                        class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition"
+                                        :class="form.is_admin ? 'translate-x-5' : 'translate-x-1'"
+                                    />
+                                </button>
+                            </template>
                         </div>
                     </header>
 

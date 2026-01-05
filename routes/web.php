@@ -6,7 +6,6 @@ use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 use App\Http\Controllers\SpecialismController;
 
 /*
@@ -23,10 +22,8 @@ Route::get('/', function () {
         : redirect()->route('login');
 });
 
-// Dashboard (breeze default)
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})
+// Dashboard (toon Search Requests overzicht)
+Route::get('/dashboard', [SearchRequestController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
@@ -81,6 +78,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('admin.organizations.update')
         ->middleware('can:manageOrganizations,user');
 
+    Route::get('/admin/users', [AdminUserController::class, 'index'])
+        ->name('admin.users.index')
+        ->middleware('can:manageUsers,App\Models\User');
     Route::get('/admin/users/{user}', [AdminUserController::class, 'edit'])
         ->name('admin.users.edit')
         ->middleware('can:manageUsers,user');

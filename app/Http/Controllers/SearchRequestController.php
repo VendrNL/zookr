@@ -16,7 +16,10 @@ class SearchRequestController extends Controller
         $user = $request->user();
 
         $query = SearchRequest::query()
-            ->with(['creator:id,name,email', 'assignee:id,name,email'])
+            ->with([
+                'creator:id,name,email,organization_name',
+                'assignee:id,name,email',
+            ])
             ->latest();
 
         // Niet-admin: alleen eigen aanvragen of aan jou toegewezen

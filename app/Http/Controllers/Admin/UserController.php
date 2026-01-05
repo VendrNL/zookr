@@ -50,6 +50,7 @@ class UserController extends Controller
                 'linkedin_url' => $user->linkedin_url,
                 'avatar_url' => $user->avatar_url,
                 'is_active' => (bool) $user->is_active,
+                'is_admin' => (bool) $user->is_admin,
             ],
             'specialism' => [
                 'selection' => [
@@ -65,6 +66,61 @@ class UserController extends Controller
         ]);
     }
 
+    public function index(Request $request)
+    {
+        $data = $request->validate([
+            'status' => ['nullable', 'in:active,inactive,all'],
+            'admin' => ['nullable', 'in:1,0,all'],
+            'sort' => ['nullable', 'in:name,organization'],
+            'direction' => ['nullable', 'in:asc,desc'],
+        ]);
+
+        $status = $data['status'] ?? 'active';
+        $admin = $data['admin'] ?? 'all';
+        $sort = $data['sort'] ?? 'name';
+        $direction = $data['direction'] ?? 'asc';
+
+        $query = User::query();
+
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        if ($admin === '1') {
+            $query->where('is_admin', true);
+        } elseif ($admin === '0') {
+            $query->where('is_admin', false);
+        }
+
+        if ($sort === 'organization') {
+            $query->orderBy('organization_name', $direction)
+                ->orderBy('name', 'asc');
+        } else {
+            $query->orderBy('name', $direction);
+        }
+
+        $users = $query->get([
+            'id',
+            'name',
+            'email',
+            'organization_name',
+            'is_admin',
+            'is_active',
+        ]);
+
+        return Inertia::render('Admin/Users/Index', [
+            'users' => $users,
+            'filters' => [
+                'status' => $status,
+                'admin' => $admin,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
+        ]);
+    }
+
     public function update(Request $request, User $user)
     {
         $returnTo = $this->resolveReturnTo($request->input('return_to'));
@@ -77,6 +133,7 @@ class UserController extends Controller
             'avatar' => ['nullable', 'image', 'max:2048'],
             'remove_avatar' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
+            'is_admin' => ['sometimes', 'boolean'],
         ]);
 
         $user->fill([
@@ -88,6 +145,10 @@ class UserController extends Controller
 
         if (array_key_exists('is_active', $data)) {
             $user->is_active = (bool) $data['is_active'];
+        }
+
+        if (array_key_exists('is_admin', $data)) {
+            $user->is_admin = (bool) $data['is_admin'];
         }
 
         if (($data['remove_avatar'] ?? false) && $user->avatar_path) {
