@@ -1,12 +1,393 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="nl">
 <head>
-    <meta charset="utf-8">
-    <title>Zookr</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Zookr is een platform voor bedrijfsmakelaars waar zoekvragen centraal worden gedeeld en passend aanbod eenduidig wordt gepresenteerd." />
+  <meta name="theme-color" content="#0b0f19" />
+
+  <title>Zookr.nl — Platform voor bedrijfsmakelaars</title>
+
+  <!-- Favicon -->
+  <link rel="icon" href="resources/images/favicon.ico" sizes="any" />
+
+  <!-- Open Graph (optioneel maar netjes) -->
+  <meta property="og:title" content="Zookr.nl — Platform voor bedrijfsmakelaars" />
+  <meta property="og:description" content="Plaats zoekvragen namens klanten en ontvang passend aanbod eenduidig gepresenteerd. Geen handmatige mailings of knip-en-plak presentaties meer." />
+  <meta property="og:type" content="website" />
+
+  <style>
+    :root{
+      --bg: #ffffff;
+      --surface: rgba(255,255,255,0.75);
+      --border: rgba(17,24,39,0.10);
+      --text: #0b1220;
+      --muted: rgba(11,18,32,0.72);
+      --muted2: rgba(11,18,32,0.55);
+      --brand: #0b5cff;
+      --brand2: #13c2c2;
+      --shadow: 0 18px 50px rgba(11,18,32,0.10);
+      --ring: 0 0 0 4px rgba(11,92,255,0.18);
+      --radius: 18px;
+      --maxw: 1120px;
+    }
+
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg: #0b0f19;
+        --surface: rgba(16,22,36,0.70);
+        --border: rgba(255,255,255,0.10);
+        --text: #f5f7ff;
+        --muted: rgba(245,247,255,0.72);
+        --muted2: rgba(245,247,255,0.55);
+        --brand: #4d8dff;
+        --brand2: #2de1c2;
+        --shadow: 0 18px 60px rgba(0,0,0,0.45);
+        --ring: 0 0 0 4px rgba(77,141,255,0.22);
+      }
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    /* Subtiele background (light/dark) */
+    .bg{
+      position: fixed;
+      inset: 0;
+      pointer-events:none;
+      background:
+        radial-gradient(1200px 800px at 20% 10%, rgba(11,92,255,0.18), transparent 60%),
+        radial-gradient(900px 700px at 80% 30%, rgba(19,194,194,0.16), transparent 60%),
+        radial-gradient(900px 900px at 50% 110%, rgba(11,92,255,0.10), transparent 60%);
+      filter: saturate(110%);
+    }
+
+    .wrap{
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px 18px;
+      position: relative;
+    }
+
+    .container{
+      width:100%;
+      max-width: var(--maxw);
+      display:grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 920px){
+      .container{ grid-template-columns: 1fr; }
+    }
+
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap: 12px;
+    }
+
+    .logo{
+      width: 140px;
+      height: auto;
+      display:block;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .dot{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      box-shadow: 0 0 0 4px rgba(11,92,255,0.10);
+      flex: 0 0 auto;
+    }
+
+    .card{
+      border: 1px solid var(--border);
+      background: var(--surface);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      padding: 26px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow:hidden;
+    }
+
+    .card::before{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background:
+        radial-gradient(600px 200px at 30% -10%, rgba(11,92,255,0.22), transparent 60%),
+        radial-gradient(600px 250px at 70% 0%, rgba(19,194,194,0.18), transparent 60%);
+      opacity: .55;
+      pointer-events:none;
+    }
+
+    .card > *{ position: relative; }
+
+    h1{
+      font-size: clamp(28px, 3.2vw, 44px);
+      line-height: 1.12;
+      margin: 0 0 14px 0;
+      letter-spacing: -0.02em;
+    }
+
+    .lead{
+      font-size: 16px;
+      color: var(--muted);
+      margin: 0 0 18px 0;
+      max-width: 58ch;
+    }
+
+    .bullets{
+      margin: 18px 0 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    .bullets li{
+      display:flex;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.30);
+    }
+    @media (prefers-color-scheme: dark){
+      .bullets li{ background: rgba(0,0,0,0.18); }
+    }
+
+    .check{
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      display:grid;
+      place-items:center;
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+    .check svg{ width: 14px; height: 14px; fill: #fff; }
+
+    .bullets b{
+      display:block;
+      font-weight: 650;
+      margin-bottom: 2px;
+    }
+    .bullets span{
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .aside h2{
+      margin: 0 0 10px 0;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .aside p{
+      margin: 0 0 14px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .cta{
+      display:flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(11,92,255,0.25);
+      background: linear-gradient(135deg, rgba(11,92,255,0.92), rgba(19,194,194,0.82));
+      color: #fff;
+      text-decoration:none;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      box-shadow: 0 14px 30px rgba(11,92,255,0.18);
+      transition: transform .08s ease, filter .15s ease, box-shadow .15s ease;
+      user-select:none;
+    }
+
+    .btn:hover{ filter: brightness(1.03); }
+    .btn:active{ transform: translateY(1px); }
+    .btn:focus{ outline:none; box-shadow: var(--shadow), var(--ring); }
+
+    .btn svg{ width: 18px; height: 18px; fill: #fff; opacity: .95; }
+
+    .mail{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.30);
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (prefers-color-scheme: dark){
+      .mail{ background: rgba(0,0,0,0.18); }
+    }
+
+    .mail a{
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 650;
+    }
+    .mail a:hover{ text-decoration: underline; }
+
+    .footer{
+      margin-top: 16px;
+      color: var(--muted2);
+      font-size: 12px;
+    }
+
+    /* Nettere weergave van SVG logo in dark mode: geef 'm een lichte drop-shadow */
+    @media (prefers-color-scheme: dark){
+      .logo{ filter: drop-shadow(0 10px 24px rgba(0,0,0,0.35)); }
+    }
+  </style>
 </head>
+
 <body>
-    <h1>Zookr</h1>
-    <p>Platform in ontwikkeling.</p>
+  <div class="bg" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <div class="container">
+
+      <!-- Main -->
+      <section class="card">
+        <header>
+          <div class="brand">
+            <!-- Logo -->
+            <img class="logo" src="resources/images/Zookr.svg" alt="Zookr" />
+          </div>
+
+          <div class="pill" title="Status">
+            <span class="dot" aria-hidden="true"></span>
+            <span>Zookr is in ontwikkeling</span>
+          </div>
+        </header>
+
+        <h1>Zoekvragen en aanbod. Eenduidig, snel en gericht.</h1>
+
+        <p class="lead">
+          Zookr is een platform voor bedrijfsmakelaars waar zij zoekvragen namens hun klanten kunnen plaatsen en waar aanbieders van commercieel vastgoed geschikte panden gericht kunnen aanbieden.
+        </p>
+
+        <ul class="bullets">
+          <li>
+            <div class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9.2 16.6 4.9 12.3l1.4-1.4 2.9 2.9 8.5-8.5 1.4 1.4z"/></svg>
+            </div>
+            <div>
+              <b>Stop met handmatige mailings</b>
+              <span>Geen tijd meer verspillen aan handmatige mailings uitsturen en presentaties knippen en plakken.</span>
+            </div>
+          </li>
+
+          <li>
+            <div class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9.2 16.6 4.9 12.3l1.4-1.4 2.9 2.9 8.5-8.5 1.4 1.4z"/></svg>
+            </div>
+            <div>
+              <b>Gerichte distributie in jouw zoekgebied</b>
+              <span>Zookr stuurt jouw zoekvraag in een handomdraai naar alle relevante makelaars in jouw zoekgebied en type vastgoed.</span>
+            </div>
+          </li>
+
+          <li>
+            <div class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9.2 16.6 4.9 12.3l1.4-1.4 2.9 2.9 8.5-8.5 1.4 1.4z"/></svg>
+            </div>
+            <div>
+              <b>Passend aanbod eenduidig gepresenteerd</b>
+              <span>Je krijgt al het passende aanbod overzichtelijk gepresenteerd, zodat je dit eenvoudig online kunt delen met jouw opdrachtgever.</span>
+            </div>
+          </li>
+        </ul>
+
+        <div class="footer">
+          © <span id="year"></span> Zookr.nl
+        </div>
+      </section>
+
+      <!-- Aside / CTA -->
+      <aside class="card aside" aria-label="Contact">
+        <h2>Contact</h2>
+        <p>
+          Zookr is momenteel in ontwikkeling. Wil je alvast meer weten? Neem contact met ons op.
+        </p>
+
+        <div class="cta">
+          <a class="btn" href="mailto:leon@zookr.nl?subject=Zookr%20-%20meer%20informatie">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            Mail ons: leon@zookr.nl
+          </a>
+
+          <div class="mail">
+            <span>Mailadres</span>
+            <a href="mailto:leon@zookr.nl">leon@zookr.nl</a>
+          </div>
+        </div>
+
+        <div class="footer">
+          Tip: je browser volgt automatisch licht/donker op basis van je systeeminstelling.
+        </div>
+      </aside>
+
+    </div>
+  </main>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
