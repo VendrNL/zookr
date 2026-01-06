@@ -5,147 +5,187 @@
   <title>Zookr — Platform voor bedrijfsmakelaars</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Zookr is een platform voor bedrijfsmakelaars waar zoekvragen en passend aanbod voor commercieel vastgoed centraal worden gedeeld.">
+  <meta name="description" content="Zookr is een platform voor bedrijfsmakelaars waar zoekvragen en passend aanbod voor commercieel vastgoed centraal en efficiënt worden gedeeld.">
+  <meta name="color-scheme" content="dark light">
 
-  <!-- Favicon -->
-  <link rel="icon" href="/assets/images/favicon.ico" sizes="any">
+  <!-- Favicon (laat dit staan als je favicon wél als bestand hebt) -->
+  <link rel="icon" href="/images/favicon.ico" sizes="any">
 
   <style>
-    :root {
-      --bg: #000;
-      --text: #fff;
-      --muted: rgba(255,255,255,0.7);
-      --border: rgba(255,255,255,0.15);
+    :root{
+      --bg:#000;
+      --text:#fff;
+      --muted:rgba(255,255,255,0.72);
+      --border:rgba(255,255,255,0.14);
+
+      --pad-left: clamp(32px, 7vw, 140px);
+      --pad-right: clamp(20px, 4vw, 64px);
+
+      --measure: 72ch; /* leesbreedte voor tekst zonder ‘container look’ */
     }
 
-    [data-theme="light"] {
-      --bg: #fff;
-      --text: #000;
-      --muted: rgba(0,0,0,0.65);
-      --border: rgba(0,0,0,0.15);
+    [data-theme="light"]{
+      --bg:#fff;
+      --text:#000;
+      --muted:rgba(0,0,0,0.66);
+      --border:rgba(0,0,0,0.14);
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
-
-    body {
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; margin:0; }
+    body{
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.55;
-      display: flex;
-      flex-direction: column;
-      transition: background 0.2s ease, color 0.2s ease;
+      display:flex;
+      flex-direction:column;
+      transition: background .18s ease, color .18s ease;
     }
 
     /* Header */
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 32px 48px 32px 72px; /* extra links */
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding: 34px var(--pad-right) 26px var(--pad-left);
     }
 
-    .logo {
-      height: 36px;
+    /* Baseline/optische uitlijning logo */
+    .brand{
+      display:flex;
+      align-items:baseline;  /* baseline alignment */
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .logo-wrap{
+      display:inline-flex;
+      align-items:baseline;
+      line-height:1;
+    }
+
+    /* Inline SVG logo: kleur volgt currentColor */
+    #zookr-logo{
+      height: 34px;
       width: auto;
-      display: block;
+      display:block;
+      fill: currentColor;
+      /* optische baseline-correctie (kleine correctie voor dit specifieke logo) */
+      transform: translateY(2px);
+      transform-origin: left center;
     }
 
-    .toggle {
+    /* Subtiele hover animatie (logo + CTA-gevoel) */
+    .logo-wrap:hover #zookr-logo{
+      transform: translateY(2px) translateX(1px);
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.35));
+    }
+    [data-theme="light"] .logo-wrap:hover #zookr-logo{
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.18));
+    }
+
+    /* Ogen (circles) bewegen mee: we bewegen een groep */
+    #eyes{
+      transition: transform 80ms linear;
+      will-change: transform;
+    }
+
+    .toggle{
       font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+      font-weight: 650;
       padding: 8px 14px;
       border: 1px solid var(--border);
-      background: none;
+      background: transparent;
       color: var(--text);
-      transition: background 0.15s ease, color 0.15s ease;
+      cursor:pointer;
+      transition: background .14s ease, color .14s ease, border-color .14s ease;
+      user-select:none;
     }
-
-    .toggle:hover {
+    .toggle:hover{
       background: var(--text);
       color: var(--bg);
+      border-color: var(--text);
     }
 
     /* Main */
-    main {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      padding: 64px 48px 64px 72px; /* extra links */
+    main{
+      flex:1;
+      display:flex;
+      align-items:center;
+      padding: 70px var(--pad-right) 70px var(--pad-left);
     }
 
-    .content {
-      max-width: 900px;
+    /* “Geen containers”, maar wel leesbaarheid: beperk alleen tekstmaat */
+    .content{
+      max-width: var(--measure);
     }
 
-    h1 {
-      font-size: clamp(32px, 4.5vw, 52px);
-      line-height: 1.12;
-      margin: 0 0 32px 0;
-      font-weight: 600;
-      letter-spacing: -0.02em;
+    h1{
+      font-size: clamp(34px, 4.8vw, 64px);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      margin: 0 0 34px 0;
+      font-weight: 650;
     }
 
-    p {
-      font-size: 17px;
+    p{
+      font-size: 18px;
       margin: 0 0 20px 0;
       color: var(--muted);
     }
 
-    /* CTA */
-    .cta {
-      margin-top: 40px;
-      display: inline-flex;
-      align-items: center;
-      padding: 16px 28px;
+    .cta{
+      margin-top: 44px;
+      display:inline-flex;
+      align-items:center;
+      gap: 12px;
+      padding: 16px 30px;
       border: 1px solid var(--text);
       color: var(--text);
-      text-decoration: none;
-      font-weight: 600;
+      text-decoration:none;
+      font-weight: 650;
       letter-spacing: 0.01em;
-      transition: background 0.15s ease, color 0.15s ease;
+      transition: background .14s ease, color .14s ease, transform .08s ease;
     }
-
-    .cta:hover {
+    .cta:hover{
       background: var(--text);
       color: var(--bg);
+      transform: translateY(-1px);
+    }
+    .cta:active{
+      transform: translateY(0);
     }
 
     /* Footer */
-    footer {
-      padding: 28px 48px 28px 72px;
-      font-size: 13px;
-      color: var(--muted);
+    footer{
+      padding: 26px var(--pad-right) 30px var(--pad-left);
       border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
     }
-
-    footer a {
+    footer a{
       color: var(--text);
-      text-decoration: none;
-      font-weight: 600;
+      text-decoration:none;
+      font-weight:650;
+    }
+    footer a:hover{ text-decoration:underline; }
+
+    /* Ultrafine tuning voor ultrawide: extra lucht, zonder ‘container’ */
+    @media (min-width: 1600px){
+      main{ padding-top: 92px; padding-bottom: 92px; }
+      #zookr-logo{ height: 38px; }
     }
 
-    footer a:hover {
-      text-decoration: underline;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      header,
-      main,
-      footer {
-        padding-left: 32px;
-        padding-right: 32px;
-      }
+    /* Mobile */
+    @media (max-width: 768px){
+      header{ padding: 24px 20px; }
+      main{ padding: 40px 20px; align-items:flex-start; }
+      #zookr-logo{ height: 30px; transform: translateY(1px); }
+      h1{ margin-bottom: 22px; }
+      p{ font-size: 16px; }
+      .cta{ width: 100%; justify-content:center; }
     }
   </style>
 </head>
@@ -153,23 +193,35 @@
 <body>
 
   <header>
-    <img
-      id="logo"
-      class="logo"
-      src="/assets/images/Zookr-white.svg"
-      alt="Zookr"
-    >
+    <div class="brand">
+      <span class="logo-wrap" id="logoArea" aria-label="Zookr logo">
+        <!-- Inline SVG logo (kleur volgt currentColor: dark=wit, light=zwart) -->
+        <svg id="zookr-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1718.47 626.4" role="img" aria-label="Zookr">
+          <path d="M1668.91,194.4h49.56v67.2h-42.84c-47.04,0-66.36,16.8-66.36,64.8v290.4h-77.28v-289.6c0-91.2,45.36-132.8,136.92-132.8Z"/>
+          <path d="M1267.73,418.4v198.4h-77.28V0h77.28v370.4l159.6-176h91.56l-177.24,196.8,189.84,225.6h-95.76l-168-198.4Z"/>
+          <path d="M700.81,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM929.29,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"/>
+          <path d="M322.9,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM551.38,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"/>
+          <path d="M0,604.8l226.8-343.2H14.28l13.44-67.2h315.84v11.2l-226.8,344h226.8l-12.6,67.2H0v-12Z"/>
 
-    <button class="toggle" id="themeToggle" aria-label="Toggle light/dark mode">
+          <!-- Ogen-groep: alleen deze beweegt mee met de muis -->
+          <g id="eyes">
+            <!-- Oog in de 'oo' (rechts) -->
+            <circle id="eye-right" cx="978.5" cy="408.8" r="49"/>
+            <!-- Oog in de 'oo' (links) -->
+            <circle id="eye-left" cx="595.5" cy="408.8" r="49"/>
+          </g>
+        </svg>
+      </span>
+    </div>
+
+    <button id="themeToggle" class="toggle" type="button" aria-label="Toggle light/dark mode">
       Light mode
     </button>
   </header>
 
   <main>
     <div class="content">
-      <h1>
-        Het platform voor zoekvragen en aanbod in commercieel vastgoed.
-      </h1>
+      <h1>Het platform voor zoekvragen en aanbod in commercieel vastgoed.</h1>
 
       <p>
         Zookr is een platform voor bedrijfsmakelaars waar zij zoekvragen namens hun klanten kunnen plaatsen en waar aanbieders van commercieel vastgoed gericht geschikt aanbod kunnen aanleveren.
@@ -190,37 +242,69 @@
   </main>
 
   <footer>
-    Zookr is momenteel in ontwikkeling.  
-    Wil je alvast meer weten? Mail naar
+    Zookr is momenteel in ontwikkeling. Wil je alvast meer weten? Mail naar
     <a href="mailto:leon@zookr.nl">leon@zookr.nl</a>.
   </footer>
 
   <script>
+    // Theme toggle (dark default)
     const root = document.documentElement;
     const toggle = document.getElementById('themeToggle');
-    const logo = document.getElementById('logo');
 
-    function setTheme(theme) {
+    function setTheme(theme){
       root.setAttribute('data-theme', theme);
       localStorage.setItem('theme', theme);
-
-      if (theme === 'dark') {
-        logo.src = '/assets/images/Zookr-white.svg';
-        toggle.textContent = 'Light mode';
-      } else {
-        logo.src = '/assets/images/Zookr.svg';
-        toggle.textContent = 'Dark mode';
-      }
+      toggle.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
     }
 
-    // Init
     const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme);
 
     toggle.addEventListener('click', () => {
-      const current = root.getAttribute('data-theme');
-      setTheme(current === 'dark' ? 'light' : 'dark');
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      setTheme(next);
     });
+
+    // Eye tracking on hover: pupils follow cursor subtly
+    const logoArea = document.getElementById('logoArea');
+    const eyes = document.getElementById('eyes');
+
+    // Tune these for subtlety
+    const MAX_OFFSET_X = 10; // px in SVG user space (via transform, behaves nicely)
+    const MAX_OFFSET_Y = 8;
+
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+    function resetEyes(){
+      eyes.setAttribute('transform', 'translate(0 0)');
+    }
+
+    logoArea.addEventListener('mousemove', (e) => {
+      const rect = logoArea.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      // Normalized cursor position relative to logo area (-1..1)
+      const nx = (e.clientX - cx) / (rect.width / 2);
+      const ny = (e.clientY - cy) / (rect.height / 2);
+
+      // Subtle translate
+      const tx = clamp(nx, -1, 1) * MAX_OFFSET_X;
+      const ty = clamp(ny, -1, 1) * MAX_OFFSET_Y;
+
+      eyes.setAttribute('transform', `translate(${tx} ${ty})`);
+    });
+
+    logoArea.addEventListener('mouseenter', () => {
+      // keep responsive; no action required
+    });
+
+    logoArea.addEventListener('mouseleave', () => {
+      resetEyes();
+    });
+
+    // Safety: reset on tab blur (prevents "stuck" eyes)
+    window.addEventListener('blur', resetEyes);
   </script>
 
 </body>
