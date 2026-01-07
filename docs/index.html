@@ -1,151 +1,200 @@
 <!doctype html>
-<html lang="nl" data-theme="dark">
+<html lang="nl" data-theme="light">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Zookr is een platform voor bedrijfsmakelaars waar zij zoekvragen en passend aanbod voor commercieel vastgoed centraal en efficiënt worden gedeeld." />
+  <meta name="color-scheme" content="dark light" />
   <title>Zookr — Platform voor bedrijfsmakelaars</title>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Zookr is een platform voor bedrijfsmakelaars waar zoekvragen en passend aanbod voor commercieel vastgoed centraal en efficiënt worden gedeeld.">
-  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="/images/favicon.ico" sizes="any" />
 
-  <!-- Favicon (laat dit staan als je favicon wél als bestand hebt) -->
-  <link rel="icon" href="/images/favicon.ico" sizes="any">
+  <!-- Figtree (Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
     :root{
+      /* Theme */
+      --bg:#fff;
+      --text:#000;
+      --muted:rgba(0,0,0,0.66);
+      --border:rgba(0,0,0,0.14);
+
+      /* Layout */
+      --pad-left: clamp(36px, 8vw, 160px);
+      --pad-right: clamp(20px, 4vw, 72px);
+      --measure: 74ch;
+
+      /* Typography */
+      --font: "Figtree", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      --h1-size: clamp(34px, 4.8vw, 64px);
+      --h1-line: 1.06;
+      --h1-track: -0.035em;
+
+      /* Switch palette (light) */
+      --sw-track:#d8dce6;
+      --sw-thumb:#f4f6fb;
+      --sw-shadow: rgba(0,0,0,0.18);
+      --sw-label: rgba(0,0,0,0.30);
+      --sw-label-strong: rgba(0,0,0,0.55);
+    }
+
+    html[data-theme="dark"]{
       --bg:#000;
       --text:#fff;
       --muted:rgba(255,255,255,0.72);
       --border:rgba(255,255,255,0.14);
 
-      --pad-left: clamp(32px, 7vw, 140px);
-      --pad-right: clamp(20px, 4vw, 64px);
-
-      --measure: 72ch; /* leesbreedte voor tekst zonder ‘container look’ */
-    }
-
-    [data-theme="light"]{
-      --bg:#fff;
-      --text:#000;
-      --muted:rgba(0,0,0,0.66);
-      --border:rgba(0,0,0,0.14);
+      /* Switch palette (dark) */
+      --sw-track:#2a2f3b;
+      --sw-thumb:#6d7383;
+      --sw-shadow: rgba(0,0,0,0.45);
+      --sw-label: rgba(255,255,255,0.30);
+      --sw-label-strong: rgba(255,255,255,0.55);
     }
 
     *{ box-sizing:border-box; }
     html,body{ height:100%; margin:0; }
     body{
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font);
       background: var(--bg);
       color: var(--text);
       line-height: 1.55;
       display:flex;
       flex-direction:column;
       transition: background .18s ease, color .18s ease;
+      overflow-x:hidden;
     }
 
-    /* Header */
     header{
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:space-between;
-      gap:16px;
-      padding: 34px var(--pad-right) 26px var(--pad-left);
+      gap:24px;
+      padding: 34px var(--pad-right) 18px var(--pad-left);
     }
 
-    /* Baseline/optische uitlijning logo */
-    .brand{
-      display:flex;
-      align-items:baseline;  /* baseline alignment */
-      gap: 14px;
-      min-width: 0;
-    }
+    .logo-wrap{ display:inline-flex; line-height:1; user-select:none; }
 
-    .logo-wrap{
-      display:inline-flex;
-      align-items:baseline;
-      line-height:1;
-    }
-
-    /* Inline SVG logo: kleur volgt currentColor */
     #zookr-logo{
-      height: 34px;
-      width: auto;
+      height: clamp(68px, 7.5vw, 104px);
+      width:auto;
       display:block;
-      fill: currentColor;
-      /* optische baseline-correctie (kleine correctie voor dit specifieke logo) */
-      transform: translateY(2px);
-      transform-origin: left center;
-    }
-
-    /* Subtiele hover animatie (logo + CTA-gevoel) */
-    .logo-wrap:hover #zookr-logo{
-      transform: translateY(2px) translateX(1px);
-      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.35));
-    }
-    [data-theme="light"] .logo-wrap:hover #zookr-logo{
-      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.18));
-    }
-
-    /* Ogen (circles) bewegen mee: we bewegen een groep */
-    #eyes{
-      transition: transform 80ms linear;
-      will-change: transform;
-    }
-
-    .toggle{
-      font-size: 13px;
-      font-weight: 650;
-      padding: 8px 14px;
-      border: 1px solid var(--border);
-      background: transparent;
+      transform: translateY(4px);
+      transform-origin:left top;
       color: var(--text);
-      cursor:pointer;
-      transition: background .14s ease, color .14s ease, border-color .14s ease;
-      user-select:none;
-    }
-    .toggle:hover{
-      background: var(--text);
-      color: var(--bg);
-      border-color: var(--text);
     }
 
-    /* Main */
+    #zookr-logo .mark{ fill: currentColor; }
+    #zookr-logo .pupil{ fill: currentColor; will-change: transform; }
+
+    /* ----- Toggle switch (≈30% smaller) ----- */
+    .theme-switch{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      user-select:none;
+      margin-top: 8px;
+      font-family: var(--font);
+    }
+
+    .theme-switch .lbl{
+      font-weight: 800;
+      letter-spacing: 0.10em;
+      font-size: 10px;
+      line-height: 1.05;
+      text-transform: uppercase;
+      color: var(--sw-label);
+    }
+    html[data-theme="light"] .theme-switch .lbl.left,
+    html[data-theme="dark"]  .theme-switch .lbl.right{
+      color: var(--sw-label-strong);
+    }
+
+    .switch{
+      position: relative;
+      width: 88px;   /* was 126 */
+      height: 36px;  /* was 52  */
+      display:inline-block;
+      flex: 0 0 auto;
+    }
+
+    .switch input{
+      position:absolute;
+      inset:0;
+      opacity:0;
+      cursor:pointer;
+      margin:0;
+      width:100%;
+      height:100%;
+    }
+
+    .track{
+      position:absolute;
+      inset:0;
+      border-radius: 999px;
+      background: var(--sw-track);
+      box-shadow:
+        inset 0 2px 6px rgba(0,0,0,0.12),
+        0 6px 16px var(--sw-shadow);
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+
+    .thumb{
+      position:absolute;
+      top: 4px;
+      left: 4px;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--sw-thumb);
+      box-shadow:
+        0 6px 12px var(--sw-shadow),
+        inset 0 2px 6px rgba(255,255,255,0.35);
+      transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+      transform: translateX(0);
+    }
+
+    /* dark -> thumb right */
+    html[data-theme="dark"] .thumb{
+      transform: translateX(52px); /* 88 - 4 - 28 - 4 = 52 */
+    }
+
     main{
       flex:1;
       display:flex;
       align-items:center;
-      padding: 70px var(--pad-right) 70px var(--pad-left);
+      padding: 60px var(--pad-right) 70px var(--pad-left);
     }
 
-    /* “Geen containers”, maar wel leesbaarheid: beperk alleen tekstmaat */
-    .content{
-      max-width: var(--measure);
-    }
+    .content{ max-width: var(--measure); }
 
     h1{
-      font-size: clamp(34px, 4.8vw, 64px);
-      line-height: 1.08;
-      letter-spacing: -0.03em;
-      margin: 0 0 34px 0;
-      font-weight: 650;
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: var(--h1-track);
+      margin:0 0 34px 0;
+      font-weight: 750;
     }
 
     p{
-      font-size: 18px;
-      margin: 0 0 20px 0;
+      font-size:18px;
+      margin:0 0 20px 0;
       color: var(--muted);
+      font-weight: 500;
     }
 
     .cta{
-      margin-top: 44px;
+      margin-top:44px;
       display:inline-flex;
       align-items:center;
-      gap: 12px;
-      padding: 16px 30px;
-      border: 1px solid var(--text);
+      padding:16px 30px;
+      border:1px solid var(--text);
       color: var(--text);
       text-decoration:none;
-      font-weight: 650;
+      font-weight: 700;
       letter-spacing: 0.01em;
       transition: background .14s ease, color .14s ease, transform .08s ease;
     }
@@ -154,69 +203,64 @@
       color: var(--bg);
       transform: translateY(-1px);
     }
-    .cta:active{
-      transform: translateY(0);
-    }
+    .cta:active{ transform: translateY(0); }
 
-    /* Footer */
     footer{
-      padding: 26px var(--pad-right) 30px var(--pad-left);
-      border-top: 1px solid var(--border);
+      padding:26px var(--pad-right) 30px var(--pad-left);
+      border-top:1px solid var(--border);
       color: var(--muted);
-      font-size: 13px;
+      font-size:13px;
+      font-weight: 500;
     }
     footer a{
       color: var(--text);
       text-decoration:none;
-      font-weight:650;
+      font-weight: 700;
     }
     footer a:hover{ text-decoration:underline; }
 
-    /* Ultrafine tuning voor ultrawide: extra lucht, zonder ‘container’ */
-    @media (min-width: 1600px){
-      main{ padding-top: 92px; padding-bottom: 92px; }
-      #zookr-logo{ height: 38px; }
-    }
-
-    /* Mobile */
+    /* Mobile: hide switch, follow system preference */
     @media (max-width: 768px){
-      header{ padding: 24px 20px; }
-      main{ padding: 40px 20px; align-items:flex-start; }
-      #zookr-logo{ height: 30px; transform: translateY(1px); }
-      h1{ margin-bottom: 22px; }
-      p{ font-size: 16px; }
-      .cta{ width: 100%; justify-content:center; }
+      header{ padding:22px 20px 12px 20px; }
+      main{ padding:34px 20px; align-items:flex-start; }
+      #zookr-logo{ height:70px; transform: translateY(2px); }
+      p{ font-size:16px; }
+      .cta{ width:100%; justify-content:center; }
+
+      .theme-switch{ display:none; }
     }
   </style>
 </head>
 
 <body>
-
   <header>
-    <div class="brand">
-      <span class="logo-wrap" id="logoArea" aria-label="Zookr logo">
-        <!-- Inline SVG logo (kleur volgt currentColor: dark=wit, light=zwart) -->
-        <svg id="zookr-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1718.47 626.4" role="img" aria-label="Zookr">
+    <div class="logo-wrap" aria-label="Zookr logo">
+      <svg id="zookr-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1718.47 626.4" role="img" aria-label="Zookr">
+        <g class="mark">
           <path d="M1668.91,194.4h49.56v67.2h-42.84c-47.04,0-66.36,16.8-66.36,64.8v290.4h-77.28v-289.6c0-91.2,45.36-132.8,136.92-132.8Z"/>
           <path d="M1267.73,418.4v198.4h-77.28V0h77.28v370.4l159.6-176h91.56l-177.24,196.8,189.84,225.6h-95.76l-168-198.4Z"/>
           <path d="M700.81,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM929.29,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"/>
           <path d="M322.9,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM551.38,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"/>
           <path d="M0,604.8l226.8-343.2H14.28l13.44-67.2h315.84v11.2l-226.8,344h226.8l-12.6,67.2H0v-12Z"/>
+        </g>
 
-          <!-- Ogen-groep: alleen deze beweegt mee met de muis -->
-          <g id="eyes">
-            <!-- Oog in de 'oo' (rechts) -->
-            <circle id="eye-right" cx="978.5" cy="408.8" r="49"/>
-            <!-- Oog in de 'oo' (links) -->
-            <circle id="eye-left" cx="595.5" cy="408.8" r="49"/>
-          </g>
-        </svg>
-      </span>
+        <circle id="pupilL" class="pupil" cx="595.5" cy="408.8" r="49"/>
+        <circle id="pupilR" class="pupil" cx="978.5" cy="408.8" r="49"/>
+      </svg>
     </div>
 
-    <button id="themeToggle" class="toggle" type="button" aria-label="Toggle light/dark mode">
-      Light mode
-    </button>
+    <!-- Switch shown only on desktop/tablet -->
+    <div class="theme-switch" aria-label="Theme switch">
+      <span class="lbl left">LIGHT<br>MODE</span>
+
+      <label class="switch" aria-label="Toggle light/dark">
+        <span class="track" aria-hidden="true"></span>
+        <span class="thumb" aria-hidden="true"></span>
+        <input id="themeToggle" type="checkbox" aria-label="Dark mode" />
+      </label>
+
+      <span class="lbl right">DARK<br>MODE</span>
+    </div>
   </header>
 
   <main>
@@ -224,19 +268,19 @@
       <h1>Het platform voor zoekvragen en aanbod in commercieel vastgoed.</h1>
 
       <p>
-        Zookr is een platform voor bedrijfsmakelaars waar zij zoekvragen namens hun klanten kunnen plaatsen en waar aanbieders van commercieel vastgoed gericht geschikt aanbod kunnen aanleveren.
+        Zookr is een platform voor bedrijfsmakelaars waar zij zoekvragen namens hun klanten kunnen plaatsen en waar aanbieders van commercieel vastgoed geschikte panden gericht kunnen aanbieden.
       </p>
 
       <p>
-        Geen tijd meer verspillen aan handmatige mailings of het knippen en plakken van presentaties. Zookr verspreidt jouw zoekvraag in één handeling naar alle relevante makelaars binnen jouw zoekgebied en vastgoedtype.
+        Geen tijd meer verspillen aan handmatige mailings uitsturen en presentaties knippen en plakken. Zookr stuurt jouw zoekvraag in een handomdraai naar alle relevante makelaars in jouw zoekgebied en type vastgoed.
       </p>
 
       <p>
-        Het volledige aanbod wordt eenduidig gepresenteerd, zodat je dit eenvoudig online kunt delen met jouw opdrachtgever.
+        En jij krijgt al het passende aanbod eenduidig gepresenteerd zodat je dit makkelijk online kan delen met jouw opdrachtgever.
       </p>
 
       <a class="cta" href="mailto:leon@zookr.nl?subject=Zookr%20-%20meer%20informatie">
-        Zookr is in ontwikkeling — neem contact op
+        Zookr is momenteel in ontwikkeling — neem contact op
       </a>
     </div>
   </main>
@@ -247,65 +291,176 @@
   </footer>
 
   <script>
-    // Theme toggle (dark default)
+    // ---------------------------
+    // Theme handling
+    // Desktop: user switch + localStorage
+    // Mobile: follow system (switch hidden)
+    // ---------------------------
     const root = document.documentElement;
-    const toggle = document.getElementById('themeToggle');
+    const themeToggle = document.getElementById('themeToggle');
+
+    function isMobile(){
+      return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function systemTheme(){
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
 
     function setTheme(theme){
       root.setAttribute('data-theme', theme);
-      localStorage.setItem('theme', theme);
-      toggle.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+      if (themeToggle) themeToggle.checked = (theme === 'dark');
     }
 
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    setTheme(savedTheme);
-
-    toggle.addEventListener('click', () => {
-      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      setTheme(next);
-    });
-
-    // Eye tracking on hover: pupils follow cursor subtly
-    const logoArea = document.getElementById('logoArea');
-    const eyes = document.getElementById('eyes');
-
-    // Tune these for subtlety
-    const MAX_OFFSET_X = 10; // px in SVG user space (via transform, behaves nicely)
-    const MAX_OFFSET_Y = 8;
-
-    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
-
-    function resetEyes(){
-      eyes.setAttribute('transform', 'translate(0 0)');
+    function applyTheme(){
+      if (isMobile()){
+        // follow system only
+        setTheme(systemTheme());
+        return;
+      }
+      // desktop: saved or default light
+      const saved = localStorage.getItem('theme') || 'light';
+      setTheme(saved);
     }
 
-    logoArea.addEventListener('mousemove', (e) => {
-      const rect = logoArea.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
+    applyTheme();
 
-      // Normalized cursor position relative to logo area (-1..1)
-      const nx = (e.clientX - cx) / (rect.width / 2);
-      const ny = (e.clientY - cy) / (rect.height / 2);
+    // desktop toggle behavior
+    if (themeToggle){
+      themeToggle.addEventListener('change', () => {
+        const theme = themeToggle.checked ? 'dark' : 'light';
+        localStorage.setItem('theme', theme);
+        setTheme(theme);
+      });
+    }
 
-      // Subtle translate
-      const tx = clamp(nx, -1, 1) * MAX_OFFSET_X;
-      const ty = clamp(ny, -1, 1) * MAX_OFFSET_Y;
+    // react to window resize crossing breakpoint
+    window.addEventListener('resize', applyTheme, { passive:true });
 
-      eyes.setAttribute('transform', `translate(${tx} ${ty})`);
-    });
+    // mobile/system changes
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener?.('change', () => { if (isMobile()) setTheme(systemTheme()); });
 
-    logoArea.addEventListener('mouseenter', () => {
-      // keep responsive; no action required
-    });
+    // ---------------------------
+    // Pupils (kept from last working version)
+    // ---------------------------
+    const pupilL = document.getElementById('pupilL');
+    const pupilR = document.getElementById('pupilR');
 
-    logoArea.addEventListener('mouseleave', () => {
-      resetEyes();
-    });
+    const BASE_X = -40;  // as requested
+    const BASE_Y = 0;
 
-    // Safety: reset on tab blur (prevents "stuck" eyes)
-    window.addEventListener('blur', resetEyes);
+    const INNER_R = 92;
+    const PUPIL_R = 49;
+    const MARGIN  = 3;
+    const MAX = Math.max(0, INNER_R - PUPIL_R - MARGIN);
+
+    const SENS_X = 2.0;
+    const SENS_Y = 1.5;
+
+    const FOLLOW_L = 0.22;
+    const FOLLOW_R = 0.18;
+
+    const SACCADE_SPEED_TH = 0.85;  // px/ms
+    const SACCADE_IMPULSE  = 7.5;   // svg units
+    const SACCADE_DECAY    = 0.70;
+
+    const INPUT_SMOOTH = 0.35;
+
+    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+    const hypot = Math.hypot;
+
+    function boundCircle(x, y, max){
+      const len = hypot(x, y);
+      if (len <= max || len === 0) return {x, y};
+      const k = max / len;
+      return { x: x * k, y: y * k };
+    }
+
+    function setPupil(el, dx, dy){
+      el.setAttribute('transform', `translate(${(BASE_X + dx).toFixed(2)} ${(BASE_Y + dy).toFixed(2)})`);
+    }
+
+    setPupil(pupilL, 0, 0);
+    setPupil(pupilR, 0, 0);
+
+    let tX = 0, tY = 0;
+    let sX = 0, sY = 0;
+    let cLX = 0, cLY = 0;
+    let cRX = 0, cRY = 0;
+
+    let kLX = 0, kLY = 0;
+    let kRX = 0, kRY = 0;
+
+    let prevMX = null, prevMY = null, prevMT = performance.now();
+
+    window.addEventListener('mousemove', (e) => {
+      const now = performance.now();
+
+      if (prevMX !== null){
+        const dt = Math.max(16, now - prevMT);
+        const vx = (e.clientX - prevMX) / dt;
+        const vy = (e.clientY - prevMY) / dt;
+        const speed = hypot(vx, vy);
+
+        if (speed > SACCADE_SPEED_TH){
+          const inv = 1 / (speed || 1);
+          const dirX = vx * inv;
+          const dirY = vy * inv;
+
+          kLX += dirX * SACCADE_IMPULSE * 1.00;
+          kLY += dirY * SACCADE_IMPULSE * 0.85;
+
+          kRX += dirX * SACCADE_IMPULSE * 0.92;
+          kRY += dirY * SACCADE_IMPULSE * 0.78;
+
+          const KMAX = MAX * 0.45;
+          kLX = clamp(kLX, -KMAX, KMAX);
+          kLY = clamp(kLY, -KMAX, KMAX);
+          kRX = clamp(kRX, -KMAX, KMAX);
+          kRY = clamp(kRY, -KMAX, KMAX);
+        }
+      }
+      prevMX = e.clientX; prevMY = e.clientY; prevMT = now;
+
+      let nx = (e.clientX / (window.innerWidth  || 1)) * 2 - 1;
+      let ny = (e.clientY / (window.innerHeight || 1)) * 2 - 1;
+
+      nx = clamp(nx * SENS_X, -1, 1);
+      ny = clamp(ny * SENS_Y, -1, 1);
+
+      const raw = boundCircle(nx * MAX, ny * MAX, MAX);
+      tX = raw.x;
+      tY = raw.y;
+    }, { passive:true });
+
+    function animate(){
+      sX += (tX - sX) * INPUT_SMOOTH;
+      sY += (tY - sY) * INPUT_SMOOTH;
+
+      kLX *= SACCADE_DECAY; kLY *= SACCADE_DECAY;
+      kRX *= SACCADE_DECAY; kRY *= SACCADE_DECAY;
+
+      const left  = boundCircle(sX + kLX,        sY + kLY,        MAX);
+      const right = boundCircle(sX * 0.96 + kRX, sY * 0.94 + kRY, MAX);
+
+      cLX += (left.x  - cLX) * FOLLOW_L;
+      cLY += (left.y  - cLY) * FOLLOW_L;
+
+      cRX += (right.x - cRX) * FOLLOW_R;
+      cRY += (right.y - cRY) * FOLLOW_R;
+
+      const L2 = boundCircle(cLX, cLY, MAX);
+      const R2 = boundCircle(cRX, cRY, MAX);
+      cLX = L2.x; cLY = L2.y;
+      cRX = R2.x; cRY = R2.y;
+
+      setPupil(pupilL, cLX, cLY);
+      setPupil(pupilR, cRX, cRY);
+
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
   </script>
-
 </body>
 </html>
