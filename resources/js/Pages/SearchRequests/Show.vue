@@ -1,9 +1,14 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import DangerButton from "@/Components/DangerButton.vue";
+import FormActions from "@/Components/FormActions.vue";
+import FormSection from "@/Components/FormSection.vue";
 import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
+import MaterialIcon from "@/Components/MaterialIcon.vue";
 import Modal from "@/Components/Modal.vue";
+import ModalCard from "@/Components/ModalCard.vue";
+import PageContainer from "@/Components/PageContainer.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
@@ -19,21 +24,10 @@ const props = defineProps({
 });
 
 const placeholderUsers = [
-    { id: 1, name: "Demo Admin" },
-    { id: 2, name: "Demo Member" },
-    { id: 3, name: "Demo Assignee" },
+    { id: 1, name: "Demo admin" },
+    { id: 2, name: "Demo medewerker" },
+    { id: 3, name: "Demo toegewezen" },
 ];
-
-const statusOptions = [
-    { value: "open", label: "Open" },
-    { value: "in_behandeling", label: "In behandeling" },
-    { value: "afgerond", label: "Afgerond" },
-    { value: "geannuleerd", label: "Geannuleerd" },
-];
-
-const statusForm = useForm({
-    status: props.item.status ?? "open",
-});
 
 const assignForm = useForm({
     assigned_to: props.item.assigned_to,
@@ -47,10 +41,10 @@ const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 
 function statusBadgeClass(status) {
     switch (status) {
+        case "concept":
+            return "bg-slate-50 text-slate-700 ring-slate-200";
         case "open":
             return "bg-blue-50 text-blue-700 ring-blue-200";
-        case "in_behandeling":
-            return "bg-amber-50 text-amber-700 ring-amber-200";
         case "afgerond":
             return "bg-emerald-50 text-emerald-700 ring-emerald-200";
         case "geannuleerd":
@@ -62,18 +56,12 @@ function statusBadgeClass(status) {
 
 function statusLabel(status) {
     const map = {
+        concept: "Concept",
         open: "Open",
-        in_behandeling: "In behandeling",
         afgerond: "Afgerond",
         geannuleerd: "Geannuleerd",
     };
     return map[status] ?? status;
-}
-
-function updateStatus() {
-    statusForm.patch(route("search-requests.status", props.item.id), {
-        preserveScroll: true,
-    });
 }
 
 function submitAssignment() {
@@ -117,9 +105,36 @@ function destroyRequest() {
     });
 }
 
-function formatDate(value) {
+function formatLabel(value) {
     if (!value) return "-";
-    return new Date(value).toLocaleDateString("nl-NL");
+    const parts = value.replaceAll("_", " ").split(" ");
+    return parts
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function formatProvince(value) {
+    if (!value) return "-";
+    const parts = value.split("_");
+    if (parts.length > 1) {
+        return parts
+            .map(
+                (part) =>
+                    part.charAt(0).toUpperCase() + part.slice(1)
+            )
+            .join("-");
+    }
+    return formatLabel(value);
+}
+
+function formatProvinceList(list) {
+    if (!list?.length) return "-";
+    return list.map(formatProvince).join(", ");
+}
+
+function acquisitionLabel(value) {
+    if (!value) return "-";
+    return value === "huur" ? "Huur" : "Koop";
 }
 </script>
 
@@ -130,26 +145,37 @@ function formatDate(value) {
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <p class="text-sm text-gray-500">Search Request</p>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        {{ item.title }}
-                    </h1>
+                    <p class="text-sm text-gray-500">Zoekvraag</p>
                 </div>
                 <Link
                     :href="route('search-requests.index')"
                     class="text-sm font-semibold text-gray-700 hover:text-gray-900"
                 >
-                    Terug naar overzicht
+                    <span class="hidden sm:inline">Terug naar overzicht</span>
+                    <span class="sr-only">Terug naar overzicht</span>
+                    <MaterialIcon
+                        name="reply"
+                        class="h-5 w-5 sm:hidden"
+                    />
                 </Link>
             </div>
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 space-y-6">
+            <PageContainer class="max-w-5xl space-y-6">
                 <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
-                    <div
-                        class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200 lg:col-span-2"
-                    >
+                    <FormSection class="lg:col-span-2 space-y-4">
+                        <div>
+                            <img
+                                v-if="item.organization?.logo_url"
+                                :src="item.organization.logo_url"
+                                alt="Makelaar logo"
+                                class="mb-2 h-10 w-auto"
+                            />
+                            <h1 class="text-xl font-semibold text-gray-900">
+                                {{ item.title }}
+                            </h1>
+                        </div>
                         <div class="flex flex-wrap items-center gap-3">
                             <span
                                 class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset"
@@ -171,25 +197,67 @@ function formatDate(value) {
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
+                                <p class="text-sm text-gray-500">Naam klant</p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{ item.customer_name ?? "-" }}
+                                </p>
+                            </div>
+                            <div>
                                 <p class="text-sm text-gray-500">Locatie</p>
                                 <p class="text-base font-medium text-gray-900">
                                     {{ item.location ?? "-" }}
                                 </p>
                             </div>
                             <div>
-                                <p class="text-sm text-gray-500">Deadline</p>
+                                <p class="text-sm text-gray-500">Provincies</p>
                                 <p class="text-base font-medium text-gray-900">
-                                    {{ formatDate(item.due_date) }}
+                                    {{ formatProvinceList(item.provinces) }}
                                 </p>
                             </div>
                             <div>
-                                <p class="text-sm text-gray-500">Budget</p>
+                                <p class="text-sm text-gray-500">Type vastgoed</p>
                                 <p class="text-base font-medium text-gray-900">
-                                    <span v-if="item.budget_min || item.budget_max">
-                                        EUR {{ item.budget_min ?? "-" }} - EUR
-                                        {{ item.budget_max ?? "-" }}
-                                    </span>
-                                    <span v-else>-</span>
+                                    {{ formatLabel(item.property_type) }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Oppervlakte</p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{ item.surface_area ?? "-" }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Parkeren</p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{ item.parking ?? "-" }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">
+                                    Beschikbaarheid
+                                </p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{ item.availability ?? "-" }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">
+                                    Bereikbaarheid
+                                </p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{ item.accessibility ?? "-" }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Verwerving</p>
+                                <p class="text-base font-medium text-gray-900">
+                                    {{
+                                        item.acquisitions?.length
+                                            ? item.acquisitions
+                                                  .map(acquisitionLabel)
+                                                  .join(", ")
+                                            : "-"
+                                    }}
                                 </p>
                             </div>
                             <div>
@@ -214,10 +282,21 @@ function formatDate(value) {
                         </div>
 
                         <div class="space-y-2">
-                            <p class="text-sm text-gray-500">Omschrijving</p>
-                            <p class="whitespace-pre-wrap text-gray-900">
-                                {{ item.description ?? "-" }}
-                            </p>
+                            <p class="text-sm text-gray-500">Bijzonderheden</p>
+                            <ul
+                                v-if="item.notes"
+                                class="list-disc space-y-1 pl-5 text-gray-900"
+                            >
+                                <template
+                                    v-for="(line, index) in item.notes.split('\n')"
+                                    :key="index"
+                                >
+                                    <li v-if="line.trim()">
+                                        {{ line }}
+                                    </li>
+                                </template>
+                            </ul>
+                            <p v-else class="text-gray-900">-</p>
                         </div>
 
                         <div class="flex flex-wrap gap-3 pt-2">
@@ -237,59 +316,12 @@ function formatDate(value) {
                                 Verwijderen
                             </DangerButton>
                         </div>
-                    </div>
+                    </FormSection>
 
                     <div class="space-y-6">
-                        <div
-                            v-if="can.update"
-                            class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
-                        >
-                            <div>
-                                <h3 class="text-sm font-semibold text-gray-900">
-                                    Status bijwerken
-                                </h3>
-                                <p class="text-sm text-gray-500">
-                                    Kies een nieuwe status voor deze aanvraag.
-                                </p>
-                            </div>
-
-                            <form class="space-y-3" @submit.prevent="updateStatus">
-                                <div>
-                                    <InputLabel for="status" value="Status" />
-                                    <select
-                                        id="status"
-                                        v-model="statusForm.status"
-                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                        :disabled="statusForm.processing"
-                                    >
-                                        <option
-                                            v-for="option in statusOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                    <InputError
-                                        class="mt-2"
-                                        :message="statusForm.errors.status"
-                                    />
-                                </div>
-                                <PrimaryButton
-                                    class="w-full justify-center"
-                                    :class="{
-                                        'opacity-25': statusForm.processing,
-                                    }"
-                                    :disabled="statusForm.processing"
-                                >
-                                    Opslaan
-                                </PrimaryButton>
-                            </form>
-                        </div>
-
-                        <div
+                        <FormSection
                             v-if="can.assign"
-                            class="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200"
+                            class="space-y-4"
                         >
                             <div>
                                 <h3 class="text-sm font-semibold text-gray-900">
@@ -355,62 +387,45 @@ function formatDate(value) {
                                     </SecondaryButton>
                                 </div>
                             </form>
-                        </div>
+                        </FormSection>
                     </div>
                 </div>
-            </div>
+            </PageContainer>
         </div>
 
-        <Modal :show="showDeleteModal" @close="cancelDelete">
-            <div class="p-6">
-                <div class="flex items-start gap-3">
-                    <div
-                        class="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-8 ring-rose-50"
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            class="h-5 w-5"
+        <Modal :show="showDeleteModal" maxWidth="md" @close="cancelDelete">
+            <ModalCard>
+                <template #title>
+                    <h2 class="text-xl font-semibold text-gray-900">
+                        Weet je het zeker?
+                    </h2>
+                </template>
+                <template #body>
+                    <p class="text-base font-normal text-gray-900">
+                        Deze aanvraag wordt verwijderd (soft delete) en verdwijnt
+                        uit het overzicht. Je kunt deze actie later niet ongedaan
+                        maken vanuit de applicatie.
+                    </p>
+                </template>
+                <template #actions>
+                    <FormActions align="center">
+                        <SecondaryButton
+                            type="button"
+                            :disabled="deleteForm.processing"
+                            @click="cancelDelete"
                         >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M12 9v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 18c-.77 1.333.192 3 1.732 3Z"
-                            />
-                        </svg>
-                    </div>
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900">
-                            Weet je het zeker?
-                        </h2>
-                        <p class="mt-1 text-sm text-gray-600 leading-relaxed">
-                            Deze aanvraag wordt verwijderd (soft delete) en
-                            verdwijnt uit het overzicht. Je kunt deze actie
-                            later niet ongedaan maken vanuit de applicatie.
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex justify-end gap-3">
-                    <SecondaryButton
-                        type="button"
-                        :disabled="deleteForm.processing"
-                        @click="cancelDelete"
-                    >
-                        Annuleren
-                    </SecondaryButton>
-                    <DangerButton
-                        :class="{ 'opacity-25': deleteForm.processing }"
-                        :disabled="deleteForm.processing"
-                        @click="destroyRequest"
-                    >
-                        Verwijderen
-                    </DangerButton>
-                </div>
-            </div>
+                            Annuleren
+                        </SecondaryButton>
+                        <DangerButton
+                            :class="{ 'opacity-25': deleteForm.processing }"
+                            :disabled="deleteForm.processing"
+                            @click="destroyRequest"
+                        >
+                            Verwijderen
+                        </DangerButton>
+                    </FormActions>
+                </template>
+            </ModalCard>
         </Modal>
     </AuthenticatedLayout>
 </template>

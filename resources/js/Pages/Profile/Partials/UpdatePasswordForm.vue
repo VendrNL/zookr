@@ -16,12 +16,15 @@ const form = useForm({
     password_confirmation: '',
 });
 
-useDirtyConfirm(form);
-
-const updatePassword = () => {
+const updatePassword = (onSuccess) => {
     form.put(route('password.update'), {
         preserveScroll: true,
-        onSuccess: () => form.reset(),
+        onSuccess: () => {
+            form.reset();
+            if (typeof onSuccess === 'function') {
+                onSuccess();
+            }
+        },
         onError: () => {
             if (form.errors.password) {
                 form.reset('password', 'password_confirmation');
@@ -34,24 +37,27 @@ const updatePassword = () => {
         },
     });
 };
+
+useDirtyConfirm(form, undefined, {
+    onSave: (done) => updatePassword(done),
+});
 </script>
 
 <template>
     <section>
         <header>
             <h2 class="text-lg font-medium text-gray-900">
-                Update Password
+                Wijzig wachtwoord
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                Ensure your account is using a long, random password to stay
-                secure.
+                Gebruik een lang en uniek wachtwoord om je account veilig te houden.
             </p>
         </header>
 
         <form @submit.prevent="updatePassword" class="mt-6 space-y-6">
             <div>
-                <InputLabel for="current_password" value="Current Password" />
+                <InputLabel for="current_password" value="Huidig wachtwoord" />
 
                 <TextInput
                     id="current_password"
@@ -69,7 +75,7 @@ const updatePassword = () => {
             </div>
 
             <div>
-                <InputLabel for="password" value="New Password" />
+                <InputLabel for="password" value="Nieuw wachtwoord" />
 
                 <TextInput
                     id="password"
@@ -86,7 +92,7 @@ const updatePassword = () => {
             <div>
                 <InputLabel
                     for="password_confirmation"
-                    value="Confirm Password"
+                    value="Bevestig wachtwoord"
                 />
 
                 <TextInput
@@ -104,7 +110,7 @@ const updatePassword = () => {
             </div>
 
             <div class="flex items-center gap-4">
-                <PrimaryButton :disabled="form.processing">Save</PrimaryButton>
+                <PrimaryButton :disabled="form.processing">Opslaan</PrimaryButton>
 
                 <Transition
                     enter-active-class="transition ease-in-out"
@@ -116,7 +122,7 @@ const updatePassword = () => {
                         v-if="form.recentlySuccessful"
                         class="text-sm text-gray-600"
                     >
-                        Saved.
+                        Opgeslagen.
                     </p>
                 </Transition>
             </div>

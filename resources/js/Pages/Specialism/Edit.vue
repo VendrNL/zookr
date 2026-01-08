@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import PageContainer from "@/Components/PageContainer.vue";
 import InputError from "@/Components/InputError.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
@@ -22,8 +23,6 @@ const form = useForm({
     provinces: props.selection.provinces ?? [],
 });
 
-useDirtyConfirm(form);
-
 const toggle = (key, value) => {
     const list = new Set(form[key]);
     if (list.has(value)) {
@@ -34,11 +33,16 @@ const toggle = (key, value) => {
     form[key] = Array.from(list);
 };
 
-const submit = () => {
+const submit = (onSuccess) => {
     form.post(route("specialism.update"), {
         preserveScroll: true,
+        onSuccess,
     });
 };
+
+useDirtyConfirm(form, undefined, {
+    onSave: (done) => submit(done),
+});
 
 const provinceFill = (key) =>
     form.provinces.includes(key) ? "#e5e7eb" : "#ffffff";
@@ -62,7 +66,7 @@ const provinceFill = (key) =>
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <PageContainer>
                 <form
                     class="space-y-6 rounded-lg bg-white p-6"
                     @submit.prevent="submit"
@@ -136,7 +140,7 @@ const provinceFill = (key) =>
                             <div class="mt-3">
                                 <svg
                                     viewBox="0 0 199.32 236.75"
-                                    class="h-auto w-full"
+                                    class="h-auto w-full max-h-[500px]"
                                     role="img"
                                     aria-label="Kaart van provincies"
                                     style="border: 0 !important; outline: 0 !important; box-shadow: none !important; display: block;"
@@ -302,7 +306,7 @@ const provinceFill = (key) =>
                         </PrimaryButton>
                     </div>
                 </form>
-            </div>
+            </PageContainer>
         </div>
     </AuthenticatedLayout>
 </template>

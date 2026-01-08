@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationContro
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SpecialismController;
+use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +22,18 @@ Route::get('/', function () {
         ? redirect()->route('search-requests.index')
         : redirect()->route('login');
 });
+
+Route::get('/gebruiksvoorwaarden', function () {
+    return Inertia::render('Legal/Terms');
+})->name('legal.terms');
+
+Route::get('/privacyverklaring', function () {
+    return Inertia::render('Legal/Privacy');
+})->name('legal.privacy');
+
+Route::get('/contact', function () {
+    return Inertia::render('Legal/Contact');
+})->name('legal.contact');
 
 // Dashboard (toon Search Requests overzicht)
 Route::get('/dashboard', [SearchRequestController::class, 'index'])
@@ -40,6 +53,14 @@ Route::middleware('auth')->group(function () {
         ->name('organization.edit');
     Route::post('/organization', [OrganizationController::class, 'update'])
         ->name('organization.update');
+    Route::get('/organization/users/create', [OrganizationController::class, 'createUser'])
+        ->name('organization.users.create');
+    Route::post('/organization/users', [OrganizationController::class, 'storeUser'])
+        ->name('organization.users.store');
+    Route::get('/organization/users/{user}', [OrganizationController::class, 'editUser'])
+        ->name('organization.users.edit');
+    Route::patch('/organization/users/{user}', [OrganizationController::class, 'updateUser'])
+        ->name('organization.users.update');
 
     Route::get('/specialism', [SpecialismController::class, 'edit'])
         ->name('specialism.edit');
@@ -52,6 +73,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Search Requests (core functionaliteit)
     Route::resource('search-requests', SearchRequestController::class);
+
+    Route::get(
+        'search-requests/{search_request}/recipients',
+        [SearchRequestController::class, 'recipients']
+    )
+        ->name('search-requests.recipients')
+        ->middleware('can:view,search_request');
 
     // Extra domeinacties (policy-first)
     Route::patch(
@@ -71,15 +99,33 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/admin/organizations', [AdminOrganizationController::class, 'index'])
         ->name('admin.organizations.index')
         ->middleware('can:manageOrganizations,App\Models\User');
-    Route::get('/admin/organizations/{user}', [AdminOrganizationController::class, 'edit'])
+    Route::get('/admin/organizations/import', [AdminOrganizationController::class, 'importForm'])
+        ->name('admin.organizations.import')
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::post('/admin/organizations/import', [AdminOrganizationController::class, 'import'])
+        ->name('admin.organizations.import.store')
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::get('/admin/organizations/create', [AdminOrganizationController::class, 'create'])
+        ->name('admin.organizations.create')
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::post('/admin/organizations', [AdminOrganizationController::class, 'store'])
+        ->name('admin.organizations.store')
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::get('/admin/organizations/{organization}', [AdminOrganizationController::class, 'edit'])
         ->name('admin.organizations.edit')
-        ->middleware('can:manageOrganizations,user');
-    Route::patch('/admin/organizations/{user}', [AdminOrganizationController::class, 'update'])
+        ->middleware('can:manageOrganizations,App\Models\User');
+    Route::patch('/admin/organizations/{organization}', [AdminOrganizationController::class, 'update'])
         ->name('admin.organizations.update')
-        ->middleware('can:manageOrganizations,user');
+        ->middleware('can:manageOrganizations,App\Models\User');
 
     Route::get('/admin/users', [AdminUserController::class, 'index'])
         ->name('admin.users.index')
+        ->middleware('can:manageUsers,App\Models\User');
+    Route::get('/admin/organizations/{organization}/users/create', [AdminUserController::class, 'create'])
+        ->name('admin.organizations.users.create')
+        ->middleware('can:manageUsers,App\Models\User');
+    Route::post('/admin/organizations/{organization}/users', [AdminUserController::class, 'store'])
+        ->name('admin.organizations.users.store')
         ->middleware('can:manageUsers,App\Models\User');
     Route::get('/admin/users/{user}', [AdminUserController::class, 'edit'])
         ->name('admin.users.edit')

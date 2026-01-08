@@ -1,0 +1,147 @@
+erDiagram
+    organizations {
+        BIGINT id PK
+        VARCHAR name UK
+        VARCHAR phone
+        VARCHAR email
+        VARCHAR website
+        VARCHAR logo_path
+        BOOLEAN is_active
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    users {
+        BIGINT id PK
+        VARCHAR name
+        VARCHAR email UK
+        TIMESTAMP email_verified_at
+        VARCHAR password
+        BOOLEAN is_admin
+        BIGINT organization_id FK
+        VARCHAR remember_token
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        VARCHAR phone
+        BOOLEAN is_active
+        JSON specialism_types
+        JSON specialism_provinces
+        VARCHAR avatar_path
+        VARCHAR linkedin_url
+    }
+
+    search_requests {
+        BIGINT id PK
+        BIGINT created_by FK
+        BIGINT assigned_to FK
+        BIGINT organization_id FK
+        VARCHAR title
+        VARCHAR customer_name
+        VARCHAR location
+        JSON provinces
+        VARCHAR property_type
+        VARCHAR surface_area
+        VARCHAR parking
+        VARCHAR availability
+        VARCHAR accessibility
+        JSON acquisitions
+        TEXT notes
+        VARCHAR status
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        TIMESTAMP deleted_at
+    }
+
+    properties {
+        BIGINT id PK
+        BIGINT organization_id FK
+        BIGINT user_id FK
+        BIGINT search_request_id FK
+        VARCHAR name
+        VARCHAR address
+        VARCHAR city
+        VARCHAR surface_area
+        VARCHAR parking_spots
+        VARCHAR availability
+        DECIMAL rent_price
+        DECIMAL asking_price
+        JSON images
+        JSON drawings
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    failed_jobs {
+        BIGINT id PK
+        VARCHAR uuid UK
+        TEXT connection
+        TEXT queue
+        LONGTEXT payload
+        LONGTEXT exception
+        TIMESTAMP failed_at
+    }
+
+    jobs {
+        BIGINT id PK
+        VARCHAR queue "INDEX"
+        LONGTEXT payload
+        TINYINT attempts
+        INT reserved_at
+        INT available_at
+        INT created_at
+    }
+
+    job_batches {
+        VARCHAR id PK
+        VARCHAR name
+        INT total_jobs
+        INT pending_jobs
+        INT failed_jobs
+        LONGTEXT failed_job_ids
+        MEDIUMTEXT options
+        INT cancelled_at
+        INT created_at
+        INT finished_at
+    }
+
+    cache {
+        VARCHAR key PK
+        MEDIUMTEXT value
+        INT expiration
+    }
+
+    cache_locks {
+        VARCHAR key PK
+        VARCHAR owner
+        INT expiration
+    }
+
+    password_reset_tokens {
+        VARCHAR email PK
+        VARCHAR token
+        TIMESTAMP created_at
+    }
+
+    sessions {
+        VARCHAR id PK
+        BIGINT user_id "INDEX"
+        VARCHAR ip_address
+        TEXT user_agent
+        LONGTEXT payload
+        INT last_activity "INDEX"
+    }
+
+    migrations {
+        INT id PK
+        VARCHAR migration
+        INT batch
+    }
+
+    organizations ||--o{ users : has_many
+    organizations ||--o{ search_requests : has_many
+    organizations ||--o{ properties : has_many
+    users ||--o{ search_requests : created_by
+    users ||--o{ search_requests : assigned_to
+    users ||--o{ properties : user
+    search_requests ||--o{ properties : related
+    users ||--o{ sessions : has_many

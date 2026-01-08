@@ -28,7 +28,7 @@ return new class extends Migration {
 
             $table->date('due_date')->nullable();
 
-            $table->string('status')->default('open');   // open|in_behandeling|afgerond|geannuleerd
+            $table->string('status')->default('concept');   // concept|open|afgerond|geannuleerd
 
             $table->timestamps();
         });

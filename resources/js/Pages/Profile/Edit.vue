@@ -1,5 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import PageContainer from '@/Components/PageContainer.vue';
+import FormSection from '@/Components/FormSection.vue';
 import DeleteUserForm from './Partials/DeleteUserForm.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
@@ -16,7 +18,7 @@ defineProps({
 </script>
 
 <template>
-    <Head title="Profile" />
+    <Head title="Profiel" />
 
     <AuthenticatedLayout>
         <template #header>
@@ -26,29 +28,23 @@ defineProps({
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
+            <PageContainer class="space-y-6">
+                <FormSection>
                     <UpdateProfileInformationForm
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
                         class="max-w-xl"
                     />
-                </div>
+                </FormSection>
 
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
+                <FormSection>
                     <UpdatePasswordForm class="max-w-xl" />
-                </div>
+                </FormSection>
 
-                <div
-                    class="bg-white p-4 shadow sm:rounded-lg sm:p-8"
-                >
+                <FormSection>
                     <DeleteUserForm class="max-w-xl" />
-                </div>
-            </div>
+                </FormSection>
+            </PageContainer>
         </div>
     </AuthenticatedLayout>
 </template>

@@ -28,8 +28,6 @@ const form = useForm({
     remove_avatar: false,
 });
 
-useDirtyConfirm(form);
-
 const avatarPreview = ref(null);
 const LINKEDIN_PREFIX = "https://www.linkedin.com/in/";
 const linkedinHandle = ref(
@@ -39,7 +37,7 @@ const linkedinHandle = ref(
 );
 const avatarInput = ref(null);
 
-const submit = () => {
+const submit = (onSuccess) => {
     form
         .transform((data) => ({
             ...data,
@@ -53,10 +51,17 @@ const submit = () => {
             forceFormData: true,
             onSuccess: () => {
                 form.remove_avatar = false;
+                if (typeof onSuccess === "function") {
+                    onSuccess();
+                }
             },
             onFinish: () => form.reset("avatar"),
         });
 };
+
+useDirtyConfirm(form, undefined, {
+    onSave: (done) => submit(done),
+});
 
 const handleAvatar = (event) => {
     const file = event.target.files[0] ?? null;
@@ -177,7 +182,7 @@ const clearAvatar = () => {
         <div>
             <InputLabel for="linkedin_url" value="LinkedIn-profiel" />
             <div
-                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                class="mt-1 flex w-full min-w-0 items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
             >
                 <span class="select-none pr-0 pl-2 py-2 text-base text-gray-500">
                     {{ LINKEDIN_PREFIX }}
@@ -185,7 +190,7 @@ const clearAvatar = () => {
                 <input
                     id="linkedin_url"
                     type="text"
-                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                    class="flex-1 min-w-0 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
                     v-model="linkedinHandle"
                     autocomplete="url"
                     placeholder="gebruikersnaam"

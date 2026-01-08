@@ -1,13 +1,29 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import FormActions from "@/Components/FormActions.vue";
+import FormSection from "@/Components/FormSection.vue";
+import PageContainer from "@/Components/PageContainer.vue";
+import TableCard from "@/Components/TableCard.vue";
+import TableCell from "@/Components/TableCell.vue";
+import TableEmptyState from "@/Components/TableEmptyState.vue";
+import TableHeaderCell from "@/Components/TableHeaderCell.vue";
+import TableRowLink from "@/Components/TableRowLink.vue";
 import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
+import MaterialIcon from "@/Components/MaterialIcon.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
-import { Head, Link, useForm } from "@inertiajs/vue3";
+import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
+
+const WEBSITE_PREFIX = "https://";
+
+const stripWebsitePrefix = (value) => {
+    if (!value) return "";
+    return value.replace(/^https?:\/\//i, "");
+};
 
 const props = defineProps({
     organization: {
@@ -24,28 +40,37 @@ const form = useForm({
     name: props.organization.name ?? "",
     phone: props.organization.phone ?? "",
     email: props.organization.email ?? "",
-    website: props.organization.website ?? "",
+    website: stripWebsitePrefix(props.organization.website ?? ""),
     logo: null,
     is_active: props.organization.is_active ?? true,
 });
 
-const { confirmLeave } = useDirtyConfirm(form);
-
 const logoInput = ref(null);
 const logoPreview = ref(null);
+const isDragging = ref(false);
 
-const submit = () => {
+const submit = (onSuccess) => {
     form
         .transform((data) => ({
             ...data,
             _method: "patch",
+            website: data.website
+                ? data.website.match(/^https?:\/\//i)
+                    ? data.website
+                    : `${WEBSITE_PREFIX}${data.website}`
+                : null,
         }))
         .post(route("admin.organizations.update", props.organization.id), {
             preserveScroll: true,
             forceFormData: true,
             onFinish: () => form.reset("logo"),
+            onSuccess,
         });
 };
+
+const { confirmLeave } = useDirtyConfirm(form, undefined, {
+    onSave: (done) => submit(done),
+});
 
 const handleLogo = (event) => {
     const file = event.target.files[0] ?? null;
@@ -53,15 +78,38 @@ const handleLogo = (event) => {
     logoPreview.value = file ? URL.createObjectURL(file) : null;
 };
 
+const handleDrop = (event) => {
+    event.preventDefault();
+    isDragging.value = false;
+    const file = event.dataTransfer?.files?.[0] ?? null;
+    form.logo = file;
+    logoPreview.value = file ? URL.createObjectURL(file) : null;
+};
+
+const handleDragOver = (event) => {
+    event.preventDefault();
+    isDragging.value = true;
+};
+
+const handleDragLeave = () => {
+    isDragging.value = false;
+};
+
 const openLogoPicker = () => {
     logoInput.value?.click();
 };
 
 const handleCancel = () => {
-    if (!confirmLeave()) {
-        return;
-    }
-    window.location.href = route("admin.organizations.index");
+    confirmLeave({
+        onConfirm: () => {
+            window.location.href = route("admin.organizations.index");
+        },
+        onSave: (done) => submit(done),
+    });
+};
+
+const openMember = (id) => {
+    router.visit(route("admin.users.edit", { user: id, return_to: route("admin.organizations.edit", props.organization.id, false) }));
 };
 </script>
 
@@ -83,21 +131,68 @@ const handleCancel = () => {
                     :href="route('admin.organizations.index')"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"
                 >
-                    Terug naar overzicht
+                    <span class="hidden sm:inline">Terug naar overzicht</span>
+                    <span class="sr-only">Terug naar overzicht</span>
+                    <MaterialIcon
+                        name="reply"
+                        class="h-5 w-5 sm:hidden"
+                    />
                 </Link>
             </div>
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-5xl space-y-8 px-4 sm:px-6 lg:px-8">
-                <section class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
+            <PageContainer class="space-y-8">
+                <FormSection>
                     <form class="mt-4 space-y-4" @submit.prevent="submit">
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm font-semibold text-gray-900">
-                                Status
-                            </span>
-                            <div class="flex items-center gap-3 text-sm text-gray-700">
-                                <span>Actief</span>
+                        <div class="flex flex-wrap items-start gap-4">
+                            <div>
+                                <input
+                                    ref="logoInput"
+                                    type="file"
+                                    accept="image/*"
+                                    class="hidden"
+                                    @change="handleLogo"
+                                />
+                                <div
+                                    v-if="logoPreview || organization.logo_url"
+                                    class="flex min-h-[140px] w-full max-w-[280px] cursor-pointer items-center justify-center"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openLogoPicker"
+                                    @keydown.enter.space.prevent="openLogoPicker"
+                                    @dragover="handleDragOver"
+                                    @dragleave="handleDragLeave"
+                                    @drop="handleDrop"
+                                >
+                                    <img
+                                        :src="logoPreview || organization.logo_url"
+                                        alt="Organisatielogo"
+                                        class="max-h-[120px] max-w-[220px] object-contain"
+                                    />
+                                </div>
+                                <div
+                                    v-else
+                                    class="flex min-h-[140px] w-full max-w-[280px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed bg-gray-50 text-sm text-gray-600"
+                                    :class="isDragging ? 'border-gray-900' : 'border-gray-300'"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openLogoPicker"
+                                    @keydown.enter.space.prevent="openLogoPicker"
+                                    @dragover="handleDragOver"
+                                    @dragleave="handleDragLeave"
+                                    @drop="handleDrop"
+                                >
+                                    <span class="px-4 text-center text-sm font-medium text-gray-700">
+                                        Klik hier om een logo te uploaden of sleep een logo hier naar toe.
+                                    </span>
+                                </div>
+                                <InputError class="mt-2" :message="form.errors.logo" />
+                            </div>
+                            <div class="ml-auto flex items-center gap-3 text-sm text-gray-700">
+                                <span class="text-sm font-semibold text-gray-900">
+                                    Actief
+                                </span>
                                 <button
                                     type="button"
                                     class="relative inline-flex h-6 w-11 items-center rounded-full transition"
@@ -114,34 +209,6 @@ const handleCancel = () => {
                                     />
                                 </button>
                             </div>
-                        </div>
-
-                        <div>
-                            <input
-                                ref="logoInput"
-                                type="file"
-                                accept="image/*"
-                                class="hidden"
-                                @change="handleLogo"
-                            />
-                            <div
-                                class="inline-flex cursor-pointer items-center justify-center text-sm text-gray-500"
-                                role="button"
-                                tabindex="0"
-                                @click="openLogoPicker"
-                                @keydown.enter.space.prevent="openLogoPicker"
-                            >
-                                <img
-                                    v-if="logoPreview || organization.logo_url"
-                                    :src="logoPreview || organization.logo_url"
-                                    alt="Organisatielogo"
-                                    class="max-h-[94px] max-w-[188px] object-contain"
-                                />
-                                <span v-else class="max-h-[94px] max-w-[188px]">
-                                    Logo
-                                </span>
-                            </div>
-                            <InputError class="mt-2" :message="form.errors.logo" />
                         </div>
 
                         <div>
@@ -200,7 +267,7 @@ const handleCancel = () => {
                             <InputError class="mt-2" :message="form.errors.website" />
                         </div>
 
-                        <div class="flex items-center gap-3 pt-2">
+                        <FormActions class="pt-2">
                             <PrimaryButton :disabled="form.processing">
                                 Opslaan
                             </PrimaryButton>
@@ -216,38 +283,56 @@ const handleCancel = () => {
                             >
                                 Opgeslagen.
                             </span>
-                        </div>
+                        </FormActions>
                     </form>
-                </section>
+                </FormSection>
 
-                <section class="rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-                    <div class="border-b border-gray-200 px-6 py-4">
-                        <h2 class="text-sm font-semibold text-gray-900">
-                            Medewerkers
-                        </h2>
-                        <p class="text-sm text-gray-500">
-                            Gebruikers gekoppeld aan deze organisatie.
-                        </p>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <div class="hidden sm:block">
+                    <TableCard>
+                    <template #header>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-sm font-semibold text-gray-900">
+                                    Medewerkers
+                                </h2>
+                                <p class="text-sm text-gray-500">
+                                    Gebruikers gekoppeld aan deze organisatie.
+                                </p>
+                            </div>
+                            <Link
+                                :href="route('admin.organizations.users.create', organization.id)"
+                                class="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                            >
+                                <span class="hidden sm:inline">Nieuwe medewerker</span>
+                                <span class="sr-only">Nieuwe medewerker</span>
+                                <MaterialIcon
+                                    name="person_add"
+                                    class="h-5 w-5 sm:hidden"
+                                />
+                            </Link>
+                        </div>
+                    </template>
+                    <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-6 py-3">Naam</th>
-                                    <th class="px-6 py-3">E-mail</th>
-                                    <th class="px-6 py-3">Telefoonnummer</th>
-                                    <th class="px-6 py-3">LinkedIn-profiel</th>
-                                    <th class="px-6 py-3">Status</th>
+                                    <TableHeaderCell>Naam</TableHeaderCell>
+                                    <TableHeaderCell>E-mail</TableHeaderCell>
+                                    <TableHeaderCell>Telefoonnummer</TableHeaderCell>
+                                    <TableHeaderCell>LinkedIn-profiel</TableHeaderCell>
+                                    <TableHeaderCell>Status</TableHeaderCell>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200 bg-white">
-                                <tr v-if="members.length === 0">
-                                    <td class="px-6 py-6 text-gray-500" colspan="4">
-                                        Geen medewerkers gevonden.
-                                    </td>
-                                </tr>
-                                <tr v-for="member in members" :key="member.id">
-                                    <td class="px-6 py-3">
+                            <tbody class="divide-y divide-gray-100">
+                                <TableEmptyState
+                                    v-if="members.length === 0"
+                                    :colspan="5"
+                                    message="Geen medewerkers gevonden."
+                                />
+                                <TableRowLink
+                                    v-for="member in members"
+                                    :key="member.id"
+                                    @activate="openMember(member.id)"
+                                >
+                                    <TableCell>
                                         <div class="flex items-center gap-3">
                                             <div class="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
                                                 <img
@@ -257,26 +342,22 @@ const handleCancel = () => {
                                                     class="h-full w-full object-cover"
                                                 />
                                             </div>
-                                            <Link
-                                                :href="route('admin.users.edit', { user: member.id, return_to: route('admin.organizations.edit', organization.id, false) })"
-                                                class="font-medium text-gray-900 hover:text-gray-700"
-                                            >
+                                            <span class="font-medium text-gray-900">
                                                 {{ member.name }}
-                                            </Link>
+                                            </span>
                                         </div>
-                                    </td>
-                                    <td class="px-6 py-3 text-gray-700">
-                                        <a
-                                            class="text-gray-900 hover:text-gray-700"
-                                            :href="`mailto:${member.email}`"
-                                        >
-                                            {{ member.email }}
-                                        </a>
-                                    </td>
-                                    <td class="px-6 py-3 text-gray-700">
-                                        {{ member.phone || "—" }}
-                                    </td>
-                                    <td class="px-6 py-3 text-gray-700">
+                                    </TableCell>
+                                    <TableCell>
+                                        <span class="text-sm text-gray-700">
+                                            {{ member.email || "-" }}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span class="text-sm text-gray-700">
+                                            {{ member.phone || "-" }}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
                                         <a
                                             v-if="member.linkedin_url"
                                             class="inline-flex h-8 w-8 items-center justify-center text-gray-600 hover:text-gray-900"
@@ -284,6 +365,7 @@ const handleCancel = () => {
                                             target="_blank"
                                             rel="noreferrer"
                                             aria-label="LinkedIn-profiel"
+                                            @click.stop
                                         >
                                             <svg
                                                 viewBox="0 0 72 72"
@@ -302,22 +384,84 @@ const handleCancel = () => {
                                                 />
                                             </svg>
                                         </a>
-                                        <span v-else>—</span>
-                                    </td>
-                                    <td class="px-6 py-3 text-gray-700">
+                                        <span v-else>-</span>
+                                    </TableCell>
+                                    <TableCell>
                                         <span
                                             v-if="member.is_active === false"
                                             class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700"
                                         >
                                             Inactief
                                         </span>
-                                    </td>
-                                </tr>
+                                    </TableCell>
+                                </TableRowLink>
                             </tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
+                    </TableCard>
+                </div>
+
+                <div class="space-y-3 sm:hidden">
+                    <p
+                        v-if="members.length === 0"
+                        class="text-sm text-gray-500"
+                    >
+                        Geen medewerkers gevonden.
+                    </p>
+                    <Link
+                        v-for="member in members"
+                        :key="member.id"
+                        :href="
+                            route('admin.users.edit', {
+                                user: member.id,
+                                return_to: route('admin.organizations.edit', organization.id, false),
+                            })
+                        "
+                        class="block"
+                    >
+                        <FormSection class="p-4">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="h-9 w-9 overflow-hidden rounded-full bg-gray-100">
+                                        <img
+                                            v-if="member.avatar_url"
+                                            :src="member.avatar_url"
+                                            alt=""
+                                            class="h-full w-full object-cover"
+                                        />
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-900">
+                                            {{ member.name }}
+                                        </p>
+                                        <p class="text-xs text-gray-500">
+                                            {{ member.email || "-" }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <span
+                                    v-if="member.is_active === false"
+                                    class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700"
+                                >
+                                    Inactief
+                                </span>
+                            </div>
+                            <div class="mt-3 grid gap-3 text-sm">
+                                <div>
+                                    <p class="text-xs text-gray-500">Telefoonnummer</p>
+                                    <p class="text-gray-900">
+                                        {{ member.phone || "-" }}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-gray-500">LinkedIn-profiel</p>
+                                    <p class="text-gray-900">
+                                        {{ member.linkedin_url ? "Beschikbaar" : "-" }}
+                                    </p>
+                                </div>
+                            </div>
+                        </FormSection>
+                    </Link>
+                </div>
+            </PageContainer>
         </div>
     </AuthenticatedLayout>
 </template>

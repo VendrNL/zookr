@@ -1,5 +1,8 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import FormActions from "@/Components/FormActions.vue";
+import FormSection from "@/Components/FormSection.vue";
+import PageContainer from "@/Components/PageContainer.vue";
 import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
@@ -18,6 +21,10 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    organizations: {
+        type: Array,
+        default: () => [],
+    },
     return_to: {
         type: String,
         required: true,
@@ -33,6 +40,7 @@ const form = useForm({
     remove_avatar: false,
     is_active: props.user.is_active ?? true,
     is_admin: props.user.is_admin ?? false,
+    organization_id: props.user.organization_id ?? "",
     return_to: props.return_to,
 });
 
@@ -51,11 +59,10 @@ const linkedinHandle = ref(
 );
 const avatarInput = ref(null);
 
-const { confirmLeave } = useDirtyConfirm([form, specialismForm]);
 const page = usePage();
 const isSelf = computed(() => page.props.auth?.user?.id === props.user.id);
 
-const submit = () => {
+const submit = (callbacks = {}) => {
     form
         .transform((data) => ({
             ...data,
@@ -69,8 +76,12 @@ const submit = () => {
             forceFormData: true,
             onSuccess: () => {
                 form.remove_avatar = false;
+                if (typeof callbacks.onSuccess === "function") {
+                    callbacks.onSuccess();
+                }
             },
             onFinish: () => form.reset("avatar"),
+            onError: callbacks.onError,
         });
 };
 
@@ -93,10 +104,12 @@ const clearAvatar = () => {
 };
 
 const handleCancel = () => {
-    if (!confirmLeave()) {
-        return;
-    }
-    router.visit(props.return_to);
+    confirmLeave({
+        onConfirm: () => {
+            router.visit(props.return_to);
+        },
+        onSave: (done) => saveAndProceed(done),
+    });
 };
 
 const toggleSpecialism = (key, value) => {
@@ -109,11 +122,50 @@ const toggleSpecialism = (key, value) => {
     specialismForm[key] = Array.from(list);
 };
 
-const submitSpecialism = () => {
+const submitSpecialism = (callbacks = {}) => {
     specialismForm.patch(route("admin.users.specialism.update", props.user.id), {
         preserveScroll: true,
+        onSuccess: callbacks.onSuccess,
+        onError: callbacks.onError,
     });
 };
+
+const saveAndProceed = (done) => {
+    let pending = 0;
+    let failed = false;
+
+    const handleDone = () => {
+        if (failed) {
+            return;
+        }
+        pending -= 1;
+        if (pending <= 0) {
+            done();
+        }
+    };
+
+    const fail = () => {
+        failed = true;
+    };
+
+    if (form.isDirty) {
+        pending += 1;
+        submit({ onSuccess: handleDone, onError: fail });
+    }
+
+    if (specialismForm.isDirty) {
+        pending += 1;
+        submitSpecialism({ onSuccess: handleDone, onError: fail });
+    }
+
+    if (pending === 0) {
+        done();
+    }
+};
+
+const { confirmLeave } = useDirtyConfirm([form, specialismForm], undefined, {
+    onSave: (done) => saveAndProceed(done),
+});
 
 const provinceFill = (key) =>
     specialismForm.provinces.includes(key) ? "#e5e7eb" : "#ffffff";
@@ -137,8 +189,8 @@ const provinceFill = (key) =>
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6 lg:px-8">
-                <section class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
+            <PageContainer class="space-y-6">
+                <FormSection>
                     <header class="flex items-start justify-between gap-4">
                         <div>
                             <h2 class="text-lg font-medium text-gray-900">
@@ -237,6 +289,30 @@ const provinceFill = (key) =>
                         </div>
 
                         <div>
+                            <InputLabel for="organization_id" value="Organisatie" />
+                            <select
+                                id="organization_id"
+                                v-model="form.organization_id"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            >
+                                <option value="">
+                                    Selecteer organisatie
+                                </option>
+                                <option
+                                    v-for="organization in organizations"
+                                    :key="organization.id"
+                                    :value="organization.id"
+                                >
+                                    {{ organization.name }}
+                                </option>
+                            </select>
+                            <InputError
+                                class="mt-2"
+                                :message="form.errors.organization_id"
+                            />
+                        </div>
+
+                        <div>
                             <InputLabel for="email" value="E-mail" />
 
                             <TextInput
@@ -268,7 +344,7 @@ const provinceFill = (key) =>
                         <div>
                             <InputLabel for="linkedin_url" value="LinkedIn-profiel" />
                             <div
-                                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
                             >
                                 <span class="select-none pr-0 pl-2 py-2 text-base text-gray-500">
                                     {{ LINKEDIN_PREFIX }}
@@ -276,7 +352,7 @@ const provinceFill = (key) =>
                                 <input
                                     id="linkedin_url"
                                     type="text"
-                                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
                                     v-model="linkedinHandle"
                                     autocomplete="url"
                                     placeholder="gebruikersnaam"
@@ -285,7 +361,7 @@ const provinceFill = (key) =>
                             <InputError class="mt-2" :message="form.errors.linkedin_url" />
                         </div>
 
-                        <div class="flex items-center gap-4">
+                        <FormActions align="left">
                             <PrimaryButton :disabled="form.processing">
                                 Opslaan
                             </PrimaryButton>
@@ -302,15 +378,12 @@ const provinceFill = (key) =>
                             >
                                 Opgeslagen.
                             </span>
-                        </div>
+                        </FormActions>
                     </form>
-                </section>
+                </FormSection>
                 
-                <section class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
-                    <form
-                                        class="space-y-6 rounded-lg bg-white p-6"
-                                        @submit.prevent="submitSpecialism"
-                                    >
+                <FormSection>
+                    <form class="space-y-6" @submit.prevent="submitSpecialism">
                                         <div>
                                             <h2 class="text-sm font-semibold text-gray-900">
                                                 Type vastgoed
@@ -380,7 +453,7 @@ const provinceFill = (key) =>
                                                 <div class="mt-3">
                                                     <svg
                                                         viewBox="0 0 199.32 236.75"
-                                                        class="h-auto w-full"
+                                                        class="h-auto w-full max-h-[500px]"
                                                         role="img"
                                                         aria-label="Kaart van provincies"
                                                         style="border: 0 !important; outline: 0 !important; box-shadow: none !important; display: block;"
@@ -530,7 +603,7 @@ const provinceFill = (key) =>
                                             </div>
                                         </div>
 
-                                        <div class="flex justify-end gap-3">
+                                        <FormActions align="right">
                                             <SecondaryButton
                                                 type="button"
                                                 :disabled="specialismForm.processing"
@@ -544,10 +617,10 @@ const provinceFill = (key) =>
                                             >
                                                 Opslaan
                                             </PrimaryButton>
-                                        </div>
+                                        </FormActions>
                                     </form>
-                </section>
-            </div>
+                </FormSection>
+            </PageContainer>
         </div>
     </AuthenticatedLayout>
 </template>

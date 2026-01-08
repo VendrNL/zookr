@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Organization;
 
 class SearchRequest extends Model
 {
@@ -15,24 +16,34 @@ class SearchRequest extends Model
     protected $fillable = [
         'created_by',
         'assigned_to',
+        'organization_id',
         'title',
-        'description',
+        'customer_name',
         'location',
-        'budget_min',
-        'budget_max',
-        'due_date',
+        'provinces',
+        'property_type',
+        'surface_area',
+        'parking',
+        'availability',
+        'accessibility',
+        'acquisitions',
+        'notes',
         'status',
     ];
 
     protected $casts = [
-        'due_date' => 'date',
-        'budget_min' => 'integer',
-        'budget_max' => 'integer',
+        'provinces' => 'array',
+        'acquisitions' => 'array',
     ];
 
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     public function assignee(): BelongsTo

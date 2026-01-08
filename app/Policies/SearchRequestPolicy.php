@@ -9,15 +9,13 @@ class SearchRequestPolicy
 {
     public function viewAny(User $user): bool
     {
-        // Iedereen mag naar de index (we filteren in de query al voor niet-admins)
+        // Iedereen mag naar de index
         return true;
     }
 
     public function view(User $user, SearchRequest $searchRequest): bool
     {
-        return $user->is_admin
-            || $searchRequest->created_by === $user->id
-            || $searchRequest->assigned_to === $user->id;
+        return true;
     }
 
     public function create(User $user): bool
@@ -28,15 +26,31 @@ class SearchRequestPolicy
 
     public function update(User $user, SearchRequest $searchRequest): bool
     {
-        // admin of betrokkenen mogen updaten
-        return $user->is_admin
-            || $searchRequest->created_by === $user->id
-            || $searchRequest->assigned_to === $user->id;
+        if ($user->is_admin) {
+            return true;
+        }
+
+        return $this->sameOrganization($user, $searchRequest);
     }
 
     public function delete(User $user, SearchRequest $searchRequest): bool
     {
-        // strakker: alleen admin of de maker
-        return $user->is_admin || $searchRequest->created_by === $user->id;
+        if ($user->is_admin) {
+            return true;
+        }
+
+        return $this->sameOrganization($user, $searchRequest);
+    }
+
+    private function sameOrganization(User $user, SearchRequest $searchRequest): bool
+    {
+        $userOrgId = $user->organization_id;
+        $requestOrgId = $searchRequest->organization_id;
+
+        if (! $userOrgId || ! $requestOrgId) {
+            return false;
+        }
+
+        return (int) $userOrgId === (int) $requestOrgId;
     }
 }

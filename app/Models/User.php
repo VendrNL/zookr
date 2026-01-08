@@ -18,11 +18,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'phone',
         'password',
         'is_active',
-        'organization_name',
-        'organization_phone',
-        'organization_email',
-        'organization_website',
-        'organization_logo_path',
+        'is_admin',
+        'organization_id',
         'specialism_types',
         'specialism_provinces',
         'avatar_path',
@@ -64,5 +61,10 @@ class User extends Authenticatable implements MustVerifyEmail
     public function assignedSearchRequests(): HasMany
     {
         return $this->hasMany(SearchRequest::class, 'assigned_to');
+    }
+
+    public function organization(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 }

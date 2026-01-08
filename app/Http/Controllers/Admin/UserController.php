@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -51,7 +54,11 @@ class UserController extends Controller
                 'avatar_url' => $user->avatar_url,
                 'is_active' => (bool) $user->is_active,
                 'is_admin' => (bool) $user->is_admin,
+                'organization_id' => $user->organization_id,
             ],
+            'organizations' => Organization::query()
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'specialism' => [
                 'selection' => [
                     'types' => $user->specialism_types ?? [],
@@ -66,6 +73,54 @@ class UserController extends Controller
         ]);
     }
 
+    public function create(Organization $organization)
+    {
+        return Inertia::render('Admin/Users/Create', [
+            'organization' => [
+                'id' => $organization->id,
+                'name' => $organization->name,
+            ],
+        ]);
+    }
+
+    public function store(Request $request, Organization $organization)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            'phone' => ['required', 'string', 'max:50'],
+            'linkedin_url' => ['nullable', 'url', 'max:255'],
+            'avatar' => ['nullable', 'image', 'max:2048'],
+            'is_active' => ['required', 'boolean'],
+            'is_admin' => ['required', 'boolean'],
+            'invite' => ['nullable', 'boolean'],
+        ]);
+
+        $avatarPath = null;
+        if ($request->hasFile('avatar')) {
+            $avatarPath = $request->file('avatar')->store('avatars', 'public');
+        }
+
+        User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => Hash::make(Str::random(32)),
+            'phone' => $data['phone'],
+            'linkedin_url' => $data['linkedin_url'] ?? null,
+            'is_active' => (bool) $data['is_active'],
+            'is_admin' => (bool) $data['is_admin'],
+            'organization_id' => $organization->id,
+            'avatar_path' => $avatarPath,
+        ]);
+
+        if (! empty($data['invite'])) {
+            Password::sendResetLink(['email' => $data['email']]);
+        }
+
+        return Redirect::route('admin.organizations.edit', $organization)
+            ->with('status', 'user-created');
+    }
+
     public function index(Request $request)
     {
         $data = $request->validate([
@@ -73,42 +128,72 @@ class UserController extends Controller
             'admin' => ['nullable', 'in:1,0,all'],
             'sort' => ['nullable', 'in:name,organization'],
             'direction' => ['nullable', 'in:asc,desc'],
+            'q' => ['nullable', 'string', 'max:255'],
         ]);
 
         $status = $data['status'] ?? 'active';
         $admin = $data['admin'] ?? 'all';
         $sort = $data['sort'] ?? 'name';
         $direction = $data['direction'] ?? 'asc';
+        $search = trim((string) ($data['q'] ?? ''));
 
-        $query = User::query();
+        $query = User::query()
+            ->leftJoin('organizations', 'users.organization_id', '=', 'organizations.id');
+
+        if ($search !== '') {
+            $query->where(function ($inner) use ($search) {
+                $inner->where('users.name', 'like', '%' . $search . '%')
+                    ->orWhere('users.email', 'like', '%' . $search . '%')
+                    ->orWhere('organizations.name', 'like', '%' . $search . '%');
+            });
+        }
 
         if ($status === 'active') {
-            $query->where('is_active', true);
+            $query->where('users.is_active', true);
         } elseif ($status === 'inactive') {
-            $query->where('is_active', false);
+            $query->where('users.is_active', false);
         }
 
         if ($admin === '1') {
-            $query->where('is_admin', true);
+            $query->where('users.is_admin', true);
         } elseif ($admin === '0') {
-            $query->where('is_admin', false);
+            $query->where('users.is_admin', false);
         }
 
         if ($sort === 'organization') {
-            $query->orderBy('organization_name', $direction)
-                ->orderBy('name', 'asc');
+            $query->orderBy('organizations.name', $direction)
+                ->orderBy('users.name', 'asc');
         } else {
-            $query->orderBy('name', $direction);
+            $query->orderBy('users.name', $direction);
         }
 
         $users = $query->get([
-            'id',
-            'name',
-            'email',
-            'organization_name',
-            'is_admin',
-            'is_active',
-        ]);
+            'users.id',
+            'users.name',
+            'users.email',
+            'users.phone',
+            'users.avatar_path',
+            'users.is_admin',
+            'users.is_active',
+            'users.linkedin_url',
+            'organizations.id as organization_id',
+            'organizations.name as organization_name',
+        ])->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'avatar_url' => $user->avatar_path
+                    ? Storage::disk('public')->url($user->avatar_path)
+                    : null,
+                'is_admin' => (bool) $user->is_admin,
+                'is_active' => (bool) $user->is_active,
+                'linkedin_url' => $user->linkedin_url,
+                'organization_id' => $user->organization_id,
+                'organization_name' => $user->organization_name,
+            ];
+        });
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
@@ -117,6 +202,7 @@ class UserController extends Controller
                 'admin' => $admin,
                 'sort' => $sort,
                 'direction' => $direction,
+                'q' => $search,
             ],
         ]);
     }
@@ -134,6 +220,7 @@ class UserController extends Controller
             'remove_avatar' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
             'is_admin' => ['sometimes', 'boolean'],
+            'organization_id' => ['nullable', 'integer', 'exists:organizations,id'],
         ]);
 
         $user->fill([
@@ -141,6 +228,7 @@ class UserController extends Controller
             'email' => $data['email'],
             'phone' => $data['phone'] ?? null,
             'linkedin_url' => $data['linkedin_url'] ?? null,
+            'organization_id' => $data['organization_id'] ?? null,
         ]);
 
         if (array_key_exists('is_active', $data)) {
