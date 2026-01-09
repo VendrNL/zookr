@@ -8,11 +8,20 @@ const props = defineProps({
         type: String,
         default: "left",
     },
+    stackOnMobile: {
+        type: Boolean,
+        default: true,
+    },
 });
 
 const attrs = useAttrs();
 
 const alignClass = computed(() => {
+    if (props.stackOnMobile) {
+        if (props.align === "right") return "sm:justify-end";
+        if (props.align === "center") return "sm:justify-center";
+        return "sm:justify-start";
+    }
     if (props.align === "right") return "justify-end";
     if (props.align === "center") return "justify-center";
     return "justify-start";
@@ -23,7 +32,9 @@ const alignClass = computed(() => {
     <div
         v-bind="attrs"
         :class="[
-            'flex items-center gap-4',
+            props.stackOnMobile
+                ? 'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4 [&>*]:w-full sm:[&>*]:w-auto [&>*]:text-center sm:[&>*]:text-left [&>*]:justify-center sm:[&>*]:justify-start'
+                : 'flex items-center gap-4',
             alignClass,
             attrs.class,
         ]"

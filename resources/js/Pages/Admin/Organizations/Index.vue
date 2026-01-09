@@ -265,7 +265,7 @@ function resetFilters() {
                                         {{ organization.name }}
                                     </p>
                                 </div>
-                                <div class="grid w-full grid-cols-3 gap-2">
+                                <div class="grid w-full grid-cols-3 grid-flow-col gap-2">
                                     <a
                                         :href="organization.email ? `mailto:${organization.email}` : '#'"
                                         class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"

@@ -331,7 +331,7 @@ function openUser(id) {
                                     </span>
                                 </div>
                             </div>
-                            <div class="mt-3 grid w-full grid-cols-3 gap-2">
+                            <div class="mt-3 grid w-full grid-cols-3 grid-flow-col gap-2">
                                 <a
                                     :href="user.email ? `mailto:${user.email}` : '#'"
                                     class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
