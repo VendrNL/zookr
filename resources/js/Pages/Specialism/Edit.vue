@@ -1,10 +1,11 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import FormActions from "@/Components/FormActions.vue";
 import PageContainer from "@/Components/PageContainer.vue";
 import InputError from "@/Components/InputError.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
-import { Head, useForm } from "@inertiajs/vue3";
+import { Head, router, useForm } from "@inertiajs/vue3";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const props = defineProps({
@@ -40,12 +41,23 @@ const submit = (onSuccess) => {
     });
 };
 
-useDirtyConfirm(form, undefined, {
+const { confirmLeave } = useDirtyConfirm(form, undefined, {
     onSave: (done) => submit(done),
 });
 
 const provinceFill = (key) =>
     form.provinces.includes(key) ? "#e5e7eb" : "#ffffff";
+
+const handleCancel = () => {
+    confirmLeave({
+        onConfirm: () => {
+            form.reset();
+            form.clearErrors();
+            router.visit(route("dashboard"));
+        },
+        onSave: (done) => submit(done),
+    });
+};
 </script>
 
 <template>
@@ -290,11 +302,11 @@ const provinceFill = (key) =>
                         </div>
                     </div>
 
-                    <div class="flex justify-end gap-3">
+                    <FormActions align="right">
                         <SecondaryButton
                             type="button"
                             :disabled="form.processing"
-                            @click="form.reset()"
+                            @click="handleCancel"
                         >
                             Annuleren
                         </SecondaryButton>
@@ -304,7 +316,7 @@ const provinceFill = (key) =>
                         >
                             Opslaan
                         </PrimaryButton>
-                    </div>
+                    </FormActions>
                 </form>
             </PageContainer>
         </div>

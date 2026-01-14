@@ -10,3 +10,8 @@ RUN apt-get update && apt-get install -y \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
+
+# Datadog PHP tracer (ddtrace)
+RUN curl -L https://github.com/DataDog/dd-trace-php/releases/latest/download/datadog-setup.php -o /tmp/datadog-setup.php \
+  && php /tmp/datadog-setup.php --php-bin=all \
+  && rm -f /tmp/datadog-setup.php

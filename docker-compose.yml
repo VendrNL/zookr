@@ -5,13 +5,22 @@ services:
       dockerfile: docker/Dockerfile
     container_name: zookr-app
     working_dir: /var/www
+    environment:
+      DD_AGENT_HOST: datadog-agent
+      DD_TRACE_AGENT_PORT: "8126"
+      DD_TRACE_ENABLED: "true"
+      DD_ENV: local
+      DD_SERVICE: zookr-app
+      DD_VERSION: dev
+      DD_TRACE_DEBUG: "true"
+      DD_TRACE_AGENT_DEBUG_VERBOSE_CURL: "true"
+      DD_TRACE_STARTUP_LOGS: "true"
     volumes:
       - ./:/var/www
       - zookr_storage:/var/www/storage
       - zookr_cache:/var/www/bootstrap/cache
     depends_on:
       - db
-
   vite:
     image: node:20-alpine
     working_dir: /var/www
@@ -53,6 +62,60 @@ services:
     ports:
       - "8025:8025"
       - "1025:1025"
+  
+  datadog:
+    image: datadog/agent:latest
+    container_name: datadog-agent
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE}
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+    ports:
+      - "8126:8126"
+
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog-agent
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE}
+
+      # APM
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+
+      # Forceer juiste intake host (zonder trailing dot)
+      DD_APM_DD_URL: "https://trace.agent.datadoghq.eu"
+      DD_DD_URL: "https://app.datadoghq.eu"
+
+      # DogStatsD (optioneel maar gebruikelijk)
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+
+      # Sockets (optioneel, maar sluit aan op hun voorbeeld)
+      DD_APM_RECEIVER_SOCKET: /var/run/datadog/apm.socket
+      DD_DOGSTATSD_SOCKET: /var/run/datadog/dsd.socket
+
+      # Logs (alleen als je dit echt wilt)
+      DD_LOG_LEVEL: debug
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      DD_CONTAINER_EXCLUDE_LOGS: "name:datadog-agent"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/run/datadog:/var/run/datadog
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+    ports:
+      - "8126:8126"
 
 volumes:
   dbdata:

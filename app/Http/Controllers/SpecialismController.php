@@ -64,6 +64,6 @@ class SpecialismController extends Controller
         $user->specialism_provinces = $data['provinces'] ?? [];
         $user->save();
 
-        return Redirect::route('specialism.edit')->with('status', 'specialism-updated');
+        return Redirect::route('dashboard')->with('status', 'specialism-updated');
     }
 }
