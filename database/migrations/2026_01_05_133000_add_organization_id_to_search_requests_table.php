@@ -16,11 +16,15 @@ return new class extends Migration {
                 ->nullOnDelete();
         });
 
-        DB::table('search_requests')
-            ->join('users', 'search_requests.created_by', '=', 'users.id')
-            ->update([
-                'search_requests.organization_id' => DB::raw('users.organization_id'),
-            ]);
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('update search_requests set organization_id = (select organization_id from users where users.id = search_requests.created_by)');
+        } else {
+            DB::table('search_requests')
+                ->join('users', 'search_requests.created_by', '=', 'users.id')
+                ->update([
+                    'search_requests.organization_id' => DB::raw('users.organization_id'),
+                ]);
+        }
     }
 
     public function down(): void

@@ -6,8 +6,9 @@ import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
 import PageContainer from "@/Components/PageContainer.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
+import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
-import { Head, Link, useForm } from "@inertiajs/vue3";
+import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const props = defineProps({
@@ -22,13 +23,6 @@ const props = defineProps({
     },
 });
 
-const statusOptions = [
-    { value: "concept", label: "Concept" },
-    { value: "open", label: "Open" },
-    { value: "afgerond", label: "Afgerond" },
-    { value: "geannuleerd", label: "Geannuleerd" },
-];
-
 const form = useForm({
     title: props.item.title ?? "",
     customer_name: props.item.customer_name ?? "",
@@ -41,7 +35,7 @@ const form = useForm({
     accessibility: props.item.accessibility ?? "",
     acquisitions: props.item.acquisitions ?? [],
     notes: props.item.notes ?? "",
-    status: props.item.status ?? "concept",
+    send: false,
 });
 
 function formatLabel(value) {
@@ -70,13 +64,30 @@ function acquisitionLabel(value) {
     return value === "huur" ? "Huur" : "Koop";
 }
 
-function submit(onSuccess) {
+function submitConcept(onSuccess) {
+    if (typeof onSuccess !== "function") {
+        onSuccess = undefined;
+    }
+    form.send = false;
     form.put(route("search-requests.update", props.item.id), { onSuccess });
 }
 
-useDirtyConfirm(form, undefined, {
-    onSave: (done) => submit(done),
+function submitAndSend() {
+    form.send = true;
+    form.put(route("search-requests.update", props.item.id));
+}
+
+const { confirmLeave } = useDirtyConfirm(form, undefined, {
+    onSave: (done) => submitConcept(done),
 });
+
+const handleCancel = () => {
+    confirmLeave({
+        onConfirm: () => {
+            router.visit(route("search-requests.show", props.item.id));
+        },
+    });
+};
 </script>
 
 <template>
@@ -107,7 +118,7 @@ useDirtyConfirm(form, undefined, {
                 <FormSection>
                     <form
                         class="space-y-6"
-                        @submit.prevent="submit"
+                        @submit.prevent="submitConcept"
                     >
                     <div>
                         <InputLabel for="title" value="Titel *" />
@@ -330,34 +341,29 @@ useDirtyConfirm(form, undefined, {
                         <InputError class="mt-2" :message="form.errors.notes" />
                     </div>
 
-                    <div>
-                        <InputLabel for="status" value="Status" />
-                        <select
-                            id="status"
-                            v-model="form.status"
-                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                        >
-                            <option
-                                v-for="option in statusOptions"
-                                :key="option.value"
-                                :value="option.value"
-                            >
-                                {{ option.label }}
-                            </option>
-                        </select>
-                        <InputError
-                            class="mt-2"
-                            :message="form.errors.status"
-                        />
-                    </div>
-
                     <FormActions align="right">
+                        <SecondaryButton
+                            type="button"
+                            :disabled="form.processing"
+                            @click="() => submitConcept()"
+                        >
+                            Opslaan als concept
+                        </SecondaryButton>
                         <PrimaryButton
+                            type="button"
                             :class="{ 'opacity-25': form.processing }"
                             :disabled="form.processing"
+                            @click="submitAndSend"
                         >
-                            Opslaan
+                            Opslaan en verzenden
                         </PrimaryButton>
+                        <SecondaryButton
+                            type="button"
+                            :disabled="form.processing"
+                            @click="handleCancel"
+                        >
+                            Annuleren
+                        </SecondaryButton>
                     </FormActions>
                     </form>
                 </FormSection>

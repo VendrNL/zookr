@@ -229,10 +229,17 @@ class SearchRequestController extends Controller
             'acquisitions' => ['required', 'array', 'min:1'],
             'acquisitions.*' => ['string', Rule::in(self::ACQUISITIONS)],
             'notes' => ['nullable', 'string', 'max:800'],
-            'status' => ['required', 'in:concept,open,afgerond,geannuleerd'],
+            'send' => ['nullable', 'boolean'],
         ]);
 
+        $send = $request->boolean('send');
+        $data['status'] = $send ? 'open' : 'concept';
+
         $search_request->update($data);
+
+        if ($send) {
+            return redirect()->route('search-requests.recipients', $search_request);
+        }
 
         return redirect()->route('search-requests.show', $search_request);
     }
