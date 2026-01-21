@@ -61,6 +61,8 @@ Route::middleware('auth')->group(function () {
         ->name('organization.users.edit');
     Route::patch('/organization/users/{user}', [OrganizationController::class, 'updateUser'])
         ->name('organization.users.update');
+    Route::patch('/organization/users/{user}/status', [OrganizationController::class, 'setUserStatus'])
+        ->name('organization.users.status');
 
     Route::get('/specialism', [SpecialismController::class, 'edit'])
         ->name('specialism.edit');

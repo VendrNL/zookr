@@ -271,16 +271,16 @@ const toggleMemberStatus = (member) => {
                             <InputError class="mt-2" :message="form.errors.website" />
                         </div>
 
-                        <FormActions class="pt-2">
-                            <PrimaryButton :disabled="form.processing">
-                                Opslaan
-                            </PrimaryButton>
+                        <FormActions align="right" class="pt-2">
                             <SecondaryButton
                                 type="button"
                                 @click="handleCancel"
                             >
                                 Annuleren
                             </SecondaryButton>
+                            <PrimaryButton :disabled="form.processing">
+                                Opslaan
+                            </PrimaryButton>
                             <span
                                 v-if="form.recentlySuccessful"
                                 class="text-sm text-gray-500"

@@ -166,7 +166,7 @@ function handleAvatarError(userId) {
                                     :href="route('admin.organizations.index')"
                                     class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                 >
-                                    <MaterialIcon name="add" class="mr-2 h-4 w-4" />
+                                    <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
                                     Gebruiker toevoegen
                                 </Link>
                             </div>

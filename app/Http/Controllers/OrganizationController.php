@@ -228,4 +228,23 @@ class OrganizationController extends Controller
 
         return Redirect::route('organization.edit')->with('status', 'user-updated');
     }
+
+    public function setUserStatus(Request $request, User $user)
+    {
+        $organization = $request->user()->organization;
+
+        if (! $organization || (int) $user->organization_id !== (int) $organization->id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $user->update([
+            'is_active' => (bool) $data['is_active'],
+        ]);
+
+        return Redirect::back();
+    }
 }
