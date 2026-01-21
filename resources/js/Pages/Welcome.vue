@@ -138,7 +138,7 @@ function handleImageError() {
 
                                     <div class="pt-3 sm:pt-5 lg:pt-0">
                                         <h2
-                                            class="text-xl font-semibold text-black dark:text-white"
+                                            class="text-2xl font-semibold text-black dark:text-white"
                                         >
                                             Documentatie
                                         </h2>
@@ -194,7 +194,7 @@ function handleImageError() {
 
                             <div class="pt-3 sm:pt-5">
                                 <h2
-                                    class="text-xl font-semibold text-black dark:text-white"
+                                    class="text-2xl font-semibold text-black dark:text-white"
                                 >
                                     Laracasts
                                 </h2>
@@ -251,7 +251,7 @@ function handleImageError() {
 
                             <div class="pt-3 sm:pt-5">
                                 <h2
-                                    class="text-xl font-semibold text-black dark:text-white"
+                                    class="text-2xl font-semibold text-black dark:text-white"
                                 >
                                     Laravel Nieuws
                                 </h2>
@@ -301,7 +301,7 @@ function handleImageError() {
 
                             <div class="pt-3 sm:pt-5">
                                 <h2
-                                    class="text-xl font-semibold text-black dark:text-white"
+                                    class="text-2xl font-semibold text-black dark:text-white"
                                 >
                                     Levendig ecosysteem
                                 </h2>

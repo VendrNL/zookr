@@ -46,7 +46,7 @@ useDirtyConfirm(form, undefined, {
 <template>
     <section>
         <header>
-            <h2 class="text-lg font-medium text-gray-900">
+            <h2 class="text-xl font-medium text-gray-900">
                 Wijzig wachtwoord
             </h2>
 

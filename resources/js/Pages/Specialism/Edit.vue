@@ -84,7 +84,7 @@ const handleCancel = () => {
                     @submit.prevent="submit"
                 >
                     <div>
-                        <h2 class="text-sm font-semibold text-gray-900">
+                        <h2 class="text-base font-semibold text-gray-900">
                             Type vastgoed
                         </h2>
                         <p class="text-sm text-gray-500">
@@ -114,7 +114,7 @@ const handleCancel = () => {
                     </div>
 
                     <div>
-                        <h2 class="text-sm font-semibold text-gray-900">
+                        <h2 class="text-base font-semibold text-gray-900">
                             Provincie
                         </h2>
                         <p class="text-sm text-gray-500">

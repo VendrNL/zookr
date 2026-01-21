@@ -165,7 +165,7 @@ const openMember = (id) => {
                                 <img
                                     :src="newLogoPreview || organization.logo_url"
                                     alt="Organisatielogo"
-                                    class="max-h-[120px] max-w-[220px] object-contain"
+                                    class="max-h-[120px] max-w-[220px] object-contain pointer-events-none"
                                 />
                             </div>
                             <div
@@ -269,7 +269,7 @@ const openMember = (id) => {
                     <template #header>
                         <div class="flex items-center justify-between">
                             <div>
-                                <h2 class="text-sm font-semibold text-gray-900">
+                                <h2 class="text-base font-semibold text-gray-900">
                                     Medewerkers
                                 </h2>
                                 <p class="text-sm text-gray-500">
@@ -456,4 +456,3 @@ const openMember = (id) => {
         </div>
     </AuthenticatedLayout>
 </template>
-

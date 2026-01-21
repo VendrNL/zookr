@@ -351,7 +351,7 @@ onBeforeUnmount(() => {
         <Modal :show="dirtyConfirm.open" maxWidth="md" @close="handleStay">
             <ModalCard>
                 <template #title>
-                    <h2 class="text-xl font-semibold text-gray-900">
+                    <h2 class="text-2xl font-semibold text-gray-900">
                         Gegevens zijn gewijzigd
                     </h2>
                 </template>

@@ -396,7 +396,7 @@ function acquisitionLabel(value) {
         <Modal :show="showDeleteModal" maxWidth="md" @close="cancelDelete">
             <ModalCard>
                 <template #title>
-                    <h2 class="text-xl font-semibold text-gray-900">
+                    <h2 class="text-2xl font-semibold text-gray-900">
                         Weet je het zeker?
                     </h2>
                 </template>

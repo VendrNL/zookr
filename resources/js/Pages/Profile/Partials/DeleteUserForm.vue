@@ -48,7 +48,7 @@ const closeModal = () => {
 <template>
     <section class="space-y-6">
         <header>
-            <h2 class="text-lg font-medium text-gray-900">
+            <h2 class="text-xl font-medium text-gray-900">
                 Verwijder account
             </h2>
 
@@ -62,7 +62,7 @@ const closeModal = () => {
         <Modal :show="confirmingUserDeletion" maxWidth="md" @close="closeModal">
             <ModalCard>
                 <template #title>
-                    <h2 class="text-xl font-semibold text-gray-900">
+                    <h2 class="text-2xl font-semibold text-gray-900">
                         Weet je zeker dat je je account wilt verwijderen?
                     </h2>
                 </template>

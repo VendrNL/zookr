@@ -39,6 +39,7 @@ const form = useForm({
 });
 
 const avatarPreview = ref(null);
+const isDragging = ref(false);
 const avatarInput = ref(null);
 const linkedinHandle = ref("");
 const showInviteModal = ref(false);
@@ -80,10 +81,34 @@ const confirmInvite = (invite) => {
     submit();
 };
 
+const setAvatarFile = (file) => {
+    if (!file) {
+        return;
+    }
+    if (file.type && !file.type.startsWith("image/")) {
+        return;
+    }
+    form.avatar = file;
+    avatarPreview.value = URL.createObjectURL(file);
+};
+
 const handleAvatar = (event) => {
     const file = event.target.files[0] ?? null;
-    form.avatar = file;
-    avatarPreview.value = file ? URL.createObjectURL(file) : null;
+    setAvatarFile(file);
+};
+
+const onDragOver = () => {
+    isDragging.value = true;
+};
+
+const onDragLeave = () => {
+    isDragging.value = false;
+};
+
+const onDrop = (event) => {
+    const file = event.dataTransfer?.files?.[0] ?? null;
+    setAvatarFile(file);
+    isDragging.value = false;
 };
 
 const openAvatarPicker = () => {
@@ -130,7 +155,7 @@ const selectOrganization = (org) => {
                 <FormSection>
                     <header class="flex items-start justify-between gap-4">
                         <div>
-                            <h2 class="text-lg font-medium text-gray-900">
+                            <h2 class="text-xl font-medium text-gray-900">
                                 Profielgegevens
                             </h2>
 
@@ -178,16 +203,21 @@ const selectOrganization = (org) => {
                         <div class="flex items-center gap-4">
                             <div
                                 class="h-20 w-20 overflow-hidden rounded-full border border-gray-200 bg-gray-50 shadow-sm"
+                                :class="{ 'ring-2 ring-blue-500 ring-offset-2': isDragging }"
                                 @click="openAvatarPicker"
                                 role="button"
                                 tabindex="0"
                                 @keydown.enter.space.prevent="openAvatarPicker"
+                                @dragover.prevent="onDragOver"
+                                @dragenter.prevent="onDragOver"
+                                @dragleave.prevent="onDragLeave"
+                                @drop.prevent="onDrop"
                             >
                                 <img
                                     v-if="avatarPreview"
                                     :src="avatarPreview"
                                     alt="Avatar"
-                                    class="h-full w-full object-cover"
+                                    class="h-full w-full object-cover pointer-events-none"
                                 />
                                 <div
                                     v-else
@@ -323,7 +353,7 @@ const selectOrganization = (org) => {
     <Modal :show="showInviteModal" maxWidth="md" @close="showInviteModal = false">
         <ModalCard>
             <template #title>
-                <h2 class="text-xl font-semibold text-gray-900">
+                <h2 class="text-2xl font-semibold text-gray-900">
                     Uitnodiging
                 </h2>
             </template>

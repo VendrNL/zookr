@@ -6,7 +6,7 @@ import TableCell from "@/Components/TableCell.vue";
 import TableEmptyState from "@/Components/TableEmptyState.vue";
 import TableHeaderCell from "@/Components/TableHeaderCell.vue";
 import TableRowLink from "@/Components/TableRowLink.vue";
-import { Head, Link, router } from "@inertiajs/vue3";
+import { Head, Link, router, usePage } from "@inertiajs/vue3";
 import MaterialIcon from "@/Components/MaterialIcon.vue";
 import Dropdown from "@/Components/Dropdown.vue";
 import DropdownLink from "@/Components/DropdownLink.vue";
@@ -37,6 +37,8 @@ const form = reactive({
 
 const searchTimeout = ref(null);
 const lastLinkIndex = computed(() => (props.users?.links?.length ?? 1) - 1);
+const page = usePage();
+const returnTo = computed(() => page.url);
 const avatarErrors = ref({});
 function applyFilters() {
     router.get(
@@ -67,7 +69,7 @@ function setStatusFilter(value) {
 }
 
 function openUser(id) {
-    router.visit(route("admin.users.edit", id));
+    router.visit(route("admin.users.edit", { user: id, return_to: returnTo.value }));
 }
 
 function toggleStatus(user) {
@@ -173,7 +175,7 @@ function handleAvatarError(userId) {
                             <table class="min-w-full w-full table-fixed text-left text-sm text-gray-600">
                                 <thead class="bg-gray-50 text-xs uppercase text-gray-700">
                                     <tr>
-                                        <TableHeaderCell style="width: 40px;"></TableHeaderCell>
+                                        <TableHeaderCell align="center" style="width: 40px;"></TableHeaderCell>
                                         <TableHeaderCell class="w-[32%] min-w-[280px]">
                                             <button
                                                 type="button"
@@ -293,20 +295,22 @@ function handleAvatarError(userId) {
                                         @activate="openUser(user.id)"
                                     >
                                         <TableCell align="center" style="width: 40px;">
-                                            <img
-                                                v-if="user.avatar_url && !avatarErrors[user.id]"
-                                                :src="user.avatar_url"
-                                                alt=""
-                                                class="w-10 h-10 rounded-full"
-                                                @error="handleAvatarError(user.id)"
-                                            />
-                                            <div
-                                                v-else
-                                                class="relative inline-flex items-center justify-center w-10 h-10 overflow-hidden bg-neutral-tertiary rounded-full"
-                                            >
-                                                <span class="font-medium text-body">
-                                                    {{ userInitials(user.name) }}
-                                                </span>
+                                            <div class="flex items-center justify-center">
+                                                <img
+                                                    v-if="user.avatar_url && !avatarErrors[user.id]"
+                                                    :src="user.avatar_url"
+                                                    alt=""
+                                                    class="w-10 h-10 rounded-full"
+                                                    @error="handleAvatarError(user.id)"
+                                                />
+                                                <div
+                                                    v-else
+                                                    class="relative inline-flex items-center justify-center w-10 h-10 overflow-hidden bg-neutral-tertiary rounded-full"
+                                                >
+                                                    <span class="font-medium text-body">
+                                                        {{ userInitials(user.name) }}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell class="whitespace-normal break-words">
@@ -422,7 +426,7 @@ function handleAvatarError(userId) {
                     <Link
                         v-for="user in users.data"
                         :key="user.id"
-                        :href="route('admin.users.edit', user.id)"
+                        :href="route('admin.users.edit', { user: user.id, return_to: returnTo })"
                         class="block"
                     >
                         <FormSection class="p-4">

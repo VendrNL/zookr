@@ -143,7 +143,7 @@ const handleCancel = () => {
                                     <img
                                         :src="logoPreview"
                                         alt="Organisatielogo"
-                                        class="max-h-[120px] max-w-[220px] object-contain"
+                                        class="max-h-[120px] max-w-[220px] object-contain pointer-events-none"
                                     />
                                 </div>
                                 <div
