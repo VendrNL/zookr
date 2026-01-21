@@ -15,14 +15,31 @@ class OrganizationController extends Controller
     public function index(Request $request)
     {
         $search = trim((string) $request->query('q', ''));
+        $status = $request->string('status')->toString();
+        $status = in_array($status, ['active', 'inactive', 'all'], true) ? $status : 'all';
+        $sort = $request->string('sort')->toString();
+        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
-        $organizations = Organization::query()
+        $organizationsQuery = Organization::query()
             ->when($search !== '', function ($query) use ($search) {
                 $query->where('name', 'like', '%' . $search . '%');
             })
-            ->withCount('users')
-            ->orderBy('name')
-            ->paginate(15)
+            ->withCount('users');
+
+        if ($status === 'active') {
+            $organizationsQuery->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $organizationsQuery->where('is_active', false);
+        }
+
+        if ($sort === 'name') {
+            $organizationsQuery->orderBy('name', $direction);
+        } else {
+            $organizationsQuery->orderBy('name');
+        }
+
+        $organizations = $organizationsQuery
+            ->paginate(25)
             ->withQueryString()
             ->through(function (Organization $organization) {
                 return [
@@ -41,6 +58,9 @@ class OrganizationController extends Controller
             'organizations' => $organizations,
             'filters' => [
                 'q' => $search,
+                'status' => $status,
+                'sort' => $sort,
+                'direction' => $direction,
             ],
         ]);
     }
@@ -272,5 +292,21 @@ class OrganizationController extends Controller
 
         return Redirect::route('admin.organizations.index')
             ->with('status', 'organization-updated');
+    }
+
+    public function setStatus(Request $request, Organization $organization)
+    {
+        $data = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $organization->update([
+            'is_active' => (bool) $data['is_active'],
+        ]);
+
+        $organization->users()
+            ->update(['is_active' => (bool) $data['is_active']]);
+
+        return Redirect::back();
     }
 }

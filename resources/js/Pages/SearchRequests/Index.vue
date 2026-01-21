@@ -2,23 +2,25 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import PageContainer from "@/Components/PageContainer.vue";
 import FormSection from "@/Components/FormSection.vue";
-import TableCard from "@/Components/TableCard.vue";
+import Dropdown from "@/Components/Dropdown.vue";
 import TableCell from "@/Components/TableCell.vue";
 import TableEmptyState from "@/Components/TableEmptyState.vue";
 import TableHeaderCell from "@/Components/TableHeaderCell.vue";
 import TableRowLink from "@/Components/TableRowLink.vue";
 import MaterialIcon from "@/Components/MaterialIcon.vue";
 import { Head, Link, router } from "@inertiajs/vue3";
-import { computed, reactive } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 const props = defineProps({
     filters: {
         type: Object,
         default: () => ({
-            status: "",
+            status: [],
             q: "",
-            province: "",
-            property_type: "",
+            province: [],
+            property_type: [],
+            sort: "",
+            direction: "desc",
         }),
     },
     items: {
@@ -36,31 +38,44 @@ const props = defineProps({
 });
 
 const form = reactive({
-    status: props.filters?.status ?? "",
+    status: Array.isArray(props.filters?.status)
+        ? [...props.filters.status]
+        : props.filters?.status
+            ? [props.filters.status]
+            : [],
     q: props.filters?.q ?? "",
-    province: props.filters?.province ?? "",
-    property_type: props.filters?.property_type ?? "",
+    province: Array.isArray(props.filters?.province)
+        ? [...props.filters.province]
+        : props.filters?.province
+            ? [props.filters.province]
+            : [],
+    property_type: Array.isArray(props.filters?.property_type)
+        ? [...props.filters.property_type]
+        : props.filters?.property_type
+            ? [props.filters.property_type]
+            : [],
+    sort: props.filters?.sort ?? "",
+    direction: props.filters?.direction ?? "desc",
 });
 
 const statuses = [
-    { value: "", label: "Alle statussen" },
     { value: "concept", label: "Concept" },
     { value: "open", label: "Open" },
     { value: "afgerond", label: "Afgerond" },
     { value: "geannuleerd", label: "Geannuleerd" },
 ];
 
-const hasFilters = computed(() =>
-    Boolean(form.status || form.q || form.province || form.property_type)
-);
+const searchTimeout = ref(null);
 
 function formatDate(value) {
     if (!value) return "-";
     return new Intl.DateTimeFormat("nl-NL", {
         day: "numeric",
-        month: "long",
+        month: "short",
         year: "numeric",
-    }).format(new Date(value));
+    })
+        .format(new Date(value))
+        .replaceAll(".", "");
 }
 
 function formatLabel(value) {
@@ -103,22 +118,85 @@ function applyFilters() {
     router.get(
         route("search-requests.index"),
         {
-            status: form.status || undefined,
-            province: form.province || undefined,
-            property_type: form.property_type || undefined,
+            status: form.status.length ? form.status : undefined,
+            province: form.province.length ? form.province : undefined,
+            property_type: form.property_type.length
+                ? form.property_type
+                : undefined,
             q: form.q || undefined,
+            sort: form.sort || undefined,
+            direction: form.direction || undefined,
         },
         { preserveState: true, preserveScroll: true, replace: true }
     );
 }
 
-function resetFilters() {
-    form.status = "";
-    form.q = "";
-    form.province = "";
-    form.property_type = "";
+function toggleSelection(list, value) {
+    const index = list.indexOf(value);
+    if (index === -1) {
+        list.push(value);
+    } else {
+        list.splice(index, 1);
+    }
     applyFilters();
 }
+
+function toggleSort(field) {
+    if (form.sort === field) {
+        form.direction = form.direction === "asc" ? "desc" : "asc";
+    } else {
+        form.sort = field;
+        form.direction = "asc";
+    }
+    applyFilters();
+}
+
+const propertyTypeLabel = computed(() => {
+    if (!form.property_type.length) return "Type";
+    if (form.property_type.length === 1) {
+        return formatLabel(form.property_type[0]);
+    }
+    return "Type";
+});
+
+const provinceLabel = computed(() => {
+    if (!form.province.length) return "Provincie";
+    if (form.province.length === 1) {
+        return formatProvince(form.province[0]);
+    }
+    return "Provincie";
+});
+
+const statusLabelText = computed(() => {
+    if (!form.status.length) return "Status";
+    if (form.status.length === 1) {
+        return statusLabel(form.status[0]);
+    }
+    return "Status";
+});
+
+const propertyTypeCount = computed(() => form.property_type.length);
+const provinceCount = computed(() => form.province.length);
+const statusCount = computed(() => form.status.length);
+
+const emptyRows = computed(() => {
+    const count = props.items?.data?.length ?? 0;
+    return Math.max(0, 3 - count);
+});
+
+const lastLinkIndex = computed(() => (props.items?.links?.length ?? 1) - 1);
+
+watch(
+    () => form.q,
+    () => {
+        if (searchTimeout.value) {
+            clearTimeout(searchTimeout.value);
+        }
+        searchTimeout.value = setTimeout(() => {
+            applyFilters();
+        }, 300);
+    }
+);
 
 function openItem(id) {
     router.visit(route("search-requests.show", id));
@@ -168,24 +246,6 @@ function paginationLabel(label) {
                     >
                         Zoekvragen
                     </h2>
-                    <p class="text-sm text-gray-500">
-                        Overzicht van zoekvragen (met filters en paginatie).
-                    </p>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <Link
-                        v-if="can.create"
-                        :href="route('search-requests.create')"
-                        class="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                    >
-                        <span class="hidden sm:inline">Nieuwe aanvraag</span>
-                        <span class="sr-only">Nieuwe aanvraag</span>
-                        <MaterialIcon
-                            name="add"
-                            class="h-5 w-5 sm:hidden"
-                        />
-                    </Link>
                 </div>
             </div>
         </template>
@@ -200,7 +260,6 @@ function paginationLabel(label) {
                             type="text"
                             placeholder="Titel, klant of locatie."
                             class="h-[38px] w-full min-w-0 rounded-md border-gray-300 bg-white text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                            @keyup.enter="applyFilters"
                         />
                         <button
                             type="button"
@@ -209,234 +268,413 @@ function paginationLabel(label) {
                         >
                             <MaterialIcon name="search" class="h-5 w-5" />
                         </button>
-                        <button
-                            type="button"
-                            class="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white p-0 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                            :disabled="!hasFilters"
-                            @click="resetFilters"
-                        >
-                            <MaterialIcon name="replay" class="h-5 w-5" />
-                        </button>
-                    </div>
-                </div>
-
-                <div
-                    class="hidden rounded-lg bg-white p-4 shadow-sm ring-1 ring-gray-200 sm:block"
-                >
-                    <div
-                        class="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end"
-                    >
-                        <div class="md:col-span-10">
-                            <label
-                                class="block text-sm font-medium text-gray-700"
-                                >Zoeken</label
-                            >
-                            <input
-                                v-model="form.q"
-                                type="text"
-                                placeholder="Titel, klant of locatie."
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                @keyup.enter="applyFilters"
-                            />
-                        </div>
-
-                        <div class="md:col-span-2 flex gap-2">
-                            <button
-                                type="button"
-                                class="w-full rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                                @click="applyFilters"
-                            >
-                                Zoeken
-                            </button>
-                            <button
-                                type="button"
-                                class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50"
-                                :disabled="!hasFilters"
-                                @click="resetFilters"
-                            >
-                                Reset
-                            </button>
-                        </div>
                     </div>
                 </div>
 
                 <!-- Tabel -->
                 <div class="mt-6 hidden sm:block">
-                    <TableCard>
-                    <thead class="bg-gray-50">
-                                <tr>
-                                    <TableHeaderCell>
-                                        Titel
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        Makelaar
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        <select
-                                            v-model="form.property_type"
-                                            class="w-36 rounded-md border-gray-300 text-xs shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                            aria-label="Type vastgoed"
-                                            @change="applyFilters"
-                                        >
-                                            <option value="">
-                                                Type vastgoed
-                                            </option>
-                                            <option
-                                                v-for="option in options.types"
-                                                :key="option"
-                                                :value="option"
-                                            >
-                                                {{ formatLabel(option) }}
-                                            </option>
-                                        </select>
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        <select
-                                            v-model="form.province"
-                                            class="w-32 rounded-md border-gray-300 text-xs shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                            aria-label="Provincie"
-                                            @change="applyFilters"
-                                        >
-                                            <option value="">
-                                                Provincie
-                                            </option>
-                                            <option
-                                                v-for="option in options.provinces"
-                                                :key="option"
-                                                :value="option"
-                                            >
-                                                {{ formatProvince(option) }}
-                                            </option>
-                                        </select>
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        Oppervlakte
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        Verwerving
-                                    </TableHeaderCell>
-                                    <TableHeaderCell>
-                                        Aangemaakt
-                                    </TableHeaderCell>
-                                    <TableHeaderCell align="right">
-                                        <div
-                                            class="flex items-center justify-end"
-                                        >
-                                            <select
-                                                v-model="form.status"
-                                                class="w-28 rounded-md border-gray-300 text-xs shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                                aria-label="Status"
-                                                @change="applyFilters"
-                                            >
-                                                <option
-                                                    v-for="s in statuses"
-                                                    :key="s.value"
-                                                    :value="s.value"
-                                            >
-                                                {{ s.label }}
-                                            </option>
-                                        </select>
-                                        </div>
-                                    </TableHeaderCell>
-                                </tr>
-                            </thead>
-
-                            <tbody class="divide-y divide-gray-100">
-                                <TableEmptyState
-                                    v-if="items.data?.length === 0"
-                                    :colspan="8"
-                                    message="Geen aanvragen gevonden."
-                                />
-
-                                <TableRowLink
-                                    v-for="item in items.data"
-                                    :key="item.id"
-                                    @activate="openItem(item.id)"
+                    <div class="relative rounded-lg bg-white shadow-md">
+                                <div
+                                    class="flex flex-col items-center justify-between gap-3 p-4 md:flex-row md:gap-4"
                                 >
-                                    <TableCell>
-                                        <div
-                                            class="text-sm font-semibold text-gray-900"
+                                    <div class="w-full md:w-4/12">
+                                        <form class="flex items-center" @submit.prevent="applyFilters">
+                                            <label for="simple-search" class="sr-only">
+                                                Zoeken
+                                            </label>
+                                            <div class="relative w-full">
+                                                <div
+                                                    class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500"
+                                                >
+                                                    <svg
+                                                        aria-hidden="true"
+                                                        class="h-5 w-5"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 20 20"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                    >
+                                                        <path
+                                                            fill-rule="evenodd"
+                                                            d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+                                                            clip-rule="evenodd"
+                                                        />
+                                                    </svg>
+                                                </div>
+                                                <input
+                                                    id="simple-search"
+                                                    v-model="form.q"
+                                                    type="text"
+                                                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 pl-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                                                    placeholder="Zoek op titel, klant of locatie"
+                                                />
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div
+                                        class="flex w-full flex-col items-stretch justify-end space-y-2 md:w-auto md:flex-row md:items-center md:space-x-3 md:space-y-0"
+                                    >
+                                        <Link
+                                            v-if="can.create"
+                                            :href="route('search-requests.create')"
+                                            class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                         >
-                                            {{ item.title }}
-                                        </div>
-                                        <div
-                                            class="text-xs text-gray-500"
-                                            v-if="item.customer_name"
-                                        >
-                                            Klant: {{ item.customer_name }}
-                                        </div>
-                                    </TableCell>
+                                            <MaterialIcon name="add" class="mr-2 h-4 w-4" />
+                                            Nieuwe zoekvraag
+                                        </Link>
+                                    </div>
+                                </div>
+                                <div>
+                                    <table class="w-full table-fixed text-left text-sm text-gray-600">
+                                        <thead class="bg-gray-50 text-xs uppercase text-gray-700">
+                                            <tr>
+                                                <TableHeaderCell class="w-[30%] min-w-[280px]">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex items-center gap-1 text-gray-600 uppercase"
+                                                        @click="toggleSort('title')"
+                                                    >
+                                                        Titel
+                                                        <svg
+                                                            v-if="form.sort === 'title'"
+                                                            class="h-3 w-3 text-gray-500"
+                                                            viewBox="0 0 20 20"
+                                                            fill="currentColor"
+                                                            aria-hidden="true"
+                                                        >
+                                                            <path
+                                                                v-if="form.direction === 'asc'"
+                                                                d="M10 4l-4 4h8l-4-4z"
+                                                            />
+                                                            <path
+                                                                v-else
+                                                                d="M10 16l4-4H6l4 4z"
+                                                            />
+                                                        </svg>
+                                                    </button>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[16%]">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex items-center gap-1 text-gray-600 uppercase"
+                                                        @click="toggleSort('organization')"
+                                                    >
+                                                        Makelaar
+                                                        <svg
+                                                            v-if="form.sort === 'organization'"
+                                                            class="h-3 w-3 text-gray-500"
+                                                            viewBox="0 0 20 20"
+                                                            fill="currentColor"
+                                                            aria-hidden="true"
+                                                        >
+                                                            <path
+                                                                v-if="form.direction === 'asc'"
+                                                                d="M10 4l-4 4h8l-4-4z"
+                                                            />
+                                                            <path
+                                                                v-else
+                                                                d="M10 16l4-4H6l4 4z"
+                                                            />
+                                                        </svg>
+                                                    </button>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[12%] hidden md:table-cell">
+                                                    <Dropdown align="left" width="48">
+                                                        <template #trigger>
+                                                            <button
+                                                                type="button"
+                                                                class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                                            >
+                                                                <span>{{ propertyTypeLabel }}</span>
+                                                                <span
+                                                                    v-if="propertyTypeCount"
+                                                                    class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
+                                                                >
+                                                                    {{ propertyTypeCount }}
+                                                                </span>
+                                                                <svg
+                                                                    class="h-3 w-3 text-gray-500"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path
+                                                                        fill-rule="evenodd"
+                                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                                        clip-rule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                        </template>
+                                                        <template #content>
+                                                            <div class="max-h-64 overflow-auto px-3 py-2" @click.stop>
+                                                                <div
+                                                                    v-for="option in options.types"
+                                                                    :key="option"
+                                                                    class="flex items-center py-1"
+                                                                >
+                                                                    <input
+                                                                        :id="`type-${option}`"
+                                                                        type="checkbox"
+                                                                        :checked="form.property_type.includes(option)"
+                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        @change="toggleSelection(form.property_type, option)"
+                                                                    />
+                                                            <label
+                                                                :for="`type-${option}`"
+                                                                class="ml-2 truncate text-xs font-normal text-gray-500 normal-case"
+                                                            >
+                                                                {{ formatLabel(option) }}
+                                                            </label>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </Dropdown>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[12%] hidden md:table-cell">
+                                                    <Dropdown align="left" width="48">
+                                                        <template #trigger>
+                                                            <button
+                                                                type="button"
+                                                                class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                                            >
+                                                                <span>{{ provinceLabel }}</span>
+                                                                <span
+                                                                    v-if="provinceCount"
+                                                                    class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
+                                                                >
+                                                                    {{ provinceCount }}
+                                                                </span>
+                                                                <svg
+                                                                    class="h-3 w-3 text-gray-500"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path
+                                                                        fill-rule="evenodd"
+                                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                                        clip-rule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                        </template>
+                                                        <template #content>
+                                                            <div class="max-h-64 overflow-auto px-3 py-2" @click.stop>
+                                                                <div
+                                                                    v-for="option in options.provinces"
+                                                                    :key="option"
+                                                                    class="flex items-center py-1"
+                                                                >
+                                                                    <input
+                                                                        :id="`province-${option}`"
+                                                                        type="checkbox"
+                                                                        :checked="form.province.includes(option)"
+                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        @change="toggleSelection(form.province, option)"
+                                                                    />
+                                                            <label
+                                                                :for="`province-${option}`"
+                                                                class="ml-2 truncate text-xs font-normal text-gray-500 normal-case"
+                                                            >
+                                                                {{ formatProvince(option) }}
+                                                            </label>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </Dropdown>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[10%] hidden lg:table-cell">
+                                                    Oppervlakte
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[10%] hidden lg:table-cell">
+                                                    Verwerving
+                                                </TableHeaderCell>
+                                                <TableHeaderCell class="w-[12%]">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex items-center gap-1 text-gray-600 uppercase"
+                                                        @click="toggleSort('created_at')"
+                                                    >
+                                                        Aangemaakt
+                                                        <svg
+                                                            v-if="form.sort === 'created_at'"
+                                                            class="h-3 w-3 text-gray-500"
+                                                            viewBox="0 0 20 20"
+                                                            fill="currentColor"
+                                                            aria-hidden="true"
+                                                        >
+                                                            <path
+                                                                v-if="form.direction === 'asc'"
+                                                                d="M10 4l-4 4h8l-4-4z"
+                                                            />
+                                                            <path
+                                                                v-else
+                                                                d="M10 16l4-4H6l4 4z"
+                                                            />
+                                                        </svg>
+                                                    </button>
+                                                </TableHeaderCell>
+                                                <TableHeaderCell align="center" class="w-[8%]">
+                                                    <Dropdown align="left" width="48">
+                                                        <template #trigger>
+                                                            <button
+                                                                type="button"
+                                                                class="inline-flex w-full items-center justify-center gap-2 text-gray-600 uppercase"
+                                                            >
+                                                                <span>{{ statusLabelText }}</span>
+                                                                <span
+                                                                    v-if="statusCount"
+                                                                    class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700"
+                                                                >
+                                                                    {{ statusCount }}
+                                                                </span>
+                                                                <svg
+                                                                    class="h-3 w-3 text-gray-500"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path
+                                                                        fill-rule="evenodd"
+                                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                                        clip-rule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                        </template>
+                                                        <template #content>
+                                                            <div class="px-3 py-2" @click.stop>
+                                                                <div
+                                                                    v-for="status in statuses"
+                                                                    :key="status.value"
+                                                                    class="flex items-center py-1"
+                                                                >
+                                                                    <input
+                                                                        :id="`status-${status.value}`"
+                                                                        type="checkbox"
+                                                                        :checked="form.status.includes(status.value)"
+                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        @change="toggleSelection(form.status, status.value)"
+                                                                    />
+                                                            <label
+                                                                :for="`status-${status.value}`"
+                                                                class="ml-2 truncate text-xs font-normal text-gray-500 normal-case"
+                                                            >
+                                                                {{ status.label }}
+                                                            </label>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </Dropdown>
+                                                </TableHeaderCell>
+                                            </tr>
+                                        </thead>
 
-                                    <TableCell>
-                                        {{ item.organization?.name || "-" }}
-                                    </TableCell>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <TableEmptyState
+                                                v-if="items.data?.length === 0"
+                                                :colspan="8"
+                                                message="Geen aanvragen gevonden."
+                                            />
 
-                                    <TableCell>
-                                        {{ formatLabel(item.property_type) }}
-                                    </TableCell>
+                                            <TableRowLink
+                                                v-for="item in items.data"
+                                                :key="item.id"
+                                                @activate="openItem(item.id)"
+                                            >
+                                                <TableCell class="whitespace-normal break-words">
+                                                    <div class="text-sm font-semibold text-gray-900">
+                                                        {{ item.title }}
+                                                    </div>
+                                                    <div
+                                                        v-if="item.customer_name"
+                                                        class="text-xs text-gray-500"
+                                                    >
+                                                        Klant: {{ item.customer_name }}
+                                                    </div>
+                                                </TableCell>
 
-                                    <TableCell>
-                                        {{ formatProvinceList(item.provinces) }}
-                                    </TableCell>
+                                                <TableCell class="truncate">
+                                                    {{ item.organization?.name || "-" }}
+                                                </TableCell>
 
-                                    <TableCell>
-                                        {{ item.surface_area || "-" }}
-                                    </TableCell>
+                                                <TableCell class="hidden md:table-cell truncate">
+                                                    {{ formatLabel(item.property_type) }}
+                                                </TableCell>
 
-                                    <TableCell>
-                                        {{ acquisitionList(item.acquisitions) }}
-                                    </TableCell>
+                                                <TableCell class="hidden md:table-cell truncate">
+                                                    {{ formatProvinceList(item.provinces) }}
+                                                </TableCell>
 
-                                    <TableCell>
-                                        {{
-                                            formatDate(item.created_at)
-                                        }}
-                                    </TableCell>
+                                                <TableCell class="hidden lg:table-cell truncate">
+                                                    {{ item.surface_area || "-" }}
+                                                </TableCell>
 
-                                    <TableCell align="right">
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset"
-                                            :class="
-                                                statusBadgeClass(item.status)
-                                            "
-                                        >
-                                            {{ statusLabel(item.status) }}
+                                                <TableCell class="hidden lg:table-cell truncate">
+                                                    {{ acquisitionList(item.acquisitions) }}
+                                                </TableCell>
+
+                                                <TableCell class="truncate">
+                                                    {{ formatDate(item.created_at) }}
+                                                </TableCell>
+
+                                                <TableCell align="center">
+                                                    <span
+                                                        class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-inset"
+                                                        :class="statusBadgeClass(item.status)"
+                                                    >
+                                                        {{ statusLabel(item.status) }}
+                                                    </span>
+                                                </TableCell>
+                                            </TableRowLink>
+                                            <tr
+                                                v-for="row in emptyRows"
+                                                :key="`empty-${row}`"
+                                                class="h-12"
+                                            >
+                                                <td colspan="8" class="px-4 py-3"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <nav
+                                    v-if="items.links?.length"
+                                    class="flex flex-col items-start justify-between space-y-3 border-t border-gray-200 p-4 md:flex-row md:items-center md:space-y-0"
+                                    aria-label="Table navigation"
+                                >
+                                    <span class="text-sm font-normal text-gray-500">
+                                        <span v-if="items.from && items.to && items.total">
+                                            Resultaten
+                                            <span class="font-semibold text-gray-900">
+                                                {{ items.from }}-{{ items.to }}
+                                            </span>
+                                            van
+                                            <span class="font-semibold text-gray-900">
+                                                {{ items.total }}
+                                            </span>
                                         </span>
-                                    </TableCell>
-                                </TableRowLink>
-                            </tbody>
-                    <template #footer>
-                        <div
-                            v-if="items.links?.length"
-                            class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 bg-white px-4 py-3"
-                        >
-                            <div class="text-sm text-gray-600">
-                                <span v-if="items.from && items.to && items.total">
-                                    Resultaten {{ items.from }}-{{ items.to }} van
-                                    {{ items.total }}
-                                </span>
-                            </div>
-
-                            <div class="flex flex-wrap gap-1">
-                                <Link
-                                    v-for="(link, i) in items.links"
-                                    :key="i"
-                                    :href="link.url || ''"
-                                    class="rounded-md px-3 py-1 text-sm"
-                                    :class="[
-                                        link.active
-                                            ? 'bg-gray-900 text-white'
-                                            : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50',
-                                        !link.url
-                                            ? 'pointer-events-none opacity-40'
-                                            : '',
-                                    ]"
-                                    v-html="paginationLabel(link.label)"
-                                />
-                            </div>
-                        </div>
-                    </template>
-                    </TableCard>
+                                    </span>
+                                    <div class="inline-flex items-stretch -space-x-px">
+                                        <Link
+                                            v-for="(link, i) in items.links"
+                                            :key="i"
+                                            :href="link.url || ''"
+                                            class="flex items-center justify-center border border-gray-300 bg-white px-3 py-2 text-sm leading-tight text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                                            :class="[
+                                                i === 0 ? 'rounded-l-lg' : '',
+                                                i === lastLinkIndex ? 'rounded-r-lg' : '',
+                                                link.active
+                                                    ? 'z-10 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800'
+                                                    : '',
+                                                !link.url
+                                                    ? 'pointer-events-none opacity-40'
+                                                    : '',
+                                            ]"
+                                            v-html="paginationLabel(link.label)"
+                                        />
+                                    </div>
+                                </nav>
+                    </div>
                 </div>
 
                 <div class="mt-6 space-y-3 sm:hidden">

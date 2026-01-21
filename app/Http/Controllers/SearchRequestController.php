@@ -48,23 +48,29 @@ class SearchRequestController extends Controller
                 'creator:id,name,email,organization_id',
                 'organization:id,name,logo_path',
                 'assignee:id,name,email',
-            ])
-            ->latest();
+            ]);
 
         // Filters
-        $status = $request->string('status')->toString();
-        if ($status !== '') {
-            $query->where('status', $status);
+        $status = array_values(array_filter((array) $request->input('status', [])));
+        $status = array_values(array_intersect($status, ['concept', 'open', 'afgerond', 'geannuleerd']));
+        if ($status !== []) {
+            $query->whereIn('status', $status);
         }
 
-        $province = $request->string('province')->toString();
-        if ($province !== '') {
-            $query->whereJsonContains('provinces', $province);
+        $province = array_values(array_filter((array) $request->input('province', [])));
+        $province = array_values(array_intersect($province, self::PROVINCES));
+        if ($province !== []) {
+            $query->where(function ($sub) use ($province) {
+                foreach ($province as $item) {
+                    $sub->orWhereJsonContains('provinces', $item);
+                }
+            });
         }
 
-        $propertyType = $request->string('property_type')->toString();
-        if ($propertyType !== '') {
-            $query->where('property_type', $propertyType);
+        $propertyType = array_values(array_filter((array) $request->input('property_type', [])));
+        $propertyType = array_values(array_intersect($propertyType, self::PROPERTY_TYPES));
+        if ($propertyType !== []) {
+            $query->whereIn('property_type', $propertyType);
         }
 
         $q = $request->string('q')->toString();
@@ -76,14 +82,31 @@ class SearchRequestController extends Controller
             });
         }
 
+        $sort = $request->string('sort')->toString();
+        $direction = $request->string('direction')->toString() === 'asc' ? 'asc' : 'desc';
+
+        if ($sort === 'title') {
+            $query->orderBy('title', $direction);
+        } elseif ($sort === 'organization') {
+            $query->leftJoin('organizations', 'search_requests.organization_id', '=', 'organizations.id')
+                ->orderBy('organizations.name', $direction)
+                ->select('search_requests.*');
+        } elseif ($sort === 'created_at') {
+            $query->orderBy('created_at', $direction);
+        } else {
+            $query->latest();
+        }
+
         return Inertia::render('SearchRequests/Index', [
             'filters' => [
                 'status' => $status,
                 'q' => $q,
                 'province' => $province,
                 'property_type' => $propertyType,
+                'sort' => $sort,
+                'direction' => $direction,
             ],
-            'items' => $query->paginate(15)->withQueryString(),
+            'items' => $query->paginate(25)->withQueryString(),
             'can' => [
                 'create' => $request->user()->can('create', SearchRequest::class),
                 'is_admin' => (bool) $request->user()->is_admin,

@@ -80,6 +80,9 @@ class UserController extends Controller
                 'id' => $organization->id,
                 'name' => $organization->name,
             ],
+            'organizations' => Organization::query()
+                ->orderBy('name')
+                ->get(['id', 'name']),
         ]);
     }
 
@@ -125,14 +128,12 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'status' => ['nullable', 'in:active,inactive,all'],
-            'admin' => ['nullable', 'in:1,0,all'],
             'sort' => ['nullable', 'in:name,organization'],
             'direction' => ['nullable', 'in:asc,desc'],
             'q' => ['nullable', 'string', 'max:255'],
         ]);
 
         $status = $data['status'] ?? 'active';
-        $admin = $data['admin'] ?? 'all';
         $sort = $data['sort'] ?? 'name';
         $direction = $data['direction'] ?? 'asc';
         $search = trim((string) ($data['q'] ?? ''));
@@ -154,12 +155,6 @@ class UserController extends Controller
             $query->where('users.is_active', false);
         }
 
-        if ($admin === '1') {
-            $query->where('users.is_admin', true);
-        } elseif ($admin === '0') {
-            $query->where('users.is_admin', false);
-        }
-
         if ($sort === 'organization') {
             $query->orderBy('organizations.name', $direction)
                 ->orderBy('users.name', 'asc');
@@ -167,39 +162,42 @@ class UserController extends Controller
             $query->orderBy('users.name', $direction);
         }
 
-        $users = $query->get([
-            'users.id',
-            'users.name',
-            'users.email',
-            'users.phone',
-            'users.avatar_path',
-            'users.is_admin',
-            'users.is_active',
-            'users.linkedin_url',
-            'organizations.id as organization_id',
-            'organizations.name as organization_name',
-        ])->map(function ($user) {
-            return [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'avatar_url' => $user->avatar_path
-                    ? Storage::disk('public')->url($user->avatar_path)
-                    : null,
-                'is_admin' => (bool) $user->is_admin,
-                'is_active' => (bool) $user->is_active,
-                'linkedin_url' => $user->linkedin_url,
-                'organization_id' => $user->organization_id,
-                'organization_name' => $user->organization_name,
-            ];
-        });
+        $users = $query
+            ->select([
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.phone',
+                'users.avatar_path',
+                'users.is_admin',
+                'users.is_active',
+                'users.linkedin_url',
+                'organizations.id as organization_id',
+                'organizations.name as organization_name',
+            ])
+            ->paginate(25)
+            ->withQueryString()
+            ->through(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'avatar_url' => $user->avatar_path
+                        ? Storage::disk('public')->url($user->avatar_path)
+                        : null,
+                    'is_admin' => (bool) $user->is_admin,
+                    'is_active' => (bool) $user->is_active,
+                    'linkedin_url' => $user->linkedin_url,
+                    'organization_id' => $user->organization_id,
+                    'organization_name' => $user->organization_name,
+                ];
+            });
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
             'filters' => [
                 'status' => $status,
-                'admin' => $admin,
                 'sort' => $sort,
                 'direction' => $direction,
                 'q' => $search,
@@ -255,6 +253,19 @@ class UserController extends Controller
         $user->save();
 
         return Redirect::to($returnTo)->with('status', 'user-updated');
+    }
+
+    public function setStatus(Request $request, User $user)
+    {
+        $data = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $user->update([
+            'is_active' => (bool) $data['is_active'],
+        ]);
+
+        return Redirect::back();
     }
 
     public function updateSpecialism(Request $request, User $user)

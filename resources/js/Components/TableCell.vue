@@ -23,7 +23,7 @@ const alignClass = computed(() => {
     <td
         v-bind="attrs"
         :class="[
-            'px-4 py-3 text-sm text-gray-700',
+            'align-top px-4 py-3 text-sm text-gray-700',
             alignClass,
             attrs.class,
         ]"

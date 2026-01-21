@@ -12,7 +12,7 @@ import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, useForm } from "@inertiajs/vue3";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 const LINKEDIN_PREFIX = "https://www.linkedin.com/in/";
 
@@ -20,6 +20,10 @@ const props = defineProps({
     organization: {
         type: Object,
         required: true,
+    },
+    organizations: {
+        type: Array,
+        default: () => [],
     },
 });
 
@@ -38,8 +42,24 @@ const avatarPreview = ref(null);
 const avatarInput = ref(null);
 const linkedinHandle = ref("");
 const showInviteModal = ref(false);
+const organizationQuery = ref(props.organization?.name ?? "");
+const selectedOrganizationId = ref(props.organization?.id ?? null);
+const organizationError = ref("");
+
+const filteredOrganizations = computed(() => {
+    const query = organizationQuery.value.trim().toLowerCase();
+    if (!query) return props.organizations;
+    return props.organizations.filter((org) =>
+        org.name.toLowerCase().includes(query)
+    );
+});
 
 const submit = () => {
+    if (!selectedOrganizationId.value) {
+        organizationError.value = "Selecteer een organisatie.";
+        return;
+    }
+
     form
         .transform((data) => ({
             ...data,
@@ -47,7 +67,7 @@ const submit = () => {
                 ? `${LINKEDIN_PREFIX}${linkedinHandle.value}`
                 : null,
         }))
-        .post(route("admin.organizations.users.store", props.organization.id), {
+        .post(route("admin.organizations.users.store", selectedOrganizationId.value), {
             preserveScroll: true,
             forceFormData: true,
             onFinish: () => form.reset("avatar"),
@@ -68,6 +88,12 @@ const handleAvatar = (event) => {
 
 const openAvatarPicker = () => {
     avatarInput.value?.click();
+};
+
+const selectOrganization = (org) => {
+    selectedOrganizationId.value = org.id;
+    organizationQuery.value = org.name;
+    organizationError.value = "";
 };
 </script>
 
@@ -195,6 +221,35 @@ const openAvatarPicker = () => {
                             />
 
                             <InputError class="mt-2" :message="form.errors.name" />
+                        </div>
+
+                        <div class="relative">
+                            <InputLabel for="organization" value="Organisatie" />
+
+                            <TextInput
+                                id="organization"
+                                type="text"
+                                class="mt-1 block w-full"
+                                v-model="organizationQuery"
+                                autocomplete="organization"
+                            />
+
+                            <InputError class="mt-2" :message="organizationError" />
+
+                            <div
+                                v-if="filteredOrganizations.length"
+                                class="absolute z-10 mt-2 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow"
+                            >
+                                <button
+                                    v-for="org in filteredOrganizations"
+                                    :key="org.id"
+                                    type="button"
+                                    class="flex w-full items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                    @mousedown.prevent="selectOrganization(org)"
+                                >
+                                    <span class="truncate">{{ org.name }}</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div>

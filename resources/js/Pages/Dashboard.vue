@@ -9,21 +9,20 @@ import { Head } from '@inertiajs/vue3';
 
     <AuthenticatedLayout>
         <template #header>
-            <h2
-                class="text-xl font-semibold leading-tight text-gray-800"
-            >
+            <h2 class="text-xl font-semibold leading-tight text-gray-900">
                 Dashboard
             </h2>
         </template>
 
-        <div class="py-12">
+        <div class="py-8">
             <PageContainer>
-                <div
-                    class="overflow-hidden bg-white shadow-sm sm:rounded-lg"
-                >
-                    <div class="p-6 text-gray-900">
-                        Je bent ingelogd!
-                    </div>
+                <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        Welkom terug
+                    </h3>
+                    <p class="mt-2 text-sm text-gray-600">
+                        Je bent ingelogd en klaar om te starten.
+                    </p>
                 </div>
             </PageContainer>
         </div>

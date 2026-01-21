@@ -117,6 +117,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/admin/organizations/{organization}', [AdminOrganizationController::class, 'update'])
         ->name('admin.organizations.update')
         ->middleware('can:manageOrganizations,App\Models\User');
+    Route::patch('/admin/organizations/{organization}/status', [AdminOrganizationController::class, 'setStatus'])
+        ->name('admin.organizations.status')
+        ->middleware('can:manageOrganizations,App\Models\User');
 
     Route::get('/admin/users', [AdminUserController::class, 'index'])
         ->name('admin.users.index')
@@ -132,6 +135,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:manageUsers,user');
     Route::patch('/admin/users/{user}', [AdminUserController::class, 'update'])
         ->name('admin.users.update')
+        ->middleware('can:manageUsers,user');
+    Route::patch('/admin/users/{user}/status', [AdminUserController::class, 'setStatus'])
+        ->name('admin.users.status')
         ->middleware('can:manageUsers,user');
     Route::patch('/admin/users/{user}/specialism', [AdminUserController::class, 'updateSpecialism'])
         ->name('admin.users.specialism.update')

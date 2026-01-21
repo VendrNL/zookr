@@ -1,10 +1,6 @@
 <script setup>
-import Checkbox from '@/Components/Checkbox.vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 defineProps({
@@ -33,19 +29,33 @@ const submit = () => {
     <GuestLayout>
         <Head title="Inloggen" />
 
-        <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
+        <div
+            v-if="status"
+            class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+            role="alert"
+        >
             {{ status }}
         </div>
 
-        <form @submit.prevent="submit">
-            <div>
-                <InputLabel for="email" value="E-mail" />
+        <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl">
+            Inloggen op je account
+        </h1>
 
-                <TextInput
+        <form class="space-y-4 md:space-y-6" @submit.prevent="submit">
+            <div>
+                <label
+                    for="email"
+                    class="mb-2 block text-sm font-medium text-gray-900"
+                >
+                    E-mail
+                </label>
+
+                <input
                     id="email"
                     type="email"
-                    class="mt-1 block w-full"
                     v-model="form.email"
+                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="name@bedrijf.nl"
                     required
                     autofocus
                     autocomplete="username"
@@ -54,14 +64,20 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.email" />
             </div>
 
-            <div class="mt-4">
-                <InputLabel for="password" value="Wachtwoord" />
+            <div>
+                <label
+                    for="password"
+                    class="mb-2 block text-sm font-medium text-gray-900"
+                >
+                    Wachtwoord
+                </label>
 
-                <TextInput
+                <input
                     id="password"
                     type="password"
-                    class="mt-1 block w-full"
                     v-model="form.password"
+                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="••••••••"
                     required
                     autocomplete="current-password"
                 />
@@ -69,32 +85,39 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
-            <div class="mt-4 block">
-                <label class="flex items-center">
-                    <Checkbox name="remember" v-model:checked="form.remember" />
-                    <span class="ms-2 text-sm text-gray-600"
-                        >Onthoud mij</span
-                    >
+            <div class="flex items-center justify-between">
+                <label class="flex items-start">
+                    <div class="flex h-5 items-center">
+                        <input
+                            id="remember"
+                            name="remember"
+                            type="checkbox"
+                            v-model="form.remember"
+                            class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-4 focus:ring-blue-300"
+                        />
+                    </div>
+                    <span class="ms-2 text-sm text-gray-600">
+                        Onthoud mij
+                    </span>
                 </label>
-            </div>
 
-            <div class="mt-4 flex items-center justify-end">
                 <Link
                     v-if="canResetPassword"
                     :href="route('password.request')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    class="text-sm font-medium text-blue-600 hover:underline"
                 >
                     Wachtwoord vergeten?
                 </Link>
-
-                <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Inloggen
-                </PrimaryButton>
             </div>
+
+            <button
+                type="submit"
+                class="w-full rounded-lg bg-blue-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                :class="{ 'opacity-50': form.processing }"
+                :disabled="form.processing"
+            >
+                Inloggen
+            </button>
         </form>
     </GuestLayout>
 </template>

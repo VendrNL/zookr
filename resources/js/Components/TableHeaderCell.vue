@@ -23,7 +23,7 @@ const alignClass = computed(() => {
     <th
         v-bind="attrs"
         :class="[
-            'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600',
+            'align-top px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600',
             alignClass,
             attrs.class,
         ]"
