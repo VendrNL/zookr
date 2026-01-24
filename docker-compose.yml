@@ -27,9 +27,9 @@ services:
     volumes:
       - ./:/var/www
       - zookr_node_modules:/var/www/node_modules
-    command: sh -lc "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort"
+    command: sh -lc "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5174 --strictPort"
     ports:
-      - "5173:5173"
+      - "5174:5174"
 
   web:
     image: nginx:alpine

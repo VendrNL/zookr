@@ -1,6 +1,5 @@
 <script setup>
 import { useAttrs } from 'vue';
-import zookrLogo from '../../images/Zookr.svg';
 
 defineOptions({ inheritAttrs: false });
 
@@ -8,10 +7,47 @@ const attrs = useAttrs();
 </script>
 
 <template>
-    <img
+    <svg
         v-bind="attrs"
-        :src="zookrLogo"
-        alt="Zookr"
-        class="block"
-    />
+        class="zookr-logo"
+        data-zookr-logo
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 1718.47 626.4"
+        fill="currentColor"
+        role="img"
+        aria-label="Zookr"
+    >
+        <g class="mark">
+            <path
+                d="M1668.91,194.4h49.56v67.2h-42.84c-47.04,0-66.36,16.8-66.36,64.8v290.4h-77.28v-289.6c0-91.2,45.36-132.8,136.92-132.8Z"
+            />
+            <path
+                d="M1267.73,418.4v198.4h-77.28V0h77.28v370.4l159.6-176h91.56l-177.24,196.8,189.84,225.6h-95.76l-168-198.4Z"
+            />
+            <path
+                d="M700.81,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM929.29,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"
+            />
+            <path
+                d="M322.9,406.4c0-128,99.12-221.6,228.48-221.6s227.64,93.6,227.64,221.6-99.12,220-227.64,220-228.48-92.8-228.48-220ZM551.38,556.8c85.68,0,149.52-63.2,149.52-150.4s-63.84-152-149.52-152-151.2,63.2-151.2,152,64.68,150.4,151.2,150.4Z"
+            />
+            <path
+                d="M0,604.8l226.8-343.2H14.28l13.44-67.2h315.84v11.2l-226.8,344h226.8l-12.6,67.2H0v-12Z"
+            />
+        </g>
+
+        <circle
+            class="pupil"
+            data-pupil="left"
+            cx="595.5"
+            cy="408.8"
+            r="49"
+        />
+        <circle
+            class="pupil"
+            data-pupil="right"
+            cx="978.5"
+            cy="408.8"
+            r="49"
+        />
+    </svg>
 </template>
