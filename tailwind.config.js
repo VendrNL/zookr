@@ -19,7 +19,7 @@ export default {
                 'body': '#475569',
             },
             fontFamily: {
-                sans: ['Inter', ...defaultTheme.fontFamily.sans],
+                sans: ['Figtree'],
             },
         },
     },

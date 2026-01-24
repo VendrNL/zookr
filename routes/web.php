@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Controllers\SearchRequestController;
+use App\Models\SearchRequest;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\SpecialismController;
 use Inertia\Inertia;
 
@@ -16,11 +19,60 @@ use Inertia\Inertia;
 | Web routes voor de Zookr applicatie
 */
 
-// Root: slim redirecten op basis van login-status
+// Root: toon landing page (Home)
 Route::get('/', function () {
-    return auth()->check()
-        ? redirect()->route('search-requests.index')
-        : redirect()->route('login');
+    $searchRequests = SearchRequest::query()
+        ->where('status', 'open')
+        ->with([
+            'organization:id,name,logo_path',
+            'creator:id,name,avatar_path',
+        ])
+        ->latest()
+        ->take(10)
+        ->get([
+            'id',
+            'organization_id',
+            'created_by',
+            'title',
+            'location',
+            'provinces',
+            'property_type',
+            'surface_area',
+            'acquisitions',
+            'created_at',
+        ])
+        ->map(function (SearchRequest $item) {
+            $logoPath = $item->organization?->logo_path;
+
+            return [
+                'id' => $item->id,
+                'title' => $item->title,
+                'location' => $item->location,
+                'provinces' => $item->provinces,
+                'property_type' => $item->property_type,
+                'surface_area' => $item->surface_area,
+                'acquisitions' => $item->acquisitions,
+                'created_at' => $item->created_at,
+                'organization' => [
+                    'name' => $item->organization?->name,
+                    'logo_url' => $logoPath
+                        ? Storage::disk('public')->url($logoPath)
+                        : null,
+                ],
+                'contact' => [
+                    'name' => $item->creator?->name,
+                    'avatar_url' => $item->creator?->avatar_url,
+                ],
+            ];
+        });
+
+    return Inertia::render('Home', [
+        'canLogin' => Route::has('login'),
+        'canRegister' => Route::has('register'),
+        'laravelVersion' => Application::VERSION,
+        'phpVersion' => PHP_VERSION,
+        'searchRequests' => $searchRequests,
+    ]);
 });
 
 Route::get('/gebruiksvoorwaarden', function () {
