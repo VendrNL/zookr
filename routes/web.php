@@ -35,8 +35,10 @@ Route::get('/contact', function () {
     return Inertia::render('Legal/Contact');
 })->name('legal.contact');
 
-// Dashboard (toon Search Requests overzicht)
-Route::get('/dashboard', [SearchRequestController::class, 'index'])
+// Dashboard (legacy redirect naar zoekvragen)
+Route::get('/dashboard', function () {
+    return redirect()->route('search-requests.index');
+})
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 

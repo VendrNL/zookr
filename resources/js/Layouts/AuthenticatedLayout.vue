@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
                             </svg>
                         </button>
                         <div class="flex shrink-0 items-center gap-3">
-                            <Link :href="route('dashboard')">
+                            <Link :href="route('search-requests.index')">
                                 <ApplicationLogo
                                     class="block h-12 w-auto fill-current text-gray-800"
                                 />
@@ -257,103 +257,187 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
 
-                    <nav class="flex flex-1 flex-col gap-1">
+                    <nav class="flex flex-1 flex-col gap-2">
                         <Link
-                            :href="route('dashboard')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('dashboard')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            :href="route('search-requests.index')"
+                            class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                            :class="[
+                                route().current('search-requests.*')
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                            ]"
                             @click="closeSidebar"
                         >
-                            <MaterialIcon name="public" class="h-5 w-5" />
+                            <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 11H4m15.5 5a.5.5 0 0 0 .5-.5V8a1 1 0 0 0-1-1h-3.75a1 1 0 0 1-.829-.44l-1.436-2.12a1 1 0 0 0-.828-.44H8a1 1 0 0 0-1 1M4 9v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-3.75a1 1 0 0 1-.829-.44L9.985 8.44A1 1 0 0 0 9.157 8H5a1 1 0 0 0-1 1Z"/>
+                            </svg>
                             <span
                                 class="transition-all duration-200"
                                 :class="sidebarLabelClass"
                             >
-                                Dashboard
+                                Zoekvragen
                             </span>
-                        </Link>
-                        <Link
-                            v-if="$page.props.auth?.user?.is_admin"
-                            :href="route('admin.organizations.index')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('admin.organizations.*')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
-                            @click="closeSidebar"
-                        >
-                            <MaterialIcon name="link" class="h-5 w-5" />
                             <span
-                                class="transition-all duration-200"
-                                :class="sidebarLabelClass"
+                                v-if="isSidebarCollapsed"
+                                class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
                             >
-                                Organisaties
+                                Zoekvragen
+                                <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                             </span>
                         </Link>
-                        <Link
-                            v-if="$page.props.auth?.user?.is_admin"
-                            :href="route('admin.users.index')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('admin.users.*')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
-                            @click="closeSidebar"
+                        <template v-if="$page.props.auth?.user?.is_admin">
+                            <div
+                                v-if="!isSidebarCollapsed"
+                                class="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400"
+                            >
+                                Admin
+                            </div>
+                            <Link
+                                :href="route('admin.organizations.index')"
+                                class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                                :class="[
+                                    route().current('admin.organizations.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                    isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                                ]"
+                                @click="closeSidebar"
+                            >
+                                <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <path stroke="currentColor" stroke-width="1" d="M3 11h18M3 15h18m-9-4v8m-8 0h16a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Z"/>
+                                </svg>
+                                <span
+                                    class="transition-all duration-200"
+                                    :class="sidebarLabelClass"
+                                >
+                                    Organisaties
+                                </span>
+                                <span
+                                    v-if="isSidebarCollapsed"
+                                    class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                                >
+                                    Organisaties
+                                    <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
+                                </span>
+                            </Link>
+                            <Link
+                                :href="route('admin.users.index')"
+                                class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                                :class="[
+                                    route().current('admin.users.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                    isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                                ]"
+                                @click="closeSidebar"
+                            >
+                                <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <path stroke="currentColor" stroke-linecap="round" stroke-width="1" d="M16 19h4a1 1 0 0 0 1-1v-1a3 3 0 0 0-3-3h-2m-2.236-4a3 3 0 1 0 0-4M3 18v-1a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Zm8-10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                                </svg>
+                                <span
+                                    class="transition-all duration-200"
+                                    :class="sidebarLabelClass"
+                                >
+                                    Gebruikers
+                                </span>
+                                <span
+                                    v-if="isSidebarCollapsed"
+                                    class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                                >
+                                    Gebruikers
+                                    <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
+                                </span>
+                            </Link>
+                        </template>
+                        <div
+                            v-if="!isSidebarCollapsed"
+                            class="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400"
                         >
-                            <MaterialIcon name="person_add" class="h-5 w-5" />
-                            <span
-                                class="transition-all duration-200"
-                                :class="sidebarLabelClass"
-                            >
-                                Gebruikers
-                            </span>
-                        </Link>
+                            Mijn Zookr
+                        </div>
                         <Link
                             :href="route('profile.edit')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('profile.edit')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                            :class="[
+                                route().current('profile.edit')
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                            ]"
                             @click="closeSidebar"
                         >
-                            <MaterialIcon name="mail" class="h-5 w-5" />
+                            <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 9h3m-3 3h3m-3 3h3m-6 1c-.306-.613-.933-1-1.618-1H7.618c-.685 0-1.312.387-1.618 1M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm7 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/>
+                            </svg>
                             <span
                                 class="transition-all duration-200"
                                 :class="sidebarLabelClass"
                             >
                                 Mijn profiel
                             </span>
+                            <span
+                                v-if="isSidebarCollapsed"
+                                class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                            >
+                                Mijn profiel
+                                <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
+                            </span>
                         </Link>
                         <Link
                             :href="route('organization.edit')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('organization.edit')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                            :class="[
+                                route().current('organization.edit')
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                            ]"
                             @click="closeSidebar"
                         >
-                            <MaterialIcon name="public" class="h-5 w-5" />
+                            <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M6 4h12M6 4v16M6 4H5m13 0v16m0-16h1m-1 16H6m12 0h1M6 20H5M9 7h1v1H9V7Zm5 0h1v1h-1V7Zm-5 4h1v1H9v-1Zm5 0h1v1h-1v-1Zm-3 4h2a1 1 0 0 1 1 1v4h-4v-4a1 1 0 0 1 1-1Z"/>
+                            </svg>
                             <span
                                 class="transition-all duration-200"
                                 :class="sidebarLabelClass"
                             >
                                 Mijn organisatie
                             </span>
+                            <span
+                                v-if="isSidebarCollapsed"
+                                class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                            >
+                                Mijn organisatie
+                                <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
+                            </span>
                         </Link>
                         <Link
                             :href="route('specialism.edit')"
-                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-                            :class="route().current('specialism.edit')
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                            :class="[
+                                route().current('specialism.edit')
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                            ]"
                             @click="closeSidebar"
                         >
-                            <MaterialIcon name="reply" class="h-5 w-5" />
+                            <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-width="1" d="M4.37 7.657c2.063.528 2.396 2.806 3.202 3.87 1.07 1.413 2.075 1.228 3.192 2.644 1.805 2.289 1.312 5.705 1.312 6.705M20 15h-1a4 4 0 0 0-4 4v1M8.587 3.992c0 .822.112 1.886 1.515 2.58 1.402.693 2.918.351 2.918 2.334 0 .276 0 2.008 1.972 2.008 2.026.031 2.026-1.678 2.026-2.008 0-.65.527-.9 1.177-.9H20M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                            </svg>
                             <span
                                 class="transition-all duration-200"
                                 :class="sidebarLabelClass"
                             >
                                 Mijn specialisme
+                            </span>
+                            <span
+                                v-if="isSidebarCollapsed"
+                                class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                            >
+                                Mijn specialisme
+                                <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                             </span>
                         </Link>
                     </nav>

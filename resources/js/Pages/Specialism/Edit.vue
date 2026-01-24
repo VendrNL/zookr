@@ -53,7 +53,7 @@ const handleCancel = () => {
         onConfirm: () => {
             form.reset();
             form.clearErrors();
-            router.visit(route("dashboard"));
+            router.visit(route("search-requests.index"));
         },
         onSave: (done) => submit(done),
     });
