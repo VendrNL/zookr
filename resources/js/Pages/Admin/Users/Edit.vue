@@ -202,14 +202,9 @@ const provinceFill = (key) =>
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Gebruiker beheren
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Pas de profielgegevens en status van de gebruiker aan.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Gebruiker beheren
+                </h2>
             </div>
         </template>
 

@@ -96,14 +96,9 @@ const handleCancel = () => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Zoekvraag bewerken
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Pas de gegevens van deze aanvraag aan.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Zoekvraag bewerken
+                </h2>
                 <Link
                     :href="route('search-requests.show', item.id)"
                     class="text-sm font-semibold text-gray-700 hover:text-gray-900"

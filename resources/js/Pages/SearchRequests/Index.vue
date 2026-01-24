@@ -241,9 +241,7 @@ function paginationLabel(label) {
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <h2
-                        class="text-2xl font-semibold leading-tight text-gray-800"
-                    >
+                    <h2 class="text-2xl font-semibold leading-tight text-gray-800">
                         Zoekvragen
                     </h2>
                 </div>

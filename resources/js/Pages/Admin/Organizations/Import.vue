@@ -30,16 +30,9 @@ const submit = () => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Makelaars importeren
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Upload een CSV-export vanuit Excel met de kolommen:
-                        Organization_name, Organization_phone,
-                        Organization_email, Organization_website.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Makelaars importeren
+                </h2>
                 <Link
                     :href="route('admin.organizations.index')"
                     class="text-sm font-semibold text-gray-700 hover:text-gray-900"

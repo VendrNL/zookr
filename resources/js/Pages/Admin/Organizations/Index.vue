@@ -106,9 +106,9 @@ watch(
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold text-gray-900">
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
                     Organisaties
-                </h1>
+                </h2>
             </div>
         </template>
 

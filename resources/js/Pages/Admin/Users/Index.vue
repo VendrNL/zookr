@@ -117,7 +117,9 @@ function handleAvatarError(userId) {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold text-gray-900">Gebruikers</h1>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Gebruikers
+                </h2>
             </div>
         </template>
 

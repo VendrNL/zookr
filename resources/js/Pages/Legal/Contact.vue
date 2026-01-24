@@ -10,7 +10,9 @@ import { Head } from "@inertiajs/vue3";
 
     <AuthenticatedLayout>
         <template #header>
-            <h1 class="text-xl font-semibold text-gray-900">Contact</h1>
+            <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                Contact
+            </h2>
         </template>
 
         <div class="py-8">

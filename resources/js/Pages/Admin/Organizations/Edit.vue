@@ -126,11 +126,9 @@ const toggleMemberStatus = (member) => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Organisatie beheren
-                    </h1>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Organisatie beheren
+                </h2>
                 <Link
                     :href="route('admin.organizations.index')"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"

@@ -129,14 +129,9 @@ const confirmDiscard = () => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Medewerker beheren
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Pas de profielgegevens van de medewerker aan.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Medewerker beheren
+                </h2>
                 <button
                     type="button"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"

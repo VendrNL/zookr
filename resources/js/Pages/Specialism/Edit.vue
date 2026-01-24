@@ -66,14 +66,9 @@ const handleCancel = () => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Mijn specialisme
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Kies vastgoedtypes en provincies waarin je actief bent.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Mijn specialisme
+                </h2>
             </div>
         </template>
 

@@ -135,11 +135,9 @@ const toggleMemberStatus = (member) => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Mijn organisatie
-                    </h1>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Mijn organisatie
+                </h2>
             </div>
         </template>
 

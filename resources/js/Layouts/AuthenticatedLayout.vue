@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -7,19 +7,39 @@ import FormActions from '@/Components/FormActions.vue';
 import MaterialIcon from '@/Components/MaterialIcon.vue';
 import Modal from '@/Components/Modal.vue';
 import ModalCard from '@/Components/ModalCard.vue';
-import NavLink from '@/Components/NavLink.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import AppFooter from '@/Components/AppFooter.vue';
 import { Link } from '@inertiajs/vue3';
 import { closeDirtyConfirm, useDirtyConfirmState } from '@/Stores/dirtyConfirm';
 
-const showingNavigationDropdown = ref(false);
-const showPrimaryNav = ref(true);
-const lastScrollY = ref(0);
-const ticking = ref(false);
+const isSidebarOpen = ref(false);
+const isSidebarCollapsed = ref(false);
 const dirtyConfirm = useDirtyConfirmState();
+
+const sidebarWidthClass = computed(() =>
+    isSidebarCollapsed.value ? 'w-20' : 'w-64',
+);
+
+const sidebarLabelClass = computed(() =>
+    isSidebarCollapsed.value
+        ? 'w-0 opacity-0'
+        : 'w-auto opacity-100',
+);
+
+const contentPaddingClass = computed(() =>
+    isSidebarCollapsed.value ? 'lg:pl-20' : 'lg:pl-64',
+);
+
+const handleResize = () => {
+    isSidebarOpen.value = window.innerWidth >= 1024;
+};
+
+const closeSidebar = () => {
+    if (window.innerWidth < 1024) {
+        isSidebarOpen.value = false;
+    }
+};
 
 const handleStay = () => {
     const action = dirtyConfirm.onCancel;
@@ -49,114 +69,85 @@ const handleLeave = () => {
     }
 };
 
-const updatePrimaryNav = () => {
-    const currentY = window.scrollY || 0;
-    const diff = currentY - lastScrollY.value;
-
-    if (Math.abs(diff) < 8) {
-        return;
-    }
-
-    showPrimaryNav.value = diff <= 0;
-    lastScrollY.value = currentY;
-};
-
-const handleScroll = () => {
-    if (ticking.value) return;
-    ticking.value = true;
-    window.requestAnimationFrame(() => {
-        updatePrimaryNav();
-        ticking.value = false;
-    });
-};
-
 onMounted(() => {
-    lastScrollY.value = window.scrollY || 0;
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleResize();
+    window.addEventListener('resize', handleResize);
 });
 
 onBeforeUnmount(() => {
-    window.removeEventListener('scroll', handleScroll);
+    window.removeEventListener('resize', handleResize);
 });
 </script>
 
 <template>
     <div>
-        <div class="flex min-h-screen flex-col bg-gray-100">
+        <div class="min-h-screen bg-gray-100">
             <nav
-                class="sticky top-0 z-40 border-b border-gray-100 bg-white transition-transform duration-200"
-                :class="showPrimaryNav ? 'translate-y-0' : '-translate-y-full'"
+                class="fixed left-0 right-0 top-0 z-50 border-b border-gray-100 bg-white"
             >
-                <!-- Primary Navigation Menu -->
-                <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-16 justify-between">
-                        <div class="flex">
-                            <!-- Logo -->
-                            <div class="flex shrink-0 items-center">
-                                <Link :href="route('dashboard')">
-                                    <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800"
-                                    />
-                                </Link>
-                            </div>
-
-                            <!-- Navigation Links -->
-                            <div
-                                class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
+                <div class="mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200 lg:hidden"
+                            aria-label="Open menu"
+                            @click="isSidebarOpen = true"
+                        >
+                            <svg
+                                class="h-6 w-6"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                viewBox="0 0 24 24"
                             >
-                                <NavLink
-                                    :href="route('dashboard')"
-                                    :active="route().current('dashboard')"
-                                >
-                                    Dashboard
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth?.user?.is_admin"
-                                    :href="route('admin.organizations.index')"
-                                    :active="route().current('admin.organizations.*')"
-                                >
-                                    Organisaties
-                                </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth?.user?.is_admin"
-                                    :href="route('admin.users.index')"
-                                    :active="route().current('admin.users.*')"
-                                >
-                                    Gebruikers
-                                </NavLink>
-                                <NavLink
-                                    :href="route('profile.edit')"
-                                    :active="route().current('profile.edit')"
-                                >
-                                    Mijn profiel
-                                </NavLink>
-                                <NavLink
-                                    :href="route('organization.edit')"
-                                    :active="route().current('organization.edit')"
-                                >
-                                    Mijn organisatie
-                                </NavLink>
-                                <NavLink
-                                    :href="route('specialism.edit')"
-                                    :active="route().current('specialism.edit')"
-                                >
-                                    Mijn specialisme
-                                </NavLink>
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M4 6h16M4 12h16M4 18h16"
+                                />
+                            </svg>
+                        </button>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <Link :href="route('dashboard')">
+                                <ApplicationLogo
+                                    class="block h-12 w-auto fill-current text-gray-800"
+                                />
+                            </Link>
+                            <div
+                                v-if="$slots.header"
+                                class="pl-4 pr-4 text-lg font-semibold text-gray-900 translate-y-[20%] sm:pl-[5rem] max-w-[60vw] truncate"
+                            >
+                                <slot name="header" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="$page.props.auth?.user"
+                        class="flex items-center gap-3"
+                    >
+                        <div class="hidden items-center lg:flex">
+                            <div class="relative">
+                                <MaterialIcon
+                                    name="search"
+                                    class="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                                />
+                                <input
+                                    type="search"
+                                    placeholder="Zoeken"
+                                    class="w-72 rounded-full border border-gray-200 bg-gray-50 py-2 pl-10 pr-4 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                />
                             </div>
                         </div>
 
-                        <div
-                            v-if="$page.props.auth?.user"
-                            class="hidden sm:ms-6 sm:flex sm:items-center"
-                        >
-                            <!-- Settings Dropdown -->
+                        <div class="relative">
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
                                     <template #trigger>
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center rounded-full border border-transparent bg-white px-2 py-1 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
                                             >
                                                 <span class="mr-2 inline-flex h-7 w-7 overflow-hidden rounded-full bg-gray-100">
                                                     <img
@@ -166,10 +157,12 @@ onBeforeUnmount(() => {
                                                         class="h-full w-full object-cover"
                                                     />
                                                 </span>
-                                                {{ $page.props.auth.user.name }}
+                                                <span class="hidden sm:inline">
+                                                    {{ $page.props.auth.user.name }}
+                                                </span>
 
                                                 <svg
-                                                    class="-me-0.5 ms-2 h-4 w-4"
+                                                    class="-me-0.5 ms-2 hidden h-4 w-4 sm:inline"
                                                     xmlns="http://www.w3.org/2000/svg"
                                                     viewBox="0 0 20 20"
                                                     fill="currentColor"
@@ -211,141 +204,184 @@ onBeforeUnmount(() => {
                                 </Dropdown>
                             </div>
                         </div>
-
-                        <!-- Hamburger -->
-                        <div class="-me-2 flex items-center sm:hidden">
-                            <button
-                                @click="
-                                    showingNavigationDropdown =
-                                        !showingNavigationDropdown
-                                "
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
-                            >
-                                <svg
-                                    class="h-6 w-6"
-                                    stroke="currentColor"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        :class="{
-                                            hidden: showingNavigationDropdown,
-                                            'inline-flex':
-                                                !showingNavigationDropdown,
-                                        }"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M4 6h16M4 12h16M4 18h16"
-                                    />
-                                    <path
-                                        :class="{
-                                            hidden: !showingNavigationDropdown,
-                                            'inline-flex':
-                                                showingNavigationDropdown,
-                                        }"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
                     </div>
                 </div>
-
             </nav>
 
-            <!-- Responsive Navigation Overlay -->
             <div
-                :class="{
-                    'pointer-events-auto translate-x-0': showingNavigationDropdown,
-                    'pointer-events-none translate-x-full': !showingNavigationDropdown,
-                }"
-                class="fixed inset-0 z-50 bg-white transition-transform duration-200 sm:hidden"
+                v-if="isSidebarOpen"
+                class="fixed inset-0 z-40 bg-gray-900/40 lg:hidden"
+                @click="isSidebarOpen = false"
+            ></div>
+
+            <aside
+                class="fixed bottom-0 left-0 top-16 z-40 flex flex-col border-r border-gray-200 bg-white shadow-xl transition-all duration-200"
+                :class="[
+                    sidebarWidthClass,
+                    isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
+                    'lg:translate-x-0',
+                ]"
+                aria-label="Sidebar"
             >
-                <button
-                    type="button"
-                    class="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                    aria-label="Menu sluiten"
-                    @click="showingNavigationDropdown = false"
-                >
-                    <MaterialIcon name="close" class="h-5 w-5" />
-                </button>
-                <div class="flex h-full flex-col bg-white px-6 pb-8 pt-20">
-                    <div class="space-y-2">
-                        <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            @click="showingNavigationDropdown = false"
+                <div class="flex h-full flex-col gap-4 px-3 py-4">
+                    <div
+                        class="flex items-center justify-between gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400"
+                        :class="isSidebarCollapsed ? 'justify-center' : ''"
+                    >
+                        <span
+                            class="transition-all duration-200"
+                            :class="sidebarLabelClass"
                         >
-                            Dashboard
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
+                            Navigatie
+                        </span>
+                        <button
+                            type="button"
+                            class="hidden rounded-full p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 lg:inline-flex"
+                            aria-label="Toggle sidebar"
+                            @click="isSidebarCollapsed = !isSidebarCollapsed"
+                        >
+                            <svg
+                                class="h-5 w-5 transition-transform duration-200"
+                                :class="isSidebarCollapsed ? 'rotate-180' : ''"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M15 19l-7-7 7-7"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <nav class="flex flex-1 flex-col gap-1">
+                        <Link
+                            :href="route('dashboard')"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('dashboard')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
+                        >
+                            <MaterialIcon name="public" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Dashboard
+                            </span>
+                        </Link>
+                        <Link
                             v-if="$page.props.auth?.user?.is_admin"
                             :href="route('admin.organizations.index')"
-                            @click="showingNavigationDropdown = false"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('admin.organizations.*')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
                         >
-                            Organisaties
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
+                            <MaterialIcon name="link" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Organisaties
+                            </span>
+                        </Link>
+                        <Link
                             v-if="$page.props.auth?.user?.is_admin"
                             :href="route('admin.users.index')"
-                            @click="showingNavigationDropdown = false"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('admin.users.*')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
                         >
-                            Gebruikers
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
+                            <MaterialIcon name="person_add" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Gebruikers
+                            </span>
+                        </Link>
+                        <Link
                             :href="route('profile.edit')"
-                            @click="showingNavigationDropdown = false"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('profile.edit')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
                         >
-                            Mijn profiel
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
+                            <MaterialIcon name="mail" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Mijn profiel
+                            </span>
+                        </Link>
+                        <Link
                             :href="route('organization.edit')"
-                            @click="showingNavigationDropdown = false"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('organization.edit')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
                         >
-                            Mijn organisatie
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
+                            <MaterialIcon name="public" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Mijn organisatie
+                            </span>
+                        </Link>
+                        <Link
                             :href="route('specialism.edit')"
-                            @click="showingNavigationDropdown = false"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+                            :class="route().current('specialism.edit')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            @click="closeSidebar"
                         >
-                            Mijn specialisme
-                        </ResponsiveNavLink>
-                    </div>
+                            <MaterialIcon name="reply" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Mijn specialisme
+                            </span>
+                        </Link>
+                    </nav>
 
-                    <div
-                        v-if="$page.props.auth?.user"
-                        class="mt-6 border-t border-gray-200 pt-6"
-                    >
-                        <ResponsiveNavLink
-                            :href="route('logout')"
-                            method="post"
-                            as="button"
-                            @click="showingNavigationDropdown = false"
+                    <div class="mt-auto">
+                        <button
+                            type="button"
+                            class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900 lg:hidden"
+                            @click="isSidebarOpen = false"
                         >
-                            Uitloggen
-                        </ResponsiveNavLink>
+                            <MaterialIcon name="close" class="h-5 w-5" />
+                            <span
+                                class="transition-all duration-200"
+                                :class="sidebarLabelClass"
+                            >
+                                Sluiten
+                            </span>
+                        </button>
                     </div>
                 </div>
+            </aside>
+
+            <div class="flex min-h-screen flex-col pt-16 transition-all duration-200">
+                <main class="flex-1 px-4 pb-10 pt-8 sm:px-6 lg:px-8" :class="contentPaddingClass">
+                    <slot />
+                </main>
+                <AppFooter />
             </div>
-
-            <!-- Page Heading -->
-            <header
-                class="sticky top-0 z-30 bg-white shadow"
-                v-if="$slots.header"
-            >
-                <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                    <slot name="header" />
-                </div>
-            </header>
-
-            <!-- Page Content -->
-            <main class="flex-1">
-                <slot />
-            </main>
-            <AppFooter />
         </div>
 
         <Modal :show="dirtyConfirm.open" maxWidth="md" @close="handleStay">

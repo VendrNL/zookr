@@ -93,14 +93,9 @@ const handleCancel = () => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-900">
-                        Nieuwe organisatie
-                    </h1>
-                    <p class="text-sm text-gray-500">
-                        Voeg een organisatie toe en stel de basisgegevens in.
-                    </p>
-                </div>
+                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                    Nieuwe organisatie
+                </h2>
                 <Link
                     :href="route('admin.organizations.index')"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"
