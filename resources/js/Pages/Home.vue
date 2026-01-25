@@ -651,7 +651,7 @@ onBeforeUnmount(() => {
                             prima geautomatiseerd kan.
                         </p>
                         <p>
-                            Met Vendr brengen we niet alleen snelheid en logica
+                            Met Zookr brengen we niet alleen snelheid en logica
                             in het aanhuurproces, maar brengen we onze
                             jarenlange expertise op het gebied van
                             aanhuur/aankoop in. Omdat we denken dat iedereen
