@@ -625,6 +625,72 @@ onBeforeUnmount(() => {
                 </div>
             </section>
 
+            <section class="about-zookr" data-reveal>
+                <div class="section-header">
+                    <h2>Over Zookr</h2>
+                </div>
+                <div class="about-content">
+                    <div class="about-photo">
+                        <img src="/images/PaulLeon.png" alt="Leon van Leersum en Paul" />
+                    </div>
+                    <div class="about-text">
+                        <p>
+                            Na eerdere successen met Vendr, RealMarchr en
+                            myLeaseAdmin, was het tijd om het aanhuurproces
+                            drastisch te verbeteren door de inzet van
+                            automatisering. Aanhuren anno 2025 gebeurde nog
+                            grotendeels op basis van heel veel handmatig knip-
+                            en plakwerk van inventarisaties. Mailings naar
+                            makelaars, waarvan veel ongeopend retour kwamen door
+                            de wisselingen van banen of afwezigheid door
+                            vakantie. Vervolgens alle informatie die in de
+                            meest uiteenlopende formats werd toegestuurd moest
+                            je een mooi boekje maken voor de klant met foto's,
+                            plattegronden, kaartjes en teksten. Een tijdvretende
+                            bezigheid - wat eigenlijk gewoon dom werk is en
+                            prima geautomatiseerd kan.
+                        </p>
+                        <p>
+                            Met Vendr brengen we niet alleen snelheid en logica
+                            in het aanhuurproces, maar brengen we onze
+                            jarenlange expertise op het gebied van
+                            aanhuur/aankoop in. Omdat we denken dat iedereen
+                            profiteert van betere vastgoedprocessen, hebben we
+                            het gebruik van de basisfuncties van Zookr
+                            <strong>HELEMAAL GRATIS</strong> gemaakt. Misschien
+                            dat we nog uit gaan breiden met een Pro-versie,
+                            waarbij je onder andere uitgebreide analyses kunt
+                            maken. Voor nu: veel plezier ermee. We leveren geen
+                            uitgebreide support, maar dat is ook eigenlijk niet
+                            nodig, want we hebben het weer kinderlijk eenvoudig
+                            gemaakt.
+                        </p>
+                        <p>
+                            Met vriendelijke groet,<br />
+                            Leon van Leersum FRICS
+                        </p>
+                        <p>
+                            P.S.: Als je ons initiatief waardeert kan je me met
+                            twee dingen een plezier doen: Feedback geven via
+                            leon@zookr.nl of gewoon een kop koffie voor me kopen
+                            ;-)
+                        </p>
+                        <a
+                            class="about-bmc"
+                            href="https://www.buymeacoffee.com/leonvanleersum"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <img
+                                src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
+                                alt="Buy Me A Coffee"
+                                @error="(event) => { event.target.src = '/images/buymeacoffee.png'; }"
+                            />
+                        </a>
+                    </div>
+                </div>
+            </section>
+
             <section class="app-download" data-reveal>
                 <div class="section-header">
                     <h2>Download de app op je favoriete mobiele device</h2>
@@ -1408,6 +1474,64 @@ onBeforeUnmount(() => {
     color: var(--muted);
 }
 
+.about-zookr .section-header {
+    text-align: center;
+}
+
+.about-content {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 32px;
+    align-items: flex-start;
+    justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 20px;
+    padding: 24px;
+    background: #fff;
+}
+
+.about-photo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40%;
+}
+
+.about-photo img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.about-text {
+    font-size: 17px;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    flex: 1 1 60%;
+}
+
+.about-bmc {
+    display: inline-flex;
+    align-items: center;
+}
+
+.about-bmc img {
+    height: 60px;
+    width: 217px;
+    display: block;
+}
+
+.about-text p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.about-text strong {
+    color: var(--text);
+}
+
 [data-reveal] {
     opacity: 0;
     transform: translateY(18px);
@@ -1462,6 +1586,20 @@ onBeforeUnmount(() => {
 
     .content p {
         font-size: 16px;
+    }
+
+    .about-content {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .about-photo {
+        width: 100%;
+        flex: 1 1 100%;
+    }
+
+    .about-text {
+        text-align: left;
     }
 }
 </style>
