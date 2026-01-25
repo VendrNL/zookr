@@ -42,6 +42,11 @@ class SearchRequestPolicy
         return $this->sameOrganization($user, $searchRequest);
     }
 
+    public function offer(User $user, SearchRequest $searchRequest): bool
+    {
+        return $this->differentOrganization($user, $searchRequest);
+    }
+
     private function sameOrganization(User $user, SearchRequest $searchRequest): bool
     {
         $userOrgId = $user->organization_id;
@@ -52,5 +57,17 @@ class SearchRequestPolicy
         }
 
         return (int) $userOrgId === (int) $requestOrgId;
+    }
+
+    private function differentOrganization(User $user, SearchRequest $searchRequest): bool
+    {
+        $userOrgId = $user->organization_id;
+        $requestOrgId = $searchRequest->organization_id;
+
+        if (! $userOrgId || ! $requestOrgId) {
+            return false;
+        }
+
+        return (int) $userOrgId !== (int) $requestOrgId;
     }
 }

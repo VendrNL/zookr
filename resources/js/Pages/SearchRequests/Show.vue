@@ -19,7 +19,12 @@ const props = defineProps({
     item: Object,
     can: {
         type: Object,
-        default: () => ({ update: false, assign: false, delete: false }),
+        default: () => ({
+            update: false,
+            assign: false,
+            delete: false,
+            offer: false,
+        }),
     },
 });
 
@@ -306,6 +311,13 @@ function acquisitionLabel(value) {
                                 class="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
                             >
                                 Bewerk
+                            </Link>
+                            <Link
+                                v-if="can.offer"
+                                :href="route('search-requests.properties.create', item.id)"
+                                class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm hover:border-gray-400 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                            >
+                                Pand aanbieden
                             </Link>
                             <DangerButton
                                 v-if="can.delete"

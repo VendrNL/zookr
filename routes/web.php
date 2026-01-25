@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SearchRequestController;
+use App\Http\Controllers\PropertyController;
 use App\Models\Organization;
 use App\Models\SearchRequest;
 use App\Http\Controllers\ProfileController;
@@ -158,6 +159,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     )
         ->name('search-requests.status')
         ->middleware('can:update,search_request');
+
+    Route::get(
+        'search-requests/{search_request}/properties/create',
+        [PropertyController::class, 'create']
+    )
+        ->name('search-requests.properties.create')
+        ->middleware('can:offer,search_request');
+
+    Route::post(
+        'search-requests/{search_request}/properties',
+        [PropertyController::class, 'store']
+    )
+        ->name('search-requests.properties.store')
+        ->middleware('can:offer,search_request');
 
     Route::redirect('/admin/organizations', '/admin/makelaars')
         ->middleware('can:manageOrganizations,App\Models\User');

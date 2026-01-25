@@ -186,6 +186,7 @@ class SearchRequestController extends Controller
                 'update' => $request->user()->can('update', $search_request),
                 'assign' => $request->user()->can('assign', $search_request),
                 'delete' => $request->user()->can('delete', $search_request),
+                'offer' => $request->user()->can('offer', $search_request),
             ],
         ]);
     }

@@ -13,6 +13,7 @@ class Property extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        'contact_user_id',
         'search_request_id',
         'name',
         'address',
@@ -20,10 +21,16 @@ class Property extends Model
         'surface_area',
         'parking_spots',
         'availability',
+        'acquisition',
         'rent_price',
+        'rent_price_per_m2',
+        'rent_price_parking',
         'asking_price',
         'images',
+        'brochure_path',
         'drawings',
+        'notes',
+        'url',
     ];
 
     protected $casts = [
