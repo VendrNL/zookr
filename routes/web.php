@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\SearchRequestController;
+use App\Models\Organization;
 use App\Models\SearchRequest;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\OrganizationController;
@@ -65,6 +66,11 @@ Route::get('/', function () {
                 ],
             ];
         });
+    $tickerOrganizations = Organization::query()
+        ->where('is_active', true)
+        ->whereNotNull('logo_path')
+        ->orderBy('name')
+        ->get(['id', 'name', 'logo_path']);
 
     return Inertia::render('Home', [
         'canLogin' => Route::has('login'),
@@ -72,6 +78,7 @@ Route::get('/', function () {
         'laravelVersion' => Application::VERSION,
         'phpVersion' => PHP_VERSION,
         'searchRequests' => $searchRequests,
+        'tickerOrganizations' => $tickerOrganizations,
     ]);
 });
 

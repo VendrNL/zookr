@@ -14,6 +14,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    tickerOrganizations: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const bmcScriptId = 'bmc-button-script';
@@ -80,6 +84,17 @@ const formatProvinceList = (list) => {
 
 const formatLocation = (item) =>
     item.location || formatProvinceList(item.provinces);
+
+const shuffle = (items) => {
+    const result = [...items];
+    for (let i = result.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+};
+
+const tickerLogos = ref([]);
 
 const initialsFor = (name) => {
     if (!name) return "";
@@ -254,6 +269,10 @@ onMounted(() => {
     updateParallax();
     window.addEventListener('scroll', onScrollHandler, { passive: true });
     window.addEventListener('resize', onScrollHandler);
+
+    if (!tickerLogos.value.length) {
+        tickerLogos.value = shuffle(props.tickerOrganizations);
+    }
 
     updateCarouselLayout();
     onCarouselScrollHandler = () => updateCarouselState();
@@ -570,26 +589,22 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="ticker" aria-hidden="true">
                     <div class="ticker-track">
-                        <span class="ticker-item">Van Dijk Makelaars</span>
-                        <span class="ticker-item">Groot &amp; Partners</span>
-                        <span class="ticker-item">Havenstad Bedrijfsmakelaars</span>
-                        <span class="ticker-item">Noordkade Real Estate</span>
-                        <span class="ticker-item">Zuidrand Commercieel</span>
-                        <span class="ticker-item">Delta Property</span>
-                        <span class="ticker-item">Westpoort Makelaars</span>
-                        <span class="ticker-item">Urban Logistics</span>
-                        <span class="ticker-item">Capital Offices</span>
-                        <span class="ticker-item">Rijnmond Vastgoed</span>
-                        <span class="ticker-item">Van Dijk Makelaars</span>
-                        <span class="ticker-item">Groot &amp; Partners</span>
-                        <span class="ticker-item">Havenstad Bedrijfsmakelaars</span>
-                        <span class="ticker-item">Noordkade Real Estate</span>
-                        <span class="ticker-item">Zuidrand Commercieel</span>
-                        <span class="ticker-item">Delta Property</span>
-                        <span class="ticker-item">Westpoort Makelaars</span>
-                        <span class="ticker-item">Urban Logistics</span>
-                        <span class="ticker-item">Capital Offices</span>
-                        <span class="ticker-item">Rijnmond Vastgoed</span>
+                        <img
+                            v-for="organization in tickerLogos"
+                            :key="`ticker-${organization.id}`"
+                            class="ticker-logo"
+                            :src="organization.logo_url"
+                            :alt="organization.name"
+                            loading="lazy"
+                        />
+                        <img
+                            v-for="organization in tickerLogos"
+                            :key="`ticker-dup-${organization.id}`"
+                            class="ticker-logo"
+                            :src="organization.logo_url"
+                            :alt="organization.name"
+                            loading="lazy"
+                        />
                     </div>
                 </div>
             </section>
@@ -622,6 +637,57 @@ onBeforeUnmount(() => {
                                 alt="Download via Google Play"
                             />
                         </picture>
+                    </a>
+                </div>
+            </section>
+
+            <section class="other-solutions" data-reveal>
+                <div class="section-header">
+                    <h2>Andere software voor makelaars van RESAAS</h2>
+                </div>
+                <div class="value-grid other-solutions-grid">
+                    <a
+                        class="value-card solution-card"
+                        href="https://about.vendr.nl/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <div class="solution-logo">
+                            <img class="vendr-logo" src="/images/Vendr.svg" alt="Vendr" />
+                        </div>
+                        <p class="solution-text">
+                            Vendr digitaliseert het verkoopproces van commercieel
+                            vastgoed.
+                        </p>
+                    </a>
+                    <a
+                        class="value-card solution-card"
+                        href="https://www.realmatchr.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <div class="solution-logo">
+                            <img src="/images/LogoRM-Blue.svg" alt="Real Matchr" />
+                        </div>
+                        <p class="solution-text">
+                            Software om het aankoopproces van beleggingsmakelaars
+                            te optimaliseren.
+                        </p>
+                    </a>
+                    <a
+                        class="value-card solution-card"
+                        href="https://www.myleaseadmin.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <div class="solution-logo">
+                            <img src="/images/myLeaseAdmin.svg" alt="myLeaseAdmin" />
+                        </div>
+                        <p class="solution-text">
+                            Eenvoudige oplossing om huurcontracten te beheren en
+                            tijdig geinformeerd te worden voor belangrijke
+                            evenementen.
+                        </p>
                     </a>
                 </div>
             </section>
@@ -1173,23 +1239,45 @@ onBeforeUnmount(() => {
 .ticker {
     margin-top: 28px;
     overflow: hidden;
-    border-radius: 999px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: #fff;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        #000 12%,
+        #000 88%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        #000 12%,
+        #000 88%,
+        transparent 100%
+    );
 }
 
 .ticker-track {
     display: inline-flex;
-    gap: 28px;
-    padding: 14px 24px;
+    gap: 72px;
+    padding: 14px 40px;
     white-space: nowrap;
-    animation: ticker-scroll 24s linear infinite;
+    animation: ticker-scroll 20s linear infinite;
 }
 
 .ticker-item {
     font-size: 14px;
     font-weight: 600;
     color: rgba(0, 0, 0, 0.6);
+}
+
+.ticker-logo {
+    height: 58px;
+    max-width: 120px;
+    width: auto;
+    display: block;
+    object-fit: contain;
 }
 
 .app-download .store-logos {
@@ -1213,6 +1301,57 @@ onBeforeUnmount(() => {
     max-width: 44vw;
 }
 
+ .other-solutions-grid {
+    margin-top: 28px;
+}
+
+.solution-card {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    min-height: 220px;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.solution-card:hover {
+    box-shadow: 16px 16px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.solution-logo {
+    height: 84px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    padding-top: 8px;
+    padding-bottom: 16px;
+}
+
+.solution-logo img {
+    height: 52px;
+    width: auto;
+    max-width: 180px;
+    display: block;
+    object-fit: contain;
+}
+
+.solution-logo img.vendr-logo {
+    height: 50px;
+    padding-bottom: 6px;
+    box-sizing: content-box;
+    overflow: visible;
+}
+
+.solution-text {
+    font-size: 16px;
+    color: var(--muted);
+}
+
 [data-reveal] {
     opacity: 0;
     transform: translateY(18px);
@@ -1232,6 +1371,7 @@ onBeforeUnmount(() => {
         transform: translateX(-50%);
     }
 }
+
 
 @media (prefers-color-scheme: dark) {
     .app-download .store-logos {
