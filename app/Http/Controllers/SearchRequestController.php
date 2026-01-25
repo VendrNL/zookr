@@ -158,7 +158,7 @@ class SearchRequestController extends Controller
         $data['status'] = $send ? 'open' : 'concept';
 
         if (! $data['organization_id']) {
-            abort(403, 'Deze gebruiker heeft geen organisatie gekoppeld.');
+            abort(403, 'Deze gebruiker heeft geen Makelaar gekoppeld.');
         }
 
         $item = SearchRequest::create($data);
@@ -306,3 +306,4 @@ class SearchRequestController extends Controller
         return redirect()->route('search-requests.show', $search_request);
     }
 }
+

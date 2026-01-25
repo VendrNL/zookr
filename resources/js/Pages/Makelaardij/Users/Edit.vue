@@ -59,7 +59,7 @@ const submit = () => {
                 : null,
             _method: "patch",
         }))
-        .post(route("organization.users.update", props.user.id), {
+        .post(route("makelaardij.users.update", props.user.id), {
             preserveScroll: true,
             forceFormData: true,
             onFinish: () => form.reset("avatar"),
@@ -101,7 +101,7 @@ const openAvatarPicker = () => {
 };
 
 const goBack = () => {
-    window.location.href = route("organization.edit");
+    window.location.href = route("makelaardij.edit");
 };
 
 const handleCancel = () => {
@@ -137,8 +137,8 @@ const confirmDiscard = () => {
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"
                     @click="handleCancel"
                 >
-                    <span class="hidden sm:inline">Terug naar organisatie</span>
-                    <span class="sr-only">Terug naar organisatie</span>
+                    <span class="hidden sm:inline">Terug naar makelaar</span>
+                    <span class="sr-only">Terug naar makelaar</span>
                     <MaterialIcon
                         name="reply"
                         class="h-5 w-5 sm:hidden"
@@ -311,3 +311,5 @@ const confirmDiscard = () => {
         </ModalCard>
     </Modal>
 </template>
+
+

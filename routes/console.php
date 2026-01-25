@@ -94,8 +94,9 @@ Artisan::command('organizations:import {path?}', function () {
     fclose($handle);
 
     $this->info("Rijen gelezen: {$rows}");
-    $this->info("Organisaties aangemaakt: {$created}");
-    $this->info("Bestaande organisaties overgeslagen: {$skipped}");
+    $this->info("Makelaars aangemaakt: {$created}");
+    $this->info("Bestaande Makelaars overgeslagen: {$skipped}");
 
     return 0;
-})->purpose('Importeer makelaars uit CSV en sla bestaande organisaties over.');
+})->purpose('Importeer makelaars uit CSV en sla bestaande Makelaars over.');
+

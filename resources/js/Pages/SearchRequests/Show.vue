@@ -429,3 +429,4 @@ function acquisitionLabel(value) {
         </Modal>
     </AuthenticatedLayout>
 </template>
+

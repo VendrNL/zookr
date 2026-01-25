@@ -184,9 +184,9 @@ onBeforeUnmount(() => {
                                             Mijn profiel
                                         </DropdownLink>
                                         <DropdownLink
-                                            :href="route('organization.edit')"
+                                            :href="route('makelaardij.edit')"
                                         >
-                                            Mijn organisatie
+                                            Mijn kantoor
                                         </DropdownLink>
                                         <DropdownLink
                                             :href="route('specialism.edit')"
@@ -311,13 +311,13 @@ onBeforeUnmount(() => {
                                     class="transition-all duration-200"
                                     :class="sidebarLabelClass"
                                 >
-                                    Organisaties
+                                    Makelaars
                                 </span>
                                 <span
                                     v-if="isSidebarCollapsed"
                                     class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
                                 >
-                                    Organisaties
+                                    Makelaars
                                     <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                                 </span>
                             </Link>
@@ -385,10 +385,10 @@ onBeforeUnmount(() => {
                             </span>
                         </Link>
                         <Link
-                            :href="route('organization.edit')"
+                            :href="route('makelaardij.edit')"
                             class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
                             :class="[
-                                route().current('organization.edit')
+                                route().current('makelaardij.edit')
                                     ? 'bg-blue-50 text-blue-700'
                                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
                                 isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
@@ -402,13 +402,13 @@ onBeforeUnmount(() => {
                                 class="transition-all duration-200"
                                 :class="sidebarLabelClass"
                             >
-                                Mijn organisatie
+                                Mijn kantoor
                             </span>
                             <span
                                 v-if="isSidebarCollapsed"
                                 class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
                             >
-                                Mijn organisatie
+                                Mijn kantoor
                                 <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                             </span>
                         </Link>
@@ -497,3 +497,6 @@ onBeforeUnmount(() => {
         </Modal>
     </div>
 </template>
+
+
+

@@ -66,7 +66,7 @@ const submit = (onSuccess) => {
                     : `${WEBSITE_PREFIX}${data.website}`
                 : null,
         }))
-        .post(route("organization.update"), {
+        .post(route("makelaardij.update"), {
             forceFormData: true,
             preserveScroll: true,
             onSuccess,
@@ -117,12 +117,12 @@ const handleCancel = () => {
 };
 
 const openMember = (id) => {
-    router.visit(route("organization.users.edit", id));
+    router.visit(route("makelaardij.users.edit", id));
 };
 
 const toggleMemberStatus = (member) => {
     router.patch(
-        route("organization.users.status", member.id),
+        route("makelaardij.users.status", member.id),
         { is_active: !member.is_active },
         { preserveState: true, preserveScroll: true }
     );
@@ -130,13 +130,13 @@ const toggleMemberStatus = (member) => {
 </script>
 
 <template>
-    <Head title="Mijn organisatie" />
+    <Head title="Mijn kantoor" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    Mijn organisatie
+                    Mijn kantoor
                 </h2>
             </div>
         </template>
@@ -154,7 +154,7 @@ const toggleMemberStatus = (member) => {
                                 @change="handleFile"
                             />
                             <div
-                                v-if="newLogoPreview || organization.logo_url"
+                                        v-if="newLogoPreview || organization.logo_url"
                                 class="flex min-h-[140px] w-full max-w-[280px] cursor-pointer items-center justify-center"
                                 role="button"
                                 tabindex="0"
@@ -166,7 +166,7 @@ const toggleMemberStatus = (member) => {
                             >
                                 <img
                                     :src="newLogoPreview || organization.logo_url"
-                                    alt="Organisatielogo"
+                                    alt="Makelaarlogo"
                                     class="max-h-[120px] max-w-[220px] object-contain pointer-events-none"
                                 />
                             </div>
@@ -190,7 +190,7 @@ const toggleMemberStatus = (member) => {
                         </div>
 
                         <div>
-                            <InputLabel for="name" value="Naam organisatie" />
+                            <InputLabel for="name" value="Naam Makelaar" />
                             <TextInput
                                 id="name"
                                 v-model="form.name"
@@ -274,12 +274,12 @@ const toggleMemberStatus = (member) => {
                                     Medewerkers
                                 </h2>
                                 <p class="text-sm text-gray-500">
-                                    Gebruikers gekoppeld aan {{ organization.name || "deze organisatie" }}.
+                                    Gebruikers gekoppeld aan {{ organization.name || "deze Makelaar" }}.
                                 </p>
                             </div>
                             <Link
                                 v-if="organization.id"
-                                :href="route('organization.users.create')"
+                                :href="route('makelaardij.users.create')"
                                 class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
@@ -400,7 +400,7 @@ const toggleMemberStatus = (member) => {
                     <Link
                         v-for="member in members"
                         :key="member.id"
-                        :href="route('organization.users.edit', member.id)"
+                        :href="route('makelaardij.users.edit', member.id)"
                         class="block"
                     >
                         <FormSection class="p-4">
@@ -469,3 +469,6 @@ const toggleMemberStatus = (member) => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+
+

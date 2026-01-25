@@ -88,13 +88,13 @@ const handleCancel = () => {
 </script>
 
 <template>
-    <Head title="Nieuwe organisatie" />
+    <Head title="Nieuwe Makelaar" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    Nieuwe organisatie
+                    Nieuwe Makelaar
                 </h2>
                 <Link
                     :href="route('admin.organizations.index')"
@@ -137,7 +137,7 @@ const handleCancel = () => {
                                 >
                                     <img
                                         :src="logoPreview"
-                                        alt="Organisatielogo"
+                                        alt="Makelaarlogo"
                                         class="max-h-[120px] max-w-[220px] object-contain pointer-events-none"
                                     />
                                 </div>
@@ -182,7 +182,7 @@ const handleCancel = () => {
                         </div>
 
                         <div>
-                            <InputLabel for="name" value="Naam organisatie" />
+                            <InputLabel for="name" value="Naam Makelaar" />
                             <TextInput
                                 id="name"
                                 v-model="form.name"
@@ -258,3 +258,4 @@ const handleCancel = () => {
         </div>
     </AuthenticatedLayout>
 </template>
+

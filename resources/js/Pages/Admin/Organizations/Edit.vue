@@ -121,13 +121,13 @@ const toggleMemberStatus = (member) => {
 </script>
 
 <template>
-    <Head title="Organisatie beheren" />
+    <Head title="Makelaar beheren" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    Organisatie beheren
+                    Makelaar beheren
                 </h2>
                 <Link
                     :href="route('admin.organizations.index')"
@@ -169,7 +169,7 @@ const toggleMemberStatus = (member) => {
                                 >
                                     <img
                                         :src="logoPreview || organization.logo_url"
-                                        alt="Organisatielogo"
+                                        alt="Makelaarlogo"
                                         class="max-h-[120px] max-w-[220px] object-contain pointer-events-none"
                                     />
                                 </div>
@@ -214,7 +214,7 @@ const toggleMemberStatus = (member) => {
                         </div>
 
                         <div>
-                            <InputLabel for="name" value="Naam organisatie" />
+                            <InputLabel for="name" value="Naam Makelaar" />
                             <TextInput
                                 id="name"
                                 v-model="form.name"
@@ -478,3 +478,6 @@ const toggleMemberStatus = (member) => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+
+

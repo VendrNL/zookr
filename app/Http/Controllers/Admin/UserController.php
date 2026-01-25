@@ -291,7 +291,7 @@ class UserController extends Controller
 
     private function resolveReturnTo(?string $returnTo): string
     {
-        if (is_string($returnTo) && Str::startsWith($returnTo, ['/admin/organizations', '/admin/users'])) {
+        if (is_string($returnTo) && Str::startsWith($returnTo, ['/admin/makelaars', '/admin/users'])) {
             return $returnTo;
         }
 

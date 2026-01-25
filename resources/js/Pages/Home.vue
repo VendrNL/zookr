@@ -113,8 +113,15 @@ const updateCarouselLayout = () => {
         ) || 0;
     const containerWidth =
         shell.parentElement?.getBoundingClientRect().width || window.innerWidth;
+    const viewportStyles = window.getComputedStyle(viewport);
+    const paddingX =
+        (Number.parseFloat(viewportStyles.paddingLeft || '0') || 0) +
+        (Number.parseFloat(viewportStyles.paddingRight || '0') || 0);
     const available =
-        containerWidth - arrowWidth - Math.max(0, shellGap * 2);
+        containerWidth -
+        arrowWidth -
+        Math.max(0, shellGap * 2) -
+        paddingX;
 
     const trackStyles = window.getComputedStyle(track);
     const cardGap = Number.parseFloat(trackStyles.gap || '0') || 0;
@@ -125,7 +132,8 @@ const updateCarouselLayout = () => {
     const cardUnit = cardWidth + cardGap;
     const visible = Math.max(1, Math.floor((available + cardGap) / cardUnit));
 
-    const width = visible * cardWidth + Math.max(0, visible - 1) * cardGap;
+    const width =
+        visible * cardWidth + Math.max(0, visible - 1) * cardGap + paddingX;
     viewport.style.width = `${width}px`;
     shell.style.width = `${width + arrowWidth + shellGap * 2}px`;
     updateCarouselState();
@@ -466,8 +474,9 @@ onBeforeUnmount(() => {
                             />
                         </svg>
                     </button>
-                    <div ref="carousel" class="carousel">
-                        <div class="carousel-track">
+                    <div class="carousel-viewport">
+                        <div ref="carousel" class="carousel-scroll">
+                            <div class="carousel-track">
                             <article
                                 v-for="item in props.searchRequests"
                                 :key="item.id"
@@ -519,6 +528,7 @@ onBeforeUnmount(() => {
                             >
                                 Geen zoekvragen beschikbaar.
                             </p>
+                            </div>
                         </div>
                     </div>
                     <button
@@ -633,12 +643,13 @@ onBeforeUnmount(() => {
     --pad-left: clamp(36px, 8vw, 160px);
     --pad-right: clamp(20px, 4vw, 72px);
     --measure: 74ch;
-    --h1-size: clamp(34px, 4.8vw, 64px);
+    --h1-size: clamp(36px, 5vw, 68px);
     --h1-line: 1.06;
     --h1-track: -0.035em;
     background: #f7f7f7;
     color: var(--text);
     font-family: "Figtree";
+    font-size: 17px;
     position: relative;
     overflow-x: hidden;
     min-height: 500vh;
@@ -868,13 +879,13 @@ onBeforeUnmount(() => {
     font-size: var(--h1-size);
     line-height: var(--h1-line);
     letter-spacing: var(--h1-track);
-    margin: 0 0 34px 0;
-    font-weight: 750;
+    margin: 0 0 28px 0;
+    font-weight: 800;
 }
 
 .content p {
-    font-size: 18px;
-    margin: 0 0 20px 0;
+    font-size: 19px;
+    margin: 0 0 24px 0;
     color: var(--muted);
     font-weight: 500;
 }
@@ -960,13 +971,13 @@ onBeforeUnmount(() => {
 }
 
 .stat-value {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 700;
 }
 
 .stat-label {
     color: var(--muted);
-    font-size: 14px;
+    font-size: 15px;
     margin-top: 8px;
 }
 
@@ -975,8 +986,9 @@ onBeforeUnmount(() => {
 }
 
 .value-header h2 {
-    font-size: 28px;
-    margin: 0 0 14px;
+    font-size: 30px;
+    margin: 0 0 28px;
+    font-weight: 700;
 }
 
 .value-grid {
@@ -998,11 +1010,12 @@ onBeforeUnmount(() => {
     font-weight: 700;
     margin-bottom: 8px;
     min-height: 2.6em;
+    font-size: 17px;
 }
 
 .card-text {
     color: var(--muted);
-    font-size: 15px;
+    font-size: 16px;
     min-height: 2.4em;
 }
 
@@ -1012,31 +1025,38 @@ onBeforeUnmount(() => {
 }
 
 .section-header h2 {
-    font-size: 28px;
-    margin: 0 0 12px;
+    font-size: 30px;
+    margin: 0 0 28px;
+    font-weight: 700;
 }
 
 .section-header p {
     color: var(--muted);
     margin: 0 auto;
     max-width: 68ch;
+    font-size: 17px;
 }
 
-.search-requests .carousel {
-    --card-width: 280px;
+.search-requests .carousel-scroll {
+    --card-width: 320px;
     --card-gap: 18px;
     margin-top: 24px;
     overflow-x: auto;
+    overflow-y: hidden;
     scroll-snap-type: x mandatory;
-    padding-bottom: 8px;
+    padding: 32px 26px 52px;
     margin-left: auto;
     margin-right: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
 
-.search-requests .carousel::-webkit-scrollbar {
+.search-requests .carousel-scroll::-webkit-scrollbar {
     display: none;
+}
+
+.carousel-viewport {
+    overflow: hidden;
 }
 
 .carousel-shell {
@@ -1065,27 +1085,36 @@ onBeforeUnmount(() => {
     display: flex;
     gap: var(--card-gap);
     min-width: max-content;
-    padding: 4px 2px;
+    padding: 2px;
+    justify-content: center;
 }
 
 .request-card {
     background: #fff;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 18px;
-    padding: 18px;
+    border-radius: 20px;
+    padding: 22px;
     width: var(--card-width);
     flex: 0 0 var(--card-width);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+    box-shadow: 16px 16px 20px rgba(0, 0, 0, 0.08);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
     scroll-snap-align: start;
     text-align: left;
     display: flex;
     flex-direction: column;
-    min-height: 230px;
+    min-height: 270px;
+}
+
+.request-card:hover {
+    box-shadow: 16px 16px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
 }
 
 .card-logo {
-    height: 28px;
-    margin-bottom: 10px;
+    height: 42px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
 }
 
 .card-logo img {
@@ -1097,7 +1126,7 @@ onBeforeUnmount(() => {
 
 .card-meta {
     color: rgba(0, 0, 0, 0.5);
-    font-size: 13px;
+    font-size: 14px;
     margin-top: 12px;
     min-height: 1.6em;
 }
@@ -1240,3 +1269,4 @@ onBeforeUnmount(() => {
     }
 }
 </style>
+

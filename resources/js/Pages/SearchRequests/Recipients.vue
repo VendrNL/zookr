@@ -53,7 +53,7 @@ const selected = reactive(
                                     <span class="sr-only">Selecteer</span>
                                 </TableHeaderCell>
                                 <TableHeaderCell>
-                                    Organisatie
+                                    Makelaar
                                 </TableHeaderCell>
                                 <TableHeaderCell>
                                     Gebruiker
@@ -115,3 +115,4 @@ const selected = reactive(
         </div>
     </AuthenticatedLayout>
 </template>
+

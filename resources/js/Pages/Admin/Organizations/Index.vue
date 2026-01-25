@@ -101,13 +101,13 @@ watch(
 </script>
 
 <template>
-    <Head title="Organisaties" />
+    <Head title="Makelaars" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    Organisaties
+                    Makelaars
                 </h2>
             </div>
         </template>
@@ -145,7 +145,7 @@ watch(
                                             v-model="form.q"
                                             type="text"
                                             class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 pl-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
-                                            placeholder="Zoek organisatie"
+                                            placeholder="Zoek Makelaar"
                                         />
                                     </div>
                                 </form>
@@ -157,14 +157,14 @@ watch(
                                     :href="route('admin.organizations.import')"
                                     class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-gray-200"
                                 >
-                                    Importeer organisaties
+                                    Importeer Makelaars
                                 </Link>
                                 <Link
                                     :href="route('admin.organizations.create')"
                                     class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                 >
                                     <MaterialIcon name="add" class="mr-2 h-4 w-4" />
-                                    Nieuwe organisatie
+                                    Nieuwe Makelaar
                                 </Link>
                             </div>
                         </div>
@@ -178,7 +178,7 @@ watch(
                                                 class="inline-flex items-center gap-1 text-gray-600 uppercase"
                                                 @click="toggleSort('name')"
                                             >
-                                                Naam organisatie
+                                                Naam Makelaar
                                                 <svg
                                                     v-if="form.sort === 'name'"
                                                     class="h-3 w-3 text-gray-500"
@@ -251,7 +251,7 @@ watch(
                                     <TableEmptyState
                                         v-if="organizations.data?.length === 0"
                                         :colspan="5"
-                                        message="Geen organisaties gevonden."
+                                        message="Geen Makelaars gevonden."
                                     />
                                     <TableRowLink
                                         v-for="organization in organizations.data"
@@ -344,7 +344,7 @@ watch(
                         <input
                             v-model="form.q"
                             type="text"
-                            placeholder="Zoek organisatie"
+                            placeholder="Zoek Makelaar"
                             class="h-[38px] w-full min-w-0 rounded-md border-gray-300 bg-white text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
                             @keyup.enter="applyFilters"
                         />
@@ -360,7 +360,7 @@ watch(
                         v-if="organizations.data?.length === 0"
                         class="text-sm text-gray-500"
                     >
-                        Geen organisaties gevonden.
+                        Geen Makelaars gevonden.
                     </p>
                     <div
                         v-for="organization in organizations.data"
@@ -380,7 +380,7 @@ watch(
                                 >
                                     <img
                                         :src="organization.logo_url"
-                                        alt="Organisatielogo"
+                                        alt="Makelaarlogo"
                                         class="max-h-[25%] max-w-[25%] object-contain"
                                     />
                                 </div>
@@ -460,3 +460,6 @@ watch(
         </div>
     </AuthenticatedLayout>
 </template>
+
+
+

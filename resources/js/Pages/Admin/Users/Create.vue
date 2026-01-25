@@ -57,7 +57,7 @@ const filteredOrganizations = computed(() => {
 
 const submit = () => {
     if (!selectedOrganizationId.value) {
-        organizationError.value = "Selecteer een organisatie.";
+        organizationError.value = "Selecteer een Makelaar.";
         return;
     }
 
@@ -135,8 +135,8 @@ const selectOrganization = (org) => {
                     :href="route('admin.organizations.edit', organization.id)"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"
                 >
-                    <span class="hidden sm:inline">Terug naar organisatie</span>
-                    <span class="sr-only">Terug naar organisatie</span>
+                    <span class="hidden sm:inline">Terug naar Makelaar</span>
+                    <span class="sr-only">Terug naar Makelaar</span>
                     <MaterialIcon
                         name="reply"
                         class="h-5 w-5 sm:hidden"
@@ -249,7 +249,7 @@ const selectOrganization = (org) => {
                         </div>
 
                         <div class="relative">
-                            <InputLabel for="organization" value="Organisatie" />
+                            <InputLabel for="organization" value="Makelaar" />
 
                             <TextInput
                                 id="organization"
@@ -373,3 +373,5 @@ const selectOrganization = (org) => {
         </ModalCard>
     </Modal>
 </template>
+
+

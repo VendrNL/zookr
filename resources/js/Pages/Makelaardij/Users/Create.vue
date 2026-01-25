@@ -46,7 +46,7 @@ const submit = () => {
                 ? `${LINKEDIN_PREFIX}${linkedinHandle.value}`
                 : null,
         }))
-        .post(route("organization.users.store"), {
+        .post(route("makelaardij.users.store"), {
             preserveScroll: true,
             forceFormData: true,
             onFinish: () => form.reset("avatar"),
@@ -104,11 +104,11 @@ const openAvatarPicker = () => {
                     Nieuwe medewerker
                 </h2>
                 <Link
-                    :href="route('organization.edit')"
+                    :href="route('makelaardij.edit')"
                     class="text-sm font-medium text-gray-600 hover:text-gray-900"
                 >
-                    <span class="hidden sm:inline">Terug naar organisatie</span>
-                    <span class="sr-only">Terug naar organisatie</span>
+                    <span class="hidden sm:inline">Terug naar makelaar</span>
+                    <span class="sr-only">Terug naar makelaar</span>
                     <MaterialIcon
                         name="reply"
                         class="h-5 w-5 sm:hidden"
@@ -243,7 +243,7 @@ const openAvatarPicker = () => {
                             <SecondaryButton
                                 type="button"
                                 :disabled="form.processing"
-                                :href="route('organization.edit')"
+                                :href="route('makelaardij.edit')"
                                 as="a"
                             >
                                 Annuleren
@@ -283,3 +283,5 @@ const openAvatarPicker = () => {
         </ModalCard>
     </Modal>
 </template>
+
+

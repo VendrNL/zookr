@@ -209,7 +209,7 @@ function handleAvatarError(userId) {
                                                 class="inline-flex items-center gap-1 text-gray-600 uppercase"
                                                 @click="toggleSort('organization')"
                                             >
-                                                Organisatie
+                                                Makelaar
                                                 <svg
                                                     v-if="form.sort === 'organization'"
                                                     class="h-3 w-3 text-gray-500"
@@ -557,3 +557,4 @@ function handleAvatarError(userId) {
         </div>
     </AuthenticatedLayout>
 </template>
+

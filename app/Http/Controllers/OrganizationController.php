@@ -31,7 +31,7 @@ class OrganizationController extends Controller
             ])
             : collect();
 
-        return Inertia::render('Organization/Edit', [
+        return Inertia::render('Makelaardij/Edit', [
             'organization' => [
                 'id' => $organization?->id,
                 'name' => $organization?->name,
@@ -103,7 +103,7 @@ class OrganizationController extends Controller
             $user->save();
         }
 
-        return Redirect::route('organization.edit')->with('status', 'organization-updated');
+        return Redirect::route('makelaardij.edit')->with('status', 'organization-updated');
     }
 
     public function createUser(Request $request)
@@ -114,7 +114,7 @@ class OrganizationController extends Controller
             abort(403);
         }
 
-        return Inertia::render('Organization/Users/Create', [
+        return Inertia::render('Makelaardij/Users/Create', [
             'organization' => [
                 'id' => $organization->id,
                 'name' => $organization->name,
@@ -160,7 +160,7 @@ class OrganizationController extends Controller
             Password::sendResetLink(['email' => $data['email']]);
         }
 
-        return Redirect::route('organization.edit')->with('status', 'user-created');
+        return Redirect::route('makelaardij.edit')->with('status', 'user-created');
     }
 
     public function editUser(Request $request, User $user)
@@ -171,7 +171,7 @@ class OrganizationController extends Controller
             abort(403);
         }
 
-        return Inertia::render('Organization/Users/Edit', [
+        return Inertia::render('Makelaardij/Users/Edit', [
             'organization' => [
                 'id' => $organization->id,
                 'name' => $organization->name,
@@ -226,7 +226,7 @@ class OrganizationController extends Controller
 
         $user->save();
 
-        return Redirect::route('organization.edit')->with('status', 'user-updated');
+        return Redirect::route('makelaardij.edit')->with('status', 'user-updated');
     }
 
     public function setUserStatus(Request $request, User $user)

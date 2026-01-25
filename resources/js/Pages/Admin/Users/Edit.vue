@@ -314,14 +314,14 @@ const provinceFill = (key) =>
                         </div>
 
                         <div>
-                            <InputLabel for="organization_id" value="Organisatie" />
+                            <InputLabel for="organization_id" value="Makelaar" />
                             <select
                                 id="organization_id"
                                 v-model="form.organization_id"
                                 class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
                             >
                                 <option value="">
-                                    Selecteer organisatie
+                                    Selecteer Makelaar
                                 </option>
                                 <option
                                     v-for="organization in organizations"
@@ -649,3 +649,5 @@ const provinceFill = (key) =>
         </div>
     </AuthenticatedLayout>
 </template>
+
+
