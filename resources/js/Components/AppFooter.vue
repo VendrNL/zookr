@@ -10,7 +10,7 @@ import { Link } from "@inertiajs/vue3";
                 <Link :href="route('search-requests.index')" aria-label="Zookr">
                     <ApplicationLogo class="h-6 w-auto grayscale opacity-70" />
                 </Link>
-                <span>© 2026 Zookr. Alle rechten voorbehouden.</span>
+                <span>© 2026 RESAAS. Alle rechten voorbehouden.</span>
             </div>
             <div class="flex items-center gap-4 text-sm text-gray-600">
                 <Link :href="route('legal.privacy')" class="hover:text-blue-600">

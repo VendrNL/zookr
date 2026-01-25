@@ -496,51 +496,67 @@ onBeforeUnmount(() => {
                     <div class="carousel-viewport">
                         <div ref="carousel" class="carousel-scroll">
                             <div class="carousel-track">
-                            <article
+                            <Link
                                 v-for="item in props.searchRequests"
                                 :key="item.id"
-                                class="request-card"
+                                :href="route('search-requests.show', item.id)"
+                                class="request-card-link"
                             >
-                                <div class="card-logo">
-                                    <img
-                                        v-if="item.organization?.logo_url"
-                                        :src="item.organization.logo_url"
-                                        :alt="item.organization?.name || 'Logo'"
-                                        loading="lazy"
-                                    />
-                                </div>
-                                <p class="card-title">{{ item.title }}</p>
-                                <p class="card-text">
-                                    {{ formatLabel(item.property_type) }} ·
-                                    {{ acquisitionList(item.acquisitions) }}
-                                </p>
-                                <p class="card-meta">
-                                    {{ formatLocation(item) }}
-                                    <span v-if="item.surface_area">
-                                        · {{ item.surface_area }}
-                                    </span>
-                                </p>
-                                <div class="card-contact">
-                                    <div class="card-avatar">
+                                <article class="request-card">
+                                    <div class="card-logo">
                                         <img
-                                            v-if="item.contact?.avatar_url"
-                                            :src="item.contact.avatar_url"
-                                            :alt="item.contact?.name || 'Contact'"
+                                            v-if="item.organization?.logo_url"
+                                            :src="item.organization.logo_url"
+                                            :alt="item.organization?.name || 'Logo'"
                                             loading="lazy"
                                         />
+                                    </div>
+                                    <p class="card-title">{{ item.title }}</p>
+                                    <p class="card-text card-badges">
                                         <span
-                                            v-else
-                                            class="card-avatar-fallback"
-                                            aria-hidden="true"
+                                            class="bg-neutral-secondary-medium border border-default-medium text-heading text-xs font-medium px-1.5 py-0.5 rounded"
                                         >
-                                            {{ initialsFor(item.contact?.name) }}
+                                            {{ formatLabel(item.property_type) }}
+                                        </span>
+                                        <span
+                                            v-for="acquisition in item.acquisitions || []"
+                                            :key="`${item.id}-${acquisition}`"
+                                            class="bg-neutral-secondary-medium border border-default-medium text-heading text-xs font-medium px-1.5 py-0.5 rounded"
+                                        >
+                                            {{ acquisitionLabel(acquisition) }}
+                                        </span>
+                                    </p>
+                                    <p class="card-meta">
+                                        {{ formatLocation(item) }}
+                                        <span v-if="item.surface_area">
+                                            · {{ item.surface_area }}
+                                        </span>
+                                    </p>
+                                    <div class="card-readmore">
+                                        Lees verder...
+                                    </div>
+                                    <div class="card-contact">
+                                        <div class="card-avatar">
+                                            <img
+                                                v-if="item.contact?.avatar_url"
+                                                :src="item.contact.avatar_url"
+                                                :alt="item.contact?.name || 'Contact'"
+                                                loading="lazy"
+                                            />
+                                            <span
+                                                v-else
+                                                class="card-avatar-fallback"
+                                                aria-hidden="true"
+                                            >
+                                                {{ initialsFor(item.contact?.name) }}
+                                            </span>
+                                        </div>
+                                        <span class="card-contact-name">
+                                            {{ item.contact?.name || "-" }}
                                         </span>
                                     </div>
-                                    <span class="card-contact-name">
-                                        {{ item.contact?.name || "-" }}
-                                    </span>
-                                </div>
-                            </article>
+                                </article>
+                            </Link>
                             <p
                                 v-if="props.searchRequests.length === 0"
                                 class="card-meta"
@@ -1153,6 +1169,7 @@ onBeforeUnmount(() => {
     min-width: max-content;
     padding: 2px;
     justify-content: center;
+    align-items: stretch;
 }
 
 .request-card {
@@ -1169,6 +1186,16 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     min-height: 270px;
+    gap: 0;
+    height: 100%;
+}
+
+.request-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    cursor: pointer;
+    align-items: stretch;
 }
 
 .request-card:hover {
@@ -1178,9 +1205,9 @@ onBeforeUnmount(() => {
 
 .card-logo {
     height: 42px;
-    margin-bottom: 12px;
     display: flex;
     align-items: center;
+    margin-bottom: 16px;
 }
 
 .card-logo img {
@@ -1193,8 +1220,37 @@ onBeforeUnmount(() => {
 .card-meta {
     color: rgba(0, 0, 0, 0.5);
     font-size: 14px;
-    margin-top: 12px;
     min-height: 1.6em;
+}
+
+.request-card .card-title {
+    margin: 0;
+    min-height: 2.8em;
+}
+
+.request-card .card-text {
+    margin: 2px 0 0;
+    min-height: 2.6em;
+}
+
+.card-badges {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    line-height: 1;
+}
+
+.request-card .card-meta {
+    margin: 10px 0 0;
+}
+
+.card-readmore {
+    margin-top: 8px;
+    margin-left: auto;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.5);
+    font-weight: 600;
 }
 
 .card-contact {
