@@ -72,7 +72,23 @@ const isDraggingDrawings = ref(false);
 const showUploadLimitModal = ref(false);
 const notesInput = ref(null);
 
-const imageNames = computed(() => form.images.map((file) => file.name));
+const safeCreateObjectUrl = (file) => {
+    if (!file) return "";
+    const creator = globalThis?.URL?.createObjectURL;
+    if (typeof creator !== "function") return "";
+    return creator(file);
+};
+
+const isPdfFile = (file) => {
+    if (!file) return false;
+    if (file.type === "application/pdf") return true;
+    return file.name?.toLowerCase().endsWith(".pdf");
+};
+
+const safeImages = computed(() =>
+    Array.isArray(form.images) ? form.images.filter(Boolean) : []
+);
+const imageNames = computed(() => safeImages.value.map((file) => file.name));
 const existingBrochureLabel = computed(() =>
     existingBrochure.value?.path?.split("/").pop()
 );
@@ -83,6 +99,15 @@ const pdfPreviewUrl = (url) => {
     if (!url) return "";
     const separator = url.includes("?") ? "&" : "?";
     return `${url}${separator}toolbar=0&navpanes=0&scrollbar=0`;
+};
+const brochurePreviewUrl = computed(() => safeCreateObjectUrl(form.brochure));
+const drawingsPreviewUrl = computed(() => safeCreateObjectUrl(form.drawings));
+const existingBrochureIsPdf = computed(() =>
+    existingBrochure.value?.url ? existingBrochure.value.url.toLowerCase().endsWith(".pdf") : false
+);
+const isPdfUrl = (url) => {
+    if (!url) return false;
+    return url.toLowerCase().includes(".pdf");
 };
 
 const acquisitionOptionLabel = (value) => (value === "huur" ? "Huur" : "Koop");
@@ -114,14 +139,15 @@ const selectedFiles = (overrides = {}) => {
 };
 
 const setImages = (files) => {
-    const nextImages = files ? Array.from(files) : [];
+    const nextImages = files ? Array.from(files).filter(Boolean) : [];
+    const mergedImages = [ ...safeImages.value, ...nextImages ];
 
-    if (exceedsUploadLimits(selectedFiles({ images: nextImages }))) {
+    if (exceedsUploadLimits(selectedFiles({ images: mergedImages }))) {
         openUploadLimitModal();
         return;
     }
 
-    form.images = nextImages;
+    form.images = mergedImages;
 };
 
 const handleImagesChange = (event) => {
@@ -147,6 +173,11 @@ const openImagesPicker = () => {
     imagesInput.value?.click();
 };
 
+const removeUploadedImage = (index) => {
+    const nextImages = safeImages.value.filter((_, idx) => idx !== index);
+    form.images = nextImages;
+};
+
 const setBrochure = (file) => {
     const nextBrochure = file ?? null;
 
@@ -156,6 +187,10 @@ const setBrochure = (file) => {
     }
 
     form.brochure = nextBrochure;
+    if (nextBrochure) {
+        form.remove_brochure = true;
+        existingBrochure.value = null;
+    }
 };
 
 const handleBrochureChange = (event) => {
@@ -190,6 +225,12 @@ const setDrawings = (file) => {
     }
 
     form.drawings = nextDrawings;
+    if (nextDrawings && existingDrawings.value.length) {
+        existingDrawings.value.forEach((drawing) => {
+            form.remove_drawings.push(drawing.path);
+        });
+        existingDrawings.value = [];
+    }
 };
 
 const handleDrawingsChange = (event) => {
@@ -682,11 +723,29 @@ onMounted(() => {
                                     />
                                     <button
                                         type="button"
-                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
                                         @click="removeExistingImage(image)"
                                     >
-                                        <span class="sr-only">Verwijderen</span>
-                                        <MaterialIcon name="close" class="h-4 w-4" />
+                                        ✕
+                                    </button>
+                                </div>
+                                <div
+                                    v-for="(file, index) in safeImages"
+                                    :key="`${file.name}-${index}`"
+                                    class="group relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                >
+                                    <img
+                                        v-if="safeCreateObjectUrl(file)"
+                                        :src="safeCreateObjectUrl(file)"
+                                        alt=""
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                        @click="removeUploadedImage(index)"
+                                    >
+                                        ✕
                                     </button>
                                 </div>
                                 <div
@@ -702,9 +761,6 @@ onMounted(() => {
                                 >
                                     <span class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om afbeeldingen te kiezen of sleep ze hierheen.
-                                    </span>
-                                    <span v-if="imageNames.length" class="mt-2 text-[11px] text-gray-500">
-                                        {{ imageNames.join(", ") }}
                                     </span>
                                 </div>
                             </div>
@@ -723,30 +779,74 @@ onMounted(() => {
                             <div class="space-y-2">
                                 <InputLabel value="Brochure" />
                                 <div
-                                    v-if="existingBrochure"
-                                    class="group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                    v-if="form.brochure && brochurePreviewUrl"
+                                    class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                    :class="[
+                                        isDraggingBrochure ? 'border-gray-900' : 'border-gray-300',
+                                        isPdfFile(form.brochure)
+                                            ? 'border-2 border-solid'
+                                            : 'border-2 border-dashed',
+                                    ]"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openBrochurePicker"
+                                    @keydown.enter.space.prevent="openBrochurePicker"
+                                    @dragover="handleDragOverBrochure"
+                                    @dragleave="handleDragLeaveBrochure"
+                                    @drop="handleBrochureDrop"
                                 >
-                                    <object
-                                        :data="pdfPreviewUrl(existingBrochure.url)"
-                                        type="application/pdf"
-                                        class="h-full w-full"
-                                    >
-                                        <a
-                                            :href="existingBrochure.url"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="px-3 text-center text-xs font-semibold text-gray-700"
-                                        >
-                                            {{ existingBrochureLabel }}
-                                        </a>
-                                    </object>
+                                    <iframe
+                                        v-if="isPdfFile(form.brochure)"
+                                        :src="brochurePreviewUrl"
+                                        class="pointer-events-none h-full w-full"
+                                        title="Brochure preview"
+                                    />
+                                    <img
+                                        v-else
+                                        :src="brochurePreviewUrl"
+                                        alt=""
+                                        class="pointer-events-none h-full w-full object-cover"
+                                    />
+                                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                        Klik om te vervangen of sleep een bestand hierheen
+                                    </div>
+                                </div>
+                                <div
+                                    v-else-if="existingBrochure"
+                                    class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                    :class="[
+                                        isDraggingBrochure ? 'border-gray-900' : 'border-gray-300',
+                                        existingBrochureIsPdf ? 'border-2 border-solid' : 'border-2 border-dashed',
+                                    ]"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openBrochurePicker"
+                                    @keydown.enter.space.prevent="openBrochurePicker"
+                                    @dragover="handleDragOverBrochure"
+                                    @dragleave="handleDragLeaveBrochure"
+                                    @drop="handleBrochureDrop"
+                                >
+                                    <iframe
+                                        v-if="existingBrochureIsPdf"
+                                        :src="pdfPreviewUrl(existingBrochure.url)"
+                                        class="pointer-events-none h-full w-full"
+                                        title="Brochure preview"
+                                    />
+                                    <img
+                                        v-else
+                                        :src="existingBrochure.url"
+                                        alt=""
+                                        class="pointer-events-none h-full w-full object-cover"
+                                    />
+                                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                        Klik om te vervangen of sleep een bestand hierheen
+                                    </div>
                                     <button
                                         type="button"
-                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
-                                        @click="removeExistingBrochure"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                        @click.stop="removeExistingBrochure"
                                     >
-                                        <span class="sr-only">Verwijderen</span>
-                                        <MaterialIcon name="close" class="h-4 w-4" />
+                                        ✕
                                     </button>
                                 </div>
                                 <div
@@ -779,33 +879,82 @@ onMounted(() => {
 
                             <div class="space-y-2">
                                 <InputLabel value="Tekeningen" />
-                                <div v-if="existingDrawings.length" class="grid grid-cols-1 gap-3">
+                                <div
+                                    v-if="form.drawings && drawingsPreviewUrl"
+                                    class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                    :class="[
+                                        isDraggingDrawings ? 'border-gray-900' : 'border-gray-300',
+                                        isPdfFile(form.drawings)
+                                            ? 'border-2 border-solid'
+                                            : 'border-2 border-dashed',
+                                    ]"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openDrawingsPicker"
+                                    @keydown.enter.space.prevent="openDrawingsPicker"
+                                    @dragover="handleDragOverDrawings"
+                                    @dragleave="handleDragLeaveDrawings"
+                                    @drop="handleDrawingsDrop"
+                                >
+                                    <iframe
+                                        v-if="isPdfFile(form.drawings)"
+                                        :src="drawingsPreviewUrl"
+                                        class="pointer-events-none h-full w-full"
+                                        title="Tekening preview"
+                                    />
+                                    <img
+                                        v-else
+                                        :src="drawingsPreviewUrl"
+                                        alt=""
+                                        class="pointer-events-none h-full w-full object-cover"
+                                    />
+                                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                        Klik om te vervangen of sleep een bestand hierheen
+                                    </div>
+                                </div>
+                                <div
+                                    v-else-if="existingDrawings.length"
+                                    class="grid grid-cols-1 gap-3"
+                                >
                                     <div
                                         v-for="(drawing, index) in existingDrawings"
                                         :key="drawing.path"
-                                        class="group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                        class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                        :class="[
+                                            isDraggingDrawings ? 'border-gray-900' : 'border-gray-300',
+                                            drawing.path.toLowerCase().endsWith('.pdf')
+                                                ? 'border-2 border-solid'
+                                                : 'border-2 border-dashed',
+                                        ]"
+                                        role="button"
+                                        tabindex="0"
+                                        @click="openDrawingsPicker"
+                                        @keydown.enter.space.prevent="openDrawingsPicker"
+                                        @dragover="handleDragOverDrawings"
+                                        @dragleave="handleDragLeaveDrawings"
+                                        @drop="handleDrawingsDrop"
                                     >
-                                        <object
-                                            :data="pdfPreviewUrl(drawing.url)"
-                                            type="application/pdf"
-                                            class="h-full w-full"
-                                        >
-                                            <a
-                                                :href="drawing.url"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="px-3 text-center text-xs font-semibold text-gray-700"
-                                            >
-                                                {{ existingDrawingLabels[index] }}
-                                            </a>
-                                        </object>
+                                        <iframe
+                                            v-if="isPdfUrl(drawing.url)"
+                                            :src="pdfPreviewUrl(drawing.url)"
+                                            class="pointer-events-none h-full w-full"
+                                            title="Tekening preview"
+                                        />
+                                        <img
+                                            v-else
+                                            :src="drawing.url"
+                                            alt=""
+                                            class="pointer-events-none h-full w-full object-cover"
+                                        />
+                                        <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                            Klik om te vervangen of sleep een bestand hierheen
+                                        </div>
                                         <button
                                             type="button"
-                                            class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
-                                            @click="removeExistingDrawing(drawing)"
+                                            class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                            @click.stop="removeExistingDrawing(drawing)"
                                         >
-                                            <span class="sr-only">Verwijderen</span>
-                                            <MaterialIcon name="close" class="h-4 w-4" />
+                                            ✕
                                         </button>
                                     </div>
                                 </div>

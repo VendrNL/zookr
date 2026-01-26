@@ -507,6 +507,10 @@ const openBrochurePicker = () => {
     brochureInput.value?.click();
 };
 
+const removeSelectedBrochure = () => {
+    form.brochure = null;
+};
+
 const setDrawings = (file) => {
     const nextDrawings = file ?? null;
 
@@ -545,6 +549,10 @@ const handleDragLeaveDrawings = () => {
 
 const openDrawingsPicker = () => {
     drawingsInput.value?.click();
+};
+
+const removeSelectedDrawings = () => {
+    form.drawings = null;
 };
 
 const submit = (onSuccess) => {
@@ -880,7 +888,7 @@ onMounted(() => {
                                     />
                                     <button
                                         type="button"
-                                        class="absolute right-2 top-2 rounded-full bg-white/90 p-1 text-xs font-semibold text-gray-700 shadow hover:bg-white"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
                                         @click="removeRemoteImage(url)"
                                     >
                                         ✕
@@ -968,6 +976,13 @@ onMounted(() => {
                                         <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
                                             Klik om te vervangen of sleep een bestand hierheen
                                         </div>
+                                        <button
+                                            type="button"
+                                            class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                            @click.stop="removeSelectedBrochure"
+                                        >
+                                            ✕
+                                        </button>
                                     </div>
                                     <span v-else class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om een brochure te kiezen of sleep deze hierheen.
@@ -1016,6 +1031,13 @@ onMounted(() => {
                                         <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
                                             Klik om te vervangen of sleep een bestand hierheen
                                         </div>
+                                        <button
+                                            type="button"
+                                            class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                            @click.stop="removeSelectedDrawings"
+                                        >
+                                            ✕
+                                        </button>
                                     </div>
                                     <span v-else class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om tekeningen te kiezen of sleep deze hierheen.
