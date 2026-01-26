@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+COPY docker/php.ini /usr/local/etc/php/conf.d/zookr.ini
+
 WORKDIR /var/www/html
 
 # Datadog PHP tracer (ddtrace)

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SearchRequest;
+use App\Models\Property;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -180,8 +181,38 @@ class SearchRequestController extends Controller
             'assignee:id,name,email',
         ]);
 
+        $organizationId = $request->user()->organization_id;
+        $offeredProperties = collect();
+        if ($organizationId) {
+            $offeredProperties = Property::query()
+                ->where('search_request_id', $search_request->id)
+                ->where('organization_id', $organizationId)
+                ->with([
+                    'user:id,name',
+                    'contactUser:id,name',
+                ])
+                ->latest()
+                ->get([
+                    'id',
+                    'organization_id',
+                    'user_id',
+                    'contact_user_id',
+                    'search_request_id',
+                    'name',
+                    'address',
+                    'city',
+                    'surface_area',
+                    'availability',
+                    'acquisition',
+                    'rent_price_per_m2',
+                    'rent_price_parking',
+                    'created_at',
+                ]);
+        }
+
         return Inertia::render('SearchRequests/Show', [
             'item' => $search_request,
+            'offeredProperties' => $offeredProperties,
             'can' => [
                 'update' => $request->user()->can('update', $search_request),
                 'assign' => $request->user()->can('assign', $search_request),

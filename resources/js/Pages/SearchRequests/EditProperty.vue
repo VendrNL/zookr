@@ -10,11 +10,20 @@ import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
-import { computed, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 
 const props = defineProps({
     item: Object,
+    property: Object,
+    propertyMedia: {
+        type: Object,
+        default: () => ({
+            images: [],
+            brochure: null,
+            drawings: [],
+        }),
+    },
     users: Array,
     currentUserId: Number,
     options: {
@@ -26,22 +35,29 @@ const props = defineProps({
 });
 
 const form = useForm({
-    address: "",
-    city: "",
-    name: "",
-    surface_area: "",
-    availability: "",
-    acquisition: "",
-    parking_spots: "",
-    rent_price_per_m2: "",
-    rent_price_parking: "",
-    notes: "",
+    address: props.property.address ?? "",
+    city: props.property.city ?? "",
+    name: props.property.name ?? "",
+    surface_area: props.property.surface_area ?? "",
+    availability: props.property.availability ?? "",
+    acquisition: props.property.acquisition ?? "",
+    parking_spots: props.property.parking_spots ?? "",
+    rent_price_per_m2: props.property.rent_price_per_m2 ?? "",
+    rent_price_parking: props.property.rent_price_parking ?? "",
+    notes: props.property.notes ?? "",
     images: [],
-    url: "",
+    url: props.property.url ?? "",
     brochure: null,
     drawings: null,
-    contact_user_id: props.currentUserId ?? null,
+    contact_user_id: props.property.contact_user_id ?? props.currentUserId ?? null,
+    remove_images: [],
+    remove_brochure: false,
+    remove_drawings: [],
 });
+
+const existingImages = ref([...(props.propertyMedia.images ?? [])]);
+const existingBrochure = ref(props.propertyMedia.brochure ?? null);
+const existingDrawings = ref([...(props.propertyMedia.drawings ?? [])]);
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 100 * 1024 * 1024;
@@ -53,8 +69,15 @@ const isDraggingImages = ref(false);
 const isDraggingBrochure = ref(false);
 const isDraggingDrawings = ref(false);
 const showUploadLimitModal = ref(false);
+const notesInput = ref(null);
 
 const imageNames = computed(() => form.images.map((file) => file.name));
+const existingBrochureLabel = computed(() =>
+    existingBrochure.value?.path?.split("/").pop()
+);
+const existingDrawingLabels = computed(() =>
+    existingDrawings.value.map((drawing) => drawing.path.split("/").pop())
+);
 
 const openUploadLimitModal = () => {
     showUploadLimitModal.value = true;
@@ -187,11 +210,130 @@ const submit = (onSuccess) => {
         return;
     }
 
-    form.post(route("search-requests.properties.store", props.item.id), {
-        preserveScroll: true,
-        forceFormData: true,
-        onSuccess,
-    });
+    syncNumberField(surfaceAreaInput, "surface_area", formatNumberValue);
+    syncNumberField(parkingSpotsInput, "parking_spots", formatNumberValue);
+    syncNumberField(rentPerM2Input, "rent_price_per_m2", formatCurrencyValue);
+    syncNumberField(rentParkingInput, "rent_price_parking", formatCurrencyValue);
+
+    form
+        .transform((data) => ({
+            ...data,
+            _method: "patch",
+        }))
+        .post(
+            route("search-requests.properties.update", [props.item.id, props.property.id]),
+            {
+                preserveScroll: true,
+                forceFormData: true,
+                onSuccess,
+                onFinish: () => {
+                    form.transform((data) => data);
+                },
+            }
+        );
+};
+
+const removeExistingImage = (image) => {
+    form.remove_images.push(image.path);
+    existingImages.value = existingImages.value.filter((item) => item.path !== image.path);
+};
+
+const removeExistingBrochure = () => {
+    form.remove_brochure = true;
+    existingBrochure.value = null;
+};
+
+const removeExistingDrawing = (drawing) => {
+    form.remove_drawings.push(drawing.path);
+    existingDrawings.value = existingDrawings.value.filter((item) => item.path !== drawing.path);
+};
+
+const numberFormat = new Intl.NumberFormat("nl-NL", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+});
+const currencyFormat = new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
+
+const normalizeNumber = (value) => {
+    if (!value) return "";
+    const cleaned = value
+        .replace(/[^0-9.,]/g, "")
+        .replace(/\s/g, "");
+    const parts = cleaned.split(",");
+    if (parts.length > 1) {
+        return `${parts[0].replace(/\./g, "")}.${parts.slice(1).join("")}`;
+    }
+    return cleaned.replace(/\./g, "");
+};
+
+const parseNumber = (value) => {
+    const normalized = normalizeNumber(String(value ?? ""));
+    if (!normalized) return "";
+    const parsed = Number.parseFloat(normalized);
+    return Number.isNaN(parsed) ? "" : parsed;
+};
+
+const formatNumberValue = (value) => {
+    if (value === "" || value === null || value === undefined) return "";
+    return numberFormat.format(value);
+};
+
+const formatCurrencyValue = (value) => {
+    if (value === "" || value === null || value === undefined) return "";
+    return currencyFormat.format(value);
+};
+
+const surfaceAreaInput = ref(formatNumberValue(form.surface_area));
+const parkingSpotsInput = ref(formatNumberValue(form.parking_spots));
+const rentPerM2Input = ref(formatCurrencyValue(form.rent_price_per_m2));
+const rentParkingInput = ref(formatCurrencyValue(form.rent_price_parking));
+
+const updateNumberField = (inputRef, key) => {
+    const parsed = parseNumber(inputRef.value);
+    form[key] = parsed === "" ? "" : parsed;
+};
+
+const syncNumberField = (inputRef, key, formatter) => {
+    const parsed = parseNumber(inputRef.value);
+    form[key] = parsed === "" ? "" : parsed;
+    inputRef.value = parsed === "" ? "" : formatter(parsed);
+};
+
+const handleSurfaceAreaInput = () => {
+    updateNumberField(surfaceAreaInput, "surface_area");
+};
+
+const handleSurfaceAreaBlur = () => {
+    syncNumberField(surfaceAreaInput, "surface_area", formatNumberValue);
+};
+
+const handleParkingSpotsInput = () => {
+    updateNumberField(parkingSpotsInput, "parking_spots");
+};
+
+const handleParkingSpotsBlur = () => {
+    syncNumberField(parkingSpotsInput, "parking_spots", formatNumberValue);
+};
+
+const handleRentPerM2Input = () => {
+    updateNumberField(rentPerM2Input, "rent_price_per_m2");
+};
+
+const handleRentPerM2Blur = () => {
+    syncNumberField(rentPerM2Input, "rent_price_per_m2", formatCurrencyValue);
+};
+
+const handleRentParkingInput = () => {
+    updateNumberField(rentParkingInput, "rent_price_parking");
+};
+
+const handleRentParkingBlur = () => {
+    syncNumberField(rentParkingInput, "rent_price_parking", formatCurrencyValue);
 };
 
 const { confirmLeave } = useDirtyConfirm(form, undefined, {
@@ -206,17 +348,27 @@ const handleCancel = () => {
         onSave: (done) => submit(done),
     });
 };
+
+const autoResizeNotes = () => {
+    if (!notesInput.value) return;
+    notesInput.value.style.height = "auto";
+    notesInput.value.style.height = `${notesInput.value.scrollHeight + 10}px`;
+};
+
+onMounted(() => {
+    nextTick(autoResizeNotes);
+});
 </script>
 
 <template>
-    <Head title="Pand aanbieden" />
+    <Head title="Aangeboden pand aanpassen" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <div class="space-y-1">
                     <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                        Pand aanbieden
+                        Aangeboden pand aanpassen
                     </h2>
                     <p class="text-sm text-gray-500">
                         Zoekvraag: {{ item.title }}
@@ -286,12 +438,14 @@ const handleCancel = () => {
                                 />
                                 <TextInput
                                     id="surface_area"
-                                    v-model="form.surface_area"
-                                    type="number"
+                                    v-model="surfaceAreaInput"
+                                    type="text"
                                     min="0"
                                     step="0.01"
                                     class="mt-1 block w-full"
                                     required
+                                    @input="handleSurfaceAreaInput"
+                                    @blur="handleSurfaceAreaBlur"
                                 />
                                 <InputError class="mt-2" :message="form.errors.surface_area" />
                             </div>
@@ -347,11 +501,13 @@ const handleCancel = () => {
                                 />
                                 <TextInput
                                     id="parking_spots"
-                                    v-model="form.parking_spots"
-                                    type="number"
+                                    v-model="parkingSpotsInput"
+                                    type="text"
                                     min="0"
                                     step="1"
                                     class="mt-1 block w-full"
+                                    @input="handleParkingSpotsInput"
+                                    @blur="handleParkingSpotsBlur"
                                 />
                                 <InputError class="mt-2" :message="form.errors.parking_spots" />
                             </div>
@@ -362,12 +518,14 @@ const handleCancel = () => {
                                 />
                                 <TextInput
                                     id="rent_price_per_m2"
-                                    v-model="form.rent_price_per_m2"
-                                    type="number"
+                                    v-model="rentPerM2Input"
+                                    type="text"
                                     min="0"
                                     step="0.01"
                                     class="mt-1 block w-full"
                                     required
+                                    @input="handleRentPerM2Input"
+                                    @blur="handleRentPerM2Blur"
                                 />
                                 <InputError class="mt-2" :message="form.errors.rent_price_per_m2" />
                             </div>
@@ -381,12 +539,14 @@ const handleCancel = () => {
                                 />
                                 <TextInput
                                     id="rent_price_parking"
-                                    v-model="form.rent_price_parking"
-                                    type="number"
+                                    v-model="rentParkingInput"
+                                    type="text"
                                     min="0"
                                     step="0.01"
                                     class="mt-1 block w-full"
                                     required
+                                    @input="handleRentParkingInput"
+                                    @blur="handleRentParkingBlur"
                                 />
                                 <InputError class="mt-2" :message="form.errors.rent_price_parking" />
                             </div>
@@ -407,15 +567,94 @@ const handleCancel = () => {
                             <InputLabel for="notes" value="Toelichting" />
                             <textarea
                                 id="notes"
+                                ref="notesInput"
                                 v-model="form.notes"
                                 rows="5"
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                class="mt-1 block w-full resize-none rounded-md border-gray-300 shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                @input="autoResizeNotes"
                             />
                             <InputError class="mt-2" :message="form.errors.notes" />
                         </div>
 
+                        <div v-if="existingImages.length" class="space-y-2">
+                            <InputLabel value="Bestaande afbeeldingen" />
+                            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                <div
+                                    v-for="image in existingImages"
+                                    :key="image.path"
+                                    class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 aspect-[3/2]"
+                                >
+                                    <img
+                                        :src="image.url"
+                                        alt=""
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                        @click="removeExistingImage(image)"
+                                    >
+                                        <span class="sr-only">Verwijderen</span>
+                                        <MaterialIcon name="close" class="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="existingBrochure" class="space-y-2">
+                            <InputLabel value="Bestaande brochure" />
+                            <div class="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                <MaterialIcon name="description" class="h-5 w-5 text-gray-500" />
+                                <a
+                                    :href="existingBrochure.url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="text-sm text-gray-700 hover:text-gray-900"
+                                >
+                                    {{ existingBrochureLabel }}
+                                </a>
+                                <button
+                                    type="button"
+                                    class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                    @click="removeExistingBrochure"
+                                >
+                                    <span class="sr-only">Verwijderen</span>
+                                    <MaterialIcon name="close" class="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="existingDrawings.length" class="space-y-2">
+                            <InputLabel value="Bestaande tekeningen" />
+                            <div class="space-y-2">
+                                <div
+                                    v-for="(drawing, index) in existingDrawings"
+                                    :key="drawing.path"
+                                    class="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                                >
+                                    <MaterialIcon name="assignment" class="h-5 w-5 text-gray-500" />
+                                    <a
+                                        :href="drawing.url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="text-sm text-gray-700 hover:text-gray-900"
+                                    >
+                                        {{ existingDrawingLabels[index] }}
+                                    </a>
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                        @click="removeExistingDrawing(drawing)"
+                                    >
+                                        <span class="sr-only">Verwijderen</span>
+                                        <MaterialIcon name="close" class="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="space-y-3">
-                            <InputLabel value="Afbeeldingen *" />
+                            <InputLabel value="Afbeeldingen" />
                             <input
                                 ref="imagesInput"
                                 type="file"

@@ -11,12 +11,20 @@ import ModalCard from "@/Components/ModalCard.vue";
 import PageContainer from "@/Components/PageContainer.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
+import TableCard from "@/Components/TableCard.vue";
+import TableCell from "@/Components/TableCell.vue";
+import TableEmptyState from "@/Components/TableEmptyState.vue";
+import TableHeaderCell from "@/Components/TableHeaderCell.vue";
 import TextInput from "@/Components/TextInput.vue";
-import { Head, Link, useForm, usePage } from "@inertiajs/vue3";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 
 const props = defineProps({
     item: Object,
+    offeredProperties: {
+        type: Array,
+        default: () => [],
+    },
     can: {
         type: Object,
         default: () => ({
@@ -43,6 +51,7 @@ const showDeleteModal = ref(false);
 
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+const activeTab = ref("search-request");
 
 function statusBadgeClass(status) {
     switch (status) {
@@ -141,6 +150,22 @@ function acquisitionLabel(value) {
     if (!value) return "-";
     return value === "huur" ? "Huur" : "Koop";
 }
+
+function formatCurrency(value) {
+    if (value === null || value === undefined || value === "") return "-";
+    return new Intl.NumberFormat("nl-NL", {
+        style: "currency",
+        currency: "EUR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    }).format(value);
+}
+
+function goToProperty(propertyId) {
+    router.visit(
+        route("search-requests.properties.edit", [props.item.id, propertyId])
+    );
+}
 </script>
 
 <template>
@@ -168,7 +193,39 @@ function acquisitionLabel(value) {
 
         <div class="py-8">
             <PageContainer class="max-w-5xl space-y-6">
-                <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+                <div class="text-sm font-medium text-center text-gray-500 border-b border-gray-200">
+                    <ul class="flex flex-wrap -mb-px">
+                        <li class="me-2">
+                            <button
+                                type="button"
+                                class="inline-block p-4 border-b-2 rounded-t-lg"
+                                :class="activeTab === 'search-request'
+                                    ? 'text-blue-600 border-blue-600'
+                                    : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
+                                @click="activeTab = 'search-request'"
+                            >
+                                Zoekvraag
+                            </button>
+                        </li>
+                        <li class="me-2">
+                            <button
+                                type="button"
+                                class="inline-block p-4 border-b-2 rounded-t-lg"
+                                :class="activeTab === 'offers'
+                                    ? 'text-blue-600 border-blue-600'
+                                    : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
+                                @click="activeTab = 'offers'"
+                            >
+                                Aangeboden panden
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div
+                    v-if="activeTab === 'search-request'"
+                    class="grid gap-6 lg:grid-cols-3 lg:items-start"
+                >
                     <FormSection class="lg:col-span-2 space-y-4">
                         <div>
                             <img
@@ -401,6 +458,80 @@ function acquisitionLabel(value) {
                             </form>
                         </FormSection>
                     </div>
+                </div>
+
+                <div v-else class="space-y-4">
+                    <TableCard>
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <TableHeaderCell class="w-[28%] min-w-[220px]">
+                                    Pand
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[16%] hidden md:table-cell">
+                                    Locatie
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[12%] hidden md:table-cell">
+                                    Verwerving
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
+                                    Oppervlakte
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
+                                    Huur p/m2
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
+                                    Parkeren
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[12%]">
+                                    Aangeboden door
+                                </TableHeaderCell>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <TableEmptyState
+                                v-if="offeredProperties.length === 0"
+                                :colspan="7"
+                                message="Er zijn nog geen panden aangeboden door jouw kantoor."
+                            />
+                            <tr
+                                v-for="property in offeredProperties"
+                                :key="property.id"
+                                class="cursor-pointer hover:bg-gray-50 focus-within:bg-gray-50"
+                                role="link"
+                                tabindex="0"
+                                @click="goToProperty(property.id)"
+                                @keydown.enter.prevent="goToProperty(property.id)"
+                                @keydown.space.prevent="goToProperty(property.id)"
+                            >
+                                <TableCell class="whitespace-normal break-words">
+                                    <div class="text-sm font-semibold text-gray-900">
+                                        {{ property.name || property.address }}
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        {{ property.address }}
+                                    </div>
+                                </TableCell>
+                                <TableCell class="hidden md:table-cell truncate">
+                                    {{ property.city || "-" }}
+                                </TableCell>
+                                <TableCell class="hidden md:table-cell">
+                                    {{ acquisitionLabel(property.acquisition) }}
+                                </TableCell>
+                                <TableCell class="hidden lg:table-cell">
+                                    {{ property.surface_area || "-" }}
+                                </TableCell>
+                                <TableCell class="hidden lg:table-cell">
+                                    {{ formatCurrency(property.rent_price_per_m2) }}
+                                </TableCell>
+                                <TableCell class="hidden lg:table-cell">
+                                    {{ formatCurrency(property.rent_price_parking) }}
+                                </TableCell>
+                                <TableCell>
+                                    {{ property.user?.name || property.contact_user?.name || "-" }}
+                                </TableCell>
+                            </tr>
+                        </tbody>
+                    </TableCard>
                 </div>
             </PageContainer>
         </div>

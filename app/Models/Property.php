@@ -48,6 +48,11 @@ class Property extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function contactUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'contact_user_id');
+    }
+
     public function searchRequest(): BelongsTo
     {
         return $this->belongsTo(SearchRequest::class);

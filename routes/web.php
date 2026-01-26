@@ -174,6 +174,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search-requests.properties.store')
         ->middleware('can:offer,search_request');
 
+    Route::get(
+        'search-requests/{search_request}/properties/{property}/edit',
+        [PropertyController::class, 'edit']
+    )
+        ->name('search-requests.properties.edit')
+        ->middleware('can:update,property');
+
+    Route::patch(
+        'search-requests/{search_request}/properties/{property}',
+        [PropertyController::class, 'update']
+    )
+        ->name('search-requests.properties.update')
+        ->middleware('can:update,property');
+
     Route::redirect('/admin/organizations', '/admin/makelaars')
         ->middleware('can:manageOrganizations,App\Models\User');
     Route::redirect('/admin/organizations/import', '/admin/makelaars/import')
