@@ -194,7 +194,7 @@ watch(
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    Zoekvraag
+                    {{ item.title }}
                 </h2>
                 <Link
                     :href="route('search-requests.index')"
@@ -380,29 +380,31 @@ watch(
                             <p v-else class="text-gray-900">-</p>
                         </div>
 
-                        <div class="flex flex-wrap gap-3 pt-2">
-                            <Link
-                                v-if="can.update"
-                                :href="route('search-requests.edit', item.id)"
-                                class="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                            >
-                                Bewerk
-                            </Link>
+                        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                            <div class="flex flex-wrap gap-3">
+                                <Link
+                                    v-if="can.update"
+                                    :href="route('search-requests.edit', item.id)"
+                                    class="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                                >
+                                    Bewerk
+                                </Link>
+                                <DangerButton
+                                    v-if="can.delete"
+                                    type="button"
+                                    @click="confirmDelete"
+                                    :disabled="deleteForm.processing"
+                                >
+                                    Verwijderen
+                                </DangerButton>
+                            </div>
                             <Link
                                 v-if="can.offer"
                                 :href="route('search-requests.properties.create', item.id)"
-                                class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm hover:border-gray-400 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                                class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 Pand aanbieden
                             </Link>
-                            <DangerButton
-                                v-if="can.delete"
-                                type="button"
-                                @click="confirmDelete"
-                                :disabled="deleteForm.processing"
-                            >
-                                Verwijderen
-                            </DangerButton>
                         </div>
                     </FormSection>
 

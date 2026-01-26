@@ -422,10 +422,13 @@ onMounted(() => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between gap-4">
-                <div class="space-y-1">
+                <div class="flex items-center gap-3">
                     <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                        Aangeboden pand aanpassen
+                        {{ item.title }}
                     </h2>
+                    <span class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Bewerken
+                    </span>
                 </div>
                 <Link
                     :href="route('search-requests.show', item.id)"
@@ -442,10 +445,7 @@ onMounted(() => {
         </template>
 
         <div class="py-8">
-            <PageContainer class="max-w-4xl space-y-6">
-                <h1 class="text-2xl font-semibold text-gray-900">
-                    {{ item.title }}
-                </h1>
+            <PageContainer class="max-w-4xl">
                 <FormSection>
                     <form class="space-y-6" @submit.prevent="submit">
                         <div class="grid gap-4 md:grid-cols-2">
