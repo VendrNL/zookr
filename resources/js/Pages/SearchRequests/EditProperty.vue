@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import Dropdown from "@/Components/Dropdown.vue";
 import FormActions from "@/Components/FormActions.vue";
 import FormSection from "@/Components/FormSection.vue";
 import InputError from "@/Components/InputError.vue";
@@ -77,6 +78,16 @@ const existingBrochureLabel = computed(() =>
 );
 const existingDrawingLabels = computed(() =>
     existingDrawings.value.map((drawing) => drawing.path.split("/").pop())
+);
+const pdfPreviewUrl = (url) => {
+    if (!url) return "";
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}toolbar=0&navpanes=0&scrollbar=0`;
+};
+
+const acquisitionOptionLabel = (value) => (value === "huur" ? "Huur" : "Koop");
+const selectedAcquisitionLabel = computed(() =>
+    form.acquisition ? acquisitionOptionLabel(form.acquisition) : "Kies huur of koop"
 );
 
 const openUploadLimitModal = () => {
@@ -210,6 +221,8 @@ const submit = (onSuccess) => {
         return;
     }
 
+    form.url = normalizeUrl(urlInput.value);
+
     syncNumberField(surfaceAreaInput, "surface_area", formatNumberValue);
     syncNumberField(parkingSpotsInput, "parking_spots", formatNumberValue);
     syncNumberField(rentPerM2Input, "rent_price_per_m2", formatCurrencyValue);
@@ -336,6 +349,44 @@ const handleRentParkingBlur = () => {
     syncNumberField(rentParkingInput, "rent_price_parking", formatCurrencyValue);
 };
 
+const normalizeUrl = (value) => {
+    if (!value) return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const withoutDuplicateScheme = trimmed.replace(/^(https?:\/\/)+/i, "https://");
+    if (/^https?:\/\//i.test(withoutDuplicateScheme)) {
+        try {
+            return new URL(withoutDuplicateScheme).toString();
+        } catch {
+            return withoutDuplicateScheme;
+        }
+    }
+    try {
+        return new URL(`https://${withoutDuplicateScheme}`).toString();
+    } catch {
+        return `https://${withoutDuplicateScheme}`;
+    }
+};
+
+const stripScheme = (value) => {
+    if (!value) return "";
+    return value.replace(/^https?:\/\//i, "");
+};
+
+const urlInput = ref(stripScheme(form.url));
+
+const openUrlInNewTab = () => {
+    const normalized = normalizeUrl(urlInput.value || form.url);
+    if (!normalized) return;
+    window.open(normalized, "_blank", "noopener");
+};
+
+
+const handleUrlBlur = () => {
+    form.url = normalizeUrl(urlInput.value);
+    urlInput.value = stripScheme(form.url);
+};
+
 const { confirmLeave } = useDirtyConfirm(form, undefined, {
     onSave: (done) => submit(done),
 });
@@ -343,7 +394,12 @@ const { confirmLeave } = useDirtyConfirm(form, undefined, {
 const handleCancel = () => {
     confirmLeave({
         onConfirm: () => {
-            router.visit(route("search-requests.show", props.item.id));
+            router.visit(
+                route("search-requests.show", {
+                    search_request: props.item.id,
+                    tab: "offers",
+                })
+            );
         },
         onSave: (done) => submit(done),
     });
@@ -370,9 +426,6 @@ onMounted(() => {
                     <h2 class="text-2xl font-semibold leading-tight text-gray-800">
                         Aangeboden pand aanpassen
                     </h2>
-                    <p class="text-sm text-gray-500">
-                        Zoekvraag: {{ item.title }}
-                    </p>
                 </div>
                 <Link
                     :href="route('search-requests.show', item.id)"
@@ -389,7 +442,10 @@ onMounted(() => {
         </template>
 
         <div class="py-8">
-            <PageContainer class="max-w-4xl">
+            <PageContainer class="max-w-4xl space-y-6">
+                <h1 class="text-2xl font-semibold text-gray-900">
+                    {{ item.title }}
+                </h1>
                 <FormSection>
                     <form class="space-y-6" @submit.prevent="submit">
                         <div class="grid gap-4 md:grid-cols-2">
@@ -406,6 +462,20 @@ onMounted(() => {
                                 <InputError class="mt-2" :message="form.errors.address" />
                             </div>
                             <div>
+                                <InputLabel for="name" value="Projectnaam" />
+                                <TextInput
+                                    id="name"
+                                    v-model="form.name"
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    autocomplete="off"
+                                />
+                                <InputError class="mt-2" :message="form.errors.name" />
+                            </div>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
                                 <InputLabel for="city" value="Plaats *" />
                                 <TextInput
                                     id="city"
@@ -417,20 +487,10 @@ onMounted(() => {
                                 />
                                 <InputError class="mt-2" :message="form.errors.city" />
                             </div>
+                            <div class="hidden md:block"></div>
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <InputLabel for="name" value="Projectnaam" />
-                                <TextInput
-                                    id="name"
-                                    v-model="form.name"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    autocomplete="off"
-                                />
-                                <InputError class="mt-2" :message="form.errors.name" />
-                            </div>
                             <div>
                                 <InputLabel
                                     for="surface_area"
@@ -448,68 +508,6 @@ onMounted(() => {
                                     @blur="handleSurfaceAreaBlur"
                                 />
                                 <InputError class="mt-2" :message="form.errors.surface_area" />
-                            </div>
-                        </div>
-
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <InputLabel
-                                    for="availability"
-                                    value="Beschikbaarheid *"
-                                />
-                                <TextInput
-                                    id="availability"
-                                    v-model="form.availability"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    required
-                                    autocomplete="off"
-                                />
-                                <InputError class="mt-2" :message="form.errors.availability" />
-                            </div>
-                            <div>
-                                <InputLabel
-                                    for="acquisition"
-                                    value="Verwerving *"
-                                />
-                                <select
-                                    id="acquisition"
-                                    v-model="form.acquisition"
-                                    class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                    required
-                                >
-                                    <option value="" disabled>
-                                        Kies huur of koop
-                                    </option>
-                                    <option
-                                        v-for="option in options.acquisitions"
-                                        :key="option"
-                                        :value="option"
-                                    >
-                                        {{ option === "huur" ? "Huur" : "Koop" }}
-                                    </option>
-                                </select>
-                                <InputError class="mt-2" :message="form.errors.acquisition" />
-                            </div>
-                        </div>
-
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <InputLabel
-                                    for="parking_spots"
-                                    value="Aantal parkeerplaatsen"
-                                />
-                                <TextInput
-                                    id="parking_spots"
-                                    v-model="parkingSpotsInput"
-                                    type="text"
-                                    min="0"
-                                    step="1"
-                                    class="mt-1 block w-full"
-                                    @input="handleParkingSpotsInput"
-                                    @blur="handleParkingSpotsBlur"
-                                />
-                                <InputError class="mt-2" :message="form.errors.parking_spots" />
                             </div>
                             <div>
                                 <InputLabel
@@ -534,6 +532,23 @@ onMounted(() => {
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
                                 <InputLabel
+                                    for="parking_spots"
+                                    value="Parkeerplaatsen"
+                                />
+                                <TextInput
+                                    id="parking_spots"
+                                    v-model="parkingSpotsInput"
+                                    type="text"
+                                    min="0"
+                                    step="1"
+                                    class="mt-1 block w-full"
+                                    @input="handleParkingSpotsInput"
+                                    @blur="handleParkingSpotsBlur"
+                                />
+                                <InputError class="mt-2" :message="form.errors.parking_spots" />
+                            </div>
+                            <div>
+                                <InputLabel
                                     for="rent_price_parking"
                                     value="Huurprijs per parkeerplaats per jaar *"
                                 />
@@ -550,19 +565,91 @@ onMounted(() => {
                                 />
                                 <InputError class="mt-2" :message="form.errors.rent_price_parking" />
                             </div>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <InputLabel for="url" value="URL" />
+                                <InputLabel
+                                    for="availability"
+                                    value="Beschikbaarheid *"
+                                />
                                 <TextInput
-                                    id="url"
-                                    v-model="form.url"
-                                    type="url"
+                                    id="availability"
+                                    v-model="form.availability"
+                                    type="text"
                                     class="mt-1 block w-full"
+                                    required
                                     autocomplete="off"
                                 />
-                                <InputError class="mt-2" :message="form.errors.url" />
+                                <InputError class="mt-2" :message="form.errors.availability" />
+                            </div>
+                            <div>
+                                <InputLabel
+                                    for="acquisition"
+                                    value="Verwerving *"
+                                />
+                                <Dropdown align="left" width="48" contentClasses="py-1 bg-white">
+                                    <template #trigger>
+                                        <button
+                                            id="acquisition"
+                                            type="button"
+                                            class="mt-1 flex w-full items-center justify-between rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <span :class="form.acquisition ? 'text-gray-900' : 'text-gray-500'">
+                                                {{ selectedAcquisitionLabel }}
+                                            </span>
+                                            <svg
+                                                class="h-4 w-4 text-gray-500"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 20 20"
+                                                fill="currentColor"
+                                                aria-hidden="true"
+                                            >
+                                                <path
+                                                    fill-rule="evenodd"
+                                                    d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                    clip-rule="evenodd"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </template>
+                                    <template #content>
+                                        <button
+                                            v-for="option in options.acquisitions"
+                                            :key="option"
+                                            type="button"
+                                            class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                                            @click="form.acquisition = option"
+                                        >
+                                            <span>{{ acquisitionOptionLabel(option) }}</span>
+                                            <span v-if="form.acquisition === option" class="text-blue-600">•</span>
+                                        </button>
+                                    </template>
+                                </Dropdown>
+                                <InputError class="mt-2" :message="form.errors.acquisition" />
                             </div>
                         </div>
 
+                        <div>
+                            <InputLabel for="url" value="URL" />
+                            <div class="mt-1 flex w-full rounded-base shadow-xs">
+                                <span
+                                    class="inline-flex cursor-pointer items-center rounded-s-lg border border-e-0 border-gray-300 bg-gray-100 px-3 text-sm text-gray-500"
+                                    @click="openUrlInNewTab"
+                                >
+                                    https://
+                                </span>
+                                <input
+                                    id="url"
+                                    v-model="urlInput"
+                                    type="text"
+                                    class="block w-full rounded-e-lg rounded-none border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                                    autocomplete="off"
+                                    @blur="handleUrlBlur"
+                                />
+                            </div>
+                            <InputError class="mt-2" :message="form.errors.url" />
+                        </div>
                         <div>
                             <InputLabel for="notes" value="Toelichting" />
                             <textarea
@@ -570,19 +657,20 @@ onMounted(() => {
                                 ref="notesInput"
                                 v-model="form.notes"
                                 rows="5"
-                                class="mt-1 block w-full resize-none rounded-md border-gray-300 shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                class="mt-1 block w-full resize-none rounded-md border-gray-300 bg-gray-50 shadow-sm focus:border-gray-900 focus:ring-gray-900"
                                 @input="autoResizeNotes"
                             />
                             <InputError class="mt-2" :message="form.errors.notes" />
                         </div>
 
-                        <div v-if="existingImages.length" class="space-y-2">
-                            <InputLabel value="Bestaande afbeeldingen" />
-                            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+
+                        <div class="space-y-2">
+                            <InputLabel value="Afbeeldingen" />
+                            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
                                 <div
                                     v-for="image in existingImages"
                                     :key="image.path"
-                                    class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 aspect-[3/2]"
+                                    class="group relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
                                 >
                                     <img
                                         :src="image.url"
@@ -598,63 +686,25 @@ onMounted(() => {
                                         <MaterialIcon name="close" class="h-4 w-4" />
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div v-if="existingBrochure" class="space-y-2">
-                            <InputLabel value="Bestaande brochure" />
-                            <div class="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                <MaterialIcon name="description" class="h-5 w-5 text-gray-500" />
-                                <a
-                                    :href="existingBrochure.url"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="text-sm text-gray-700 hover:text-gray-900"
-                                >
-                                    {{ existingBrochureLabel }}
-                                </a>
-                                <button
-                                    type="button"
-                                    class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
-                                    @click="removeExistingBrochure"
-                                >
-                                    <span class="sr-only">Verwijderen</span>
-                                    <MaterialIcon name="close" class="h-4 w-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div v-if="existingDrawings.length" class="space-y-2">
-                            <InputLabel value="Bestaande tekeningen" />
-                            <div class="space-y-2">
                                 <div
-                                    v-for="(drawing, index) in existingDrawings"
-                                    :key="drawing.path"
-                                    class="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                                    class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
+                                    :class="isDraggingImages ? 'border-gray-900' : 'border-gray-300'"
+                                    role="button"
+                                    tabindex="0"
+                                    @click="openImagesPicker"
+                                    @keydown.enter.space.prevent="openImagesPicker"
+                                    @dragover="handleDragOverImages"
+                                    @dragleave="handleDragLeaveImages"
+                                    @drop="handleImagesDrop"
                                 >
-                                    <MaterialIcon name="assignment" class="h-5 w-5 text-gray-500" />
-                                    <a
-                                        :href="drawing.url"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="text-sm text-gray-700 hover:text-gray-900"
-                                    >
-                                        {{ existingDrawingLabels[index] }}
-                                    </a>
-                                    <button
-                                        type="button"
-                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
-                                        @click="removeExistingDrawing(drawing)"
-                                    >
-                                        <span class="sr-only">Verwijderen</span>
-                                        <MaterialIcon name="close" class="h-4 w-4" />
-                                    </button>
+                                    <span class="px-3 text-center text-xs font-medium text-gray-700">
+                                        Klik om afbeeldingen te kiezen of sleep ze hierheen.
+                                    </span>
+                                    <span v-if="imageNames.length" class="mt-2 text-[11px] text-gray-500">
+                                        {{ imageNames.join(", ") }}
+                                    </span>
                                 </div>
                             </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <InputLabel value="Afbeeldingen" />
                             <input
                                 ref="imagesInput"
                                 type="file"
@@ -663,38 +713,42 @@ onMounted(() => {
                                 class="hidden"
                                 @change="handleImagesChange"
                             />
-                            <div
-                                class="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed bg-gray-50 text-sm text-gray-600"
-                                :class="isDraggingImages ? 'border-gray-900' : 'border-gray-300'"
-                                role="button"
-                                tabindex="0"
-                                @click="openImagesPicker"
-                                @keydown.enter.space.prevent="openImagesPicker"
-                                @dragover="handleDragOverImages"
-                                @dragleave="handleDragLeaveImages"
-                                @drop="handleImagesDrop"
-                            >
-                                <span class="px-4 text-center text-sm font-medium text-gray-700">
-                                    Klik om afbeeldingen te kiezen of sleep ze hierheen.
-                                </span>
-                                <span v-if="imageNames.length" class="mt-2 text-xs text-gray-500">
-                                    {{ imageNames.join(", ") }}
-                                </span>
-                            </div>
                             <InputError class="mt-2" :message="form.errors.images || form.errors['images.*']" />
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
-                            <div class="space-y-3">
+                            <div class="space-y-2">
                                 <InputLabel value="Brochure" />
-                                <input
-                                    ref="brochureInput"
-                                    type="file"
-                                    class="hidden"
-                                    @change="handleBrochureChange"
-                                />
                                 <div
-                                    class="flex min-h-[110px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed bg-gray-50 text-sm text-gray-600"
+                                    v-if="existingBrochure"
+                                    class="group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                >
+                                    <object
+                                        :data="pdfPreviewUrl(existingBrochure.url)"
+                                        type="application/pdf"
+                                        class="h-full w-full"
+                                    >
+                                        <a
+                                            :href="existingBrochure.url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="px-3 text-center text-xs font-semibold text-gray-700"
+                                        >
+                                            {{ existingBrochureLabel }}
+                                        </a>
+                                    </object>
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                        @click="removeExistingBrochure"
+                                    >
+                                        <span class="sr-only">Verwijderen</span>
+                                        <MaterialIcon name="close" class="h-4 w-4" />
+                                    </button>
+                                </div>
+                                <div
+                                    v-else
+                                    class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
                                     :class="isDraggingBrochure ? 'border-gray-900' : 'border-gray-300'"
                                     role="button"
                                     tabindex="0"
@@ -704,25 +758,57 @@ onMounted(() => {
                                     @dragleave="handleDragLeaveBrochure"
                                     @drop="handleBrochureDrop"
                                 >
-                                    <span class="px-4 text-center text-sm font-medium text-gray-700">
+                                    <span class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om een brochure te kiezen of sleep deze hierheen.
                                     </span>
-                                    <span v-if="form.brochure" class="mt-2 text-xs text-gray-500">
+                                    <span v-if="form.brochure" class="mt-2 text-[11px] text-gray-500">
                                         {{ form.brochure.name }}
                                     </span>
                                 </div>
-                                <InputError class="mt-2" :message="form.errors.brochure" />
-                            </div>
-                            <div class="space-y-3">
-                                <InputLabel value="Tekeningen" />
                                 <input
-                                    ref="drawingsInput"
+                                    ref="brochureInput"
                                     type="file"
                                     class="hidden"
-                                    @change="handleDrawingsChange"
+                                    @change="handleBrochureChange"
                                 />
+                                <InputError class="mt-2" :message="form.errors.brochure" />
+                            </div>
+
+                            <div class="space-y-2">
+                                <InputLabel value="Tekeningen" />
+                                <div v-if="existingDrawings.length" class="grid grid-cols-1 gap-3">
+                                    <div
+                                        v-for="(drawing, index) in existingDrawings"
+                                        :key="drawing.path"
+                                        class="group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                    >
+                                        <object
+                                            :data="pdfPreviewUrl(drawing.url)"
+                                            type="application/pdf"
+                                            class="h-full w-full"
+                                        >
+                                            <a
+                                                :href="drawing.url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="px-3 text-center text-xs font-semibold text-gray-700"
+                                            >
+                                                {{ existingDrawingLabels[index] }}
+                                            </a>
+                                        </object>
+                                        <button
+                                            type="button"
+                                            class="absolute right-2 top-2 hidden rounded-full bg-white/90 p-1 text-gray-700 shadow group-hover:block"
+                                            @click="removeExistingDrawing(drawing)"
+                                        >
+                                            <span class="sr-only">Verwijderen</span>
+                                            <MaterialIcon name="close" class="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
                                 <div
-                                    class="flex min-h-[110px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed bg-gray-50 text-sm text-gray-600"
+                                    v-else
+                                    class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
                                     :class="isDraggingDrawings ? 'border-gray-900' : 'border-gray-300'"
                                     role="button"
                                     tabindex="0"
@@ -732,17 +818,22 @@ onMounted(() => {
                                     @dragleave="handleDragLeaveDrawings"
                                     @drop="handleDrawingsDrop"
                                 >
-                                    <span class="px-4 text-center text-sm font-medium text-gray-700">
+                                    <span class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om tekeningen te kiezen of sleep deze hierheen.
                                     </span>
-                                    <span v-if="form.drawings" class="mt-2 text-xs text-gray-500">
+                                    <span v-if="form.drawings" class="mt-2 text-[11px] text-gray-500">
                                         {{ form.drawings.name }}
                                     </span>
                                 </div>
+                                <input
+                                    ref="drawingsInput"
+                                    type="file"
+                                    class="hidden"
+                                    @change="handleDrawingsChange"
+                                />
                                 <InputError class="mt-2" :message="form.errors.drawings" />
                             </div>
                         </div>
-
                         <div>
                             <InputLabel
                                 for="contact_user_id"

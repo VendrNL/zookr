@@ -115,7 +115,11 @@ class PropertyController extends Controller
             'drawings' => $drawingsPath ? [$drawingsPath] : null,
         ]);
 
-        return redirect()->route('search-requests.show', $search_request);
+        return redirect()
+            ->route('search-requests.show', [
+                'search_request' => $search_request,
+                'tab' => 'offers',
+            ]);
     }
 
     public function edit(Request $request, SearchRequest $search_request, Property $property)
@@ -234,10 +238,6 @@ class PropertyController extends Controller
             Storage::disk('public')->delete($removeImages->all());
         }
         if ($request->hasFile('images')) {
-            if ($images) {
-                Storage::disk('public')->delete($images);
-            }
-            $images = [];
             foreach ($request->file('images') as $image) {
                 $images[] = $image->store('properties/images', 'public');
             }

@@ -188,8 +188,8 @@ class SearchRequestController extends Controller
                 ->where('search_request_id', $search_request->id)
                 ->where('organization_id', $organizationId)
                 ->with([
-                    'user:id,name',
-                    'contactUser:id,name',
+                    'user:id,name,avatar_path',
+                    'contactUser:id,name,avatar_path',
                 ])
                 ->latest()
                 ->get([

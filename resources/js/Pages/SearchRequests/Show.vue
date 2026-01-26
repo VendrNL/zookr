@@ -17,7 +17,7 @@ import TableEmptyState from "@/Components/TableEmptyState.vue";
 import TableHeaderCell from "@/Components/TableHeaderCell.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/vue3";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
     item: Object,
@@ -166,6 +166,25 @@ function goToProperty(propertyId) {
         route("search-requests.properties.edit", [props.item.id, propertyId])
     );
 }
+
+const applyTabFromQuery = () => {
+    const url = page?.url ?? "";
+    const queryString = url.includes("?") ? url.split("?")[1] : "";
+    const params = new URLSearchParams(queryString);
+    const tab = params.get("tab");
+    if (tab === "offers") {
+        activeTab.value = "offers";
+    }
+};
+
+onMounted(applyTabFromQuery);
+watch(
+    () => page.url,
+    () => {
+        applyTabFromQuery();
+    },
+    { immediate: true }
+);
 </script>
 
 <template>
@@ -464,25 +483,10 @@ function goToProperty(propertyId) {
                     <TableCard>
                         <thead class="bg-gray-50">
                             <tr>
-                                <TableHeaderCell class="w-[28%] min-w-[220px]">
+                                <TableHeaderCell class="w-[60%] min-w-[260px]">
                                     Pand
                                 </TableHeaderCell>
-                                <TableHeaderCell class="w-[16%] hidden md:table-cell">
-                                    Locatie
-                                </TableHeaderCell>
-                                <TableHeaderCell class="w-[12%] hidden md:table-cell">
-                                    Verwerving
-                                </TableHeaderCell>
-                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
-                                    Oppervlakte
-                                </TableHeaderCell>
-                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
-                                    Huur p/m2
-                                </TableHeaderCell>
-                                <TableHeaderCell class="w-[12%] hidden lg:table-cell">
-                                    Parkeren
-                                </TableHeaderCell>
-                                <TableHeaderCell class="w-[12%]">
+                                <TableHeaderCell class="w-[40%]">
                                     Aangeboden door
                                 </TableHeaderCell>
                             </tr>
@@ -490,7 +494,7 @@ function goToProperty(propertyId) {
                         <tbody class="divide-y divide-gray-100">
                             <TableEmptyState
                                 v-if="offeredProperties.length === 0"
-                                :colspan="7"
+                                :colspan="2"
                                 message="Er zijn nog geen panden aangeboden door jouw kantoor."
                             />
                             <tr
@@ -508,26 +512,23 @@ function goToProperty(propertyId) {
                                         {{ property.name || property.address }}
                                     </div>
                                     <div class="text-xs text-gray-500">
-                                        {{ property.address }}
+                                        {{ property.address }} {{ property.city ? `- ${property.city}` : "" }}
                                     </div>
                                 </TableCell>
-                                <TableCell class="hidden md:table-cell truncate">
-                                    {{ property.city || "-" }}
-                                </TableCell>
-                                <TableCell class="hidden md:table-cell">
-                                    {{ acquisitionLabel(property.acquisition) }}
-                                </TableCell>
-                                <TableCell class="hidden lg:table-cell">
-                                    {{ property.surface_area || "-" }}
-                                </TableCell>
-                                <TableCell class="hidden lg:table-cell">
-                                    {{ formatCurrency(property.rent_price_per_m2) }}
-                                </TableCell>
-                                <TableCell class="hidden lg:table-cell">
-                                    {{ formatCurrency(property.rent_price_parking) }}
-                                </TableCell>
                                 <TableCell>
-                                    {{ property.user?.name || property.contact_user?.name || "-" }}
+                                    <div class="flex items-center gap-3">
+                                        <div class="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
+                                            <img
+                                                v-if="property.contact_user?.avatar_url || property.user?.avatar_url"
+                                                :src="property.contact_user?.avatar_url || property.user?.avatar_url"
+                                                alt=""
+                                                class="h-full w-full object-cover"
+                                            />
+                                        </div>
+                                        <div class="text-sm font-medium text-gray-900">
+                                            {{ property.contact_user?.name || property.user?.name || "-" }}
+                                        </div>
+                                    </div>
                                 </TableCell>
                             </tr>
                         </tbody>

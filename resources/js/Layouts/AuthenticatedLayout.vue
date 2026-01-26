@@ -126,20 +126,6 @@ onBeforeUnmount(() => {
                         v-if="$page.props.auth?.user"
                         class="flex items-center gap-3"
                     >
-                        <div class="hidden items-center lg:flex">
-                            <div class="relative">
-                                <MaterialIcon
-                                    name="search"
-                                    class="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-                                />
-                                <input
-                                    type="search"
-                                    placeholder="Zoeken"
-                                    class="w-72 rounded-full border border-gray-200 bg-gray-50 py-2 pl-10 pr-4 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </div>
-                        </div>
-
                         <div class="relative">
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
