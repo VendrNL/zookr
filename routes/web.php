@@ -175,6 +175,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search-requests.properties.store')
         ->middleware('can:offer,search_request');
 
+    Route::post(
+        'search-requests/{search_request}/properties/import-funda-business',
+        [PropertyController::class, 'importFundaBusiness']
+    )
+        ->name('search-requests.properties.import-funda-business')
+        ->middleware('can:offer,search_request');
+
+    Route::post(
+        'search-requests/{search_request}/properties/import-funda-business-html',
+        [PropertyController::class, 'importFundaBusinessHtml']
+    )
+        ->name('search-requests.properties.import-funda-business-html')
+        ->middleware('can:offer,search_request');
+
     Route::get(
         'search-requests/{search_request}/properties/{property}/edit',
         [PropertyController::class, 'edit']

@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Property;
 use App\Models\SearchRequest;
 use App\Models\User;
+use App\Services\Funda\ScrapeFundaBusinessService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class PropertyController extends Controller
@@ -64,8 +66,10 @@ class PropertyController extends Controller
             'rent_price_parking' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'url' => ['nullable', 'url', 'max:2048'],
-            'images' => ['required', 'array', 'min:1'],
+            'images' => ['required_without:remote_images', 'array', 'min:1'],
             'images.*' => ['file', 'image', 'max:5120'],
+            'remote_images' => ['nullable', 'array'],
+            'remote_images.*' => ['url', 'max:2048'],
             'brochure' => ['nullable', 'file', 'max:10240'],
             'drawings' => ['nullable', 'file', 'max:10240'],
             'contact_user_id' => [
@@ -79,6 +83,14 @@ class PropertyController extends Controller
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 $images[] = $image->store('properties/images', 'public');
+            }
+        }
+
+        $remoteImages = $data['remote_images'] ?? [];
+        foreach ($remoteImages as $remoteUrl) {
+            $downloadedPath = $this->downloadRemoteImage($remoteUrl);
+            if ($downloadedPath) {
+                $images[] = $downloadedPath;
             }
         }
 
@@ -120,6 +132,71 @@ class PropertyController extends Controller
                 'search_request' => $search_request,
                 'tab' => 'offers',
             ]);
+    }
+
+    public function importFundaBusiness(Request $request, SearchRequest $search_request, ScrapeFundaBusinessService $service)
+    {
+        $this->authorize('offer', $search_request);
+
+        $organizationId = $request->user()->organization_id;
+
+        if (! $organizationId) {
+            abort(403, 'Deze gebruiker heeft geen Makelaar gekoppeld.');
+        }
+
+        $data = $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+            'contact_user_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id')->where('organization_id', $organizationId),
+            ],
+        ]);
+
+        $scraped = $service->scrape($data['url'], false);
+        $payload = $service->mapScraped($scraped, [
+            'organization_id' => $organizationId,
+            'user_id' => $request->user()->id,
+            'contact_user_id' => $data['contact_user_id'] ?? $request->user()->id,
+            'search_request_id' => $search_request->id,
+        ]);
+
+        return response()->json([
+            'payload' => $payload,
+        ]);
+    }
+
+    public function importFundaBusinessHtml(Request $request, SearchRequest $search_request, ScrapeFundaBusinessService $service)
+    {
+        $this->authorize('offer', $search_request);
+
+        $organizationId = $request->user()->organization_id;
+
+        if (! $organizationId) {
+            abort(403, 'Deze gebruiker heeft geen Makelaar gekoppeld.');
+        }
+
+        $data = $request->validate([
+            'url' => ['nullable', 'url', 'max:2048'],
+            'html' => ['required', 'string'],
+            'contact_user_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id')->where('organization_id', $organizationId),
+            ],
+        ]);
+
+        $scraped = $service->scrapeFromHtml($data['html'], $data['url'] ?? null);
+        $payload = $service->mapScraped($scraped, [
+            'organization_id' => $organizationId,
+            'user_id' => $request->user()->id,
+            'contact_user_id' => $data['contact_user_id'] ?? $request->user()->id,
+            'search_request_id' => $search_request->id,
+        ]);
+
+        return response()->json([
+            'payload' => $payload,
+        ]);
     }
 
     public function edit(Request $request, SearchRequest $search_request, Property $property)
@@ -296,5 +373,46 @@ class PropertyController extends Controller
             'search_request' => $search_request,
             'tab' => 'offers',
         ]);
+    }
+
+    private function downloadRemoteImage(string $url): ?string
+    {
+        $response = Http::retry(2, 300)->get($url);
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $contentType = $response->header('Content-Type', '');
+        if (! str_starts_with($contentType, 'image/')) {
+            return null;
+        }
+
+        $extension = $this->guessImageExtension($contentType, $url);
+        $filename = uniqid('remote_', true).'.'.$extension;
+        $path = 'properties/images/'.$filename;
+
+        Storage::disk('public')->put($path, $response->body());
+
+        return $path;
+    }
+
+    private function guessImageExtension(string $contentType, string $url): string
+    {
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+        ];
+
+        if (isset($map[$contentType])) {
+            return $map[$contentType];
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+        $extension = $path ? pathinfo($path, PATHINFO_EXTENSION) : '';
+
+        return $extension !== '' ? strtolower($extension) : 'jpg';
     }
 }

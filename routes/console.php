@@ -2,7 +2,9 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use App\Models\Organization;
+use App\Services\Funda\ScrapeFundaBusinessService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -99,4 +101,44 @@ Artisan::command('organizations:import {path?}', function () {
 
     return 0;
 })->purpose('Importeer makelaars uit CSV en sla bestaande Makelaars over.');
+
+Artisan::command('zookr:import-funda-business {url} {--organization_id=} {--user_id=} {--contact_user_id=} {--search_request_id=} {--dry-run}', function () {
+    $authUser = Auth::user();
+    $organizationId = $this->option('organization_id')
+        ?? ($authUser?->organization_id)
+        ?? env('FUNDA_ORGANIZATION_ID');
+    $userId = $this->option('user_id')
+        ?? ($authUser?->id)
+        ?? env('FUNDA_USER_ID');
+    $contactUserId = $this->option('contact_user_id') ?? env('FUNDA_CONTACT_USER_ID');
+    $searchRequestId = $this->option('search_request_id') ?? env('FUNDA_SEARCH_REQUEST_ID');
+
+    if (! $organizationId || ! $userId) {
+        $this->error('organization_id en user_id zijn verplicht (via actieve gebruiker, option of env).');
+        return 1;
+    }
+
+    $service = app(ScrapeFundaBusinessService::class);
+    $result = $service->import($this->argument('url'), [
+        'organization_id' => (int) $organizationId,
+        'user_id' => (int) $userId,
+        'contact_user_id' => $contactUserId ? (int) $contactUserId : null,
+        'search_request_id' => $searchRequestId ? (int) $searchRequestId : null,
+    ], (bool) $this->option('dry-run'));
+
+    $payload = $result['payload'];
+
+    if ($this->option('dry-run')) {
+        $this->info('Dry run: payload prepared but not saved.');
+        $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        return 0;
+    }
+
+    $property = $result['property'];
+    if ($property) {
+        $this->info("Property opgeslagen: ID {$property->id}");
+    }
+
+    return 0;
+})->purpose('Scrape en importeer Funda in Business objectdetails naar Properties.');
 

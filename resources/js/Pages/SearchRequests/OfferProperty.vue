@@ -38,6 +38,7 @@ const form = useForm({
     rent_price_parking: "",
     notes: "",
     images: [],
+    remote_images: [],
     url: "",
     brochure: null,
     drawings: null,
@@ -54,9 +55,30 @@ const isDraggingImages = ref(false);
 const isDraggingBrochure = ref(false);
 const isDraggingDrawings = ref(false);
 const showUploadLimitModal = ref(false);
+const showOverwriteModal = ref(false);
+const showManualImportModal = ref(false);
+const isScraping = ref(false);
+const scrapeError = ref("");
+const manualHtml = ref("");
+const manualError = ref("");
 const notesInput = ref(null);
 
-const imageNames = computed(() => form.images.map((file) => file.name));
+const safeImages = computed(() =>
+    Array.isArray(form.images) ? form.images.filter(Boolean) : []
+);
+const imageNames = computed(() => safeImages.value.map((file) => file.name));
+const safeCreateObjectUrl = (file) => {
+    if (!file) return "";
+    const creator = globalThis?.URL?.createObjectURL;
+    if (typeof creator !== "function") return "";
+    return creator(file);
+};
+
+const brochurePreviewUrl = computed(() => safeCreateObjectUrl(form.brochure));
+const drawingsPreviewUrl = computed(() => safeCreateObjectUrl(form.drawings));
+const remoteImages = computed(() =>
+    Array.isArray(form.remote_images) ? form.remote_images : []
+);
 
 const acquisitionOptionLabel = (value) => (value === "huur" ? "Huur" : "Koop");
 const selectedAcquisitionLabel = computed(() =>
@@ -79,7 +101,10 @@ const exceedsUploadLimits = (files) => {
 };
 
 const selectedFiles = (overrides = {}) => {
-    const images = overrides.images ?? form.images;
+    const rawImages = overrides.images ?? form.images;
+    const images = Array.isArray(rawImages)
+        ? rawImages.filter(Boolean)
+        : Array.from(rawImages ?? []).filter(Boolean);
     const brochure = overrides.brochure ?? form.brochure;
     const drawings = overrides.drawings ?? form.drawings;
 
@@ -87,14 +112,15 @@ const selectedFiles = (overrides = {}) => {
 };
 
 const setImages = (files) => {
-    const nextImages = files ? Array.from(files) : [];
+    const nextImages = files ? Array.from(files).filter(Boolean) : [];
+    const mergedImages = [ ...safeImages.value, ...nextImages ];
 
-    if (exceedsUploadLimits(selectedFiles({ images: nextImages }))) {
+    if (exceedsUploadLimits(selectedFiles({ images: mergedImages }))) {
         openUploadLimitModal();
         return;
     }
 
-    form.images = nextImages;
+    form.images = mergedImages;
 };
 
 const handleImagesChange = (event) => {
@@ -241,6 +267,208 @@ const handleUrlBlur = () => {
     urlInput.value = stripScheme(form.url);
 };
 
+const hasScrapeData = computed(() => {
+    return Boolean(
+        form.address ||
+            form.city ||
+            form.name ||
+            form.surface_area ||
+            form.availability ||
+            form.acquisition ||
+            form.parking_spots ||
+            form.rent_price_per_m2 ||
+            form.rent_price_parking ||
+            form.notes ||
+            (form.images?.length ?? 0) > 0 ||
+            (form.remote_images?.length ?? 0) > 0 ||
+            form.brochure ||
+            form.drawings
+    );
+});
+
+const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ?? "";
+
+const applyScrapePayload = (payload) => {
+    const toNumber = (value) => {
+        const parsed = parseNumber(String(value ?? ""));
+        return parsed === "" ? "" : parsed;
+    };
+
+    form.address = payload.address ?? "";
+    form.city = payload.city ?? "";
+    form.name = payload.name ?? "";
+    form.availability = payload.availability ?? "";
+    form.acquisition = payload.acquisition ?? "";
+    form.surface_area = toNumber(payload.surface_area);
+    form.parking_spots = toNumber(payload.parking_spots);
+    form.rent_price_per_m2 = toNumber(payload.rent_price_per_m2);
+    form.rent_price_parking = toNumber(payload.rent_price_parking);
+    form.notes = payload.notes ?? "";
+    form.url = payload.url ?? form.url;
+    urlInput.value = stripScheme(form.url);
+
+    form.images = [];
+    form.remote_images = Array.isArray(payload.images) ? payload.images : [];
+    form.brochure = null;
+    form.drawings = null;
+
+    surfaceAreaInput.value = formatNumberValue(form.surface_area);
+    parkingSpotsInput.value = formatNumberValue(form.parking_spots);
+    rentPerM2Input.value = formatCurrencyValue(form.rent_price_per_m2);
+    rentParkingInput.value = formatCurrencyValue(form.rent_price_parking);
+
+    nextTick(autoResizeNotes);
+};
+
+const fetchScrape = async () => {
+    const normalizedUrl = normalizeUrl(urlInput.value || form.url);
+    if (!normalizedUrl) {
+        form.setError("url", "Vul een geldige URL in.");
+        return;
+    }
+
+    form.clearErrors("url");
+    scrapeError.value = "";
+    isScraping.value = true;
+
+    try {
+        const response = await fetch(
+            route("search-requests.properties.import-funda-business", props.item.id),
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    url: normalizedUrl,
+                    contact_user_id: form.contact_user_id,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            const message =
+                errorPayload?.message ||
+                errorPayload?.errors?.url?.[0] ||
+                "Scrapen mislukt. Probeer het opnieuw.";
+            scrapeError.value = message;
+            return;
+        }
+
+        const data = await response.json();
+        if (!data?.payload) {
+            scrapeError.value = "Geen data ontvangen van de scraper.";
+            return;
+        }
+
+        applyScrapePayload(data.payload);
+    } catch (error) {
+        scrapeError.value = "Scrapen mislukt. Probeer het opnieuw.";
+    } finally {
+        isScraping.value = false;
+        showOverwriteModal.value = false;
+    }
+};
+
+const handleScrapeClick = () => {
+    if (hasScrapeData.value) {
+        showOverwriteModal.value = true;
+        return;
+    }
+
+    fetchScrape();
+};
+
+const confirmOverwrite = () => {
+    fetchScrape();
+};
+
+const removeRemoteImage = (url) => {
+    form.remote_images = (form.remote_images ?? []).filter((item) => item !== url);
+};
+
+const removeUploadedImage = (index) => {
+    const nextImages = safeImages.value.filter((_, idx) => idx !== index);
+    form.images = nextImages;
+};
+
+const openManualImport = () => {
+    manualError.value = "";
+    showManualImportModal.value = true;
+};
+
+const fetchManualImport = async () => {
+    if (!manualHtml.value.trim()) {
+        manualError.value = "Plak de HTML van de pagina.";
+        return;
+    }
+
+    const normalizedUrl = normalizeUrl(urlInput.value || form.url);
+    manualError.value = "";
+    scrapeError.value = "";
+    isScraping.value = true;
+
+    try {
+        const response = await fetch(
+            route("search-requests.properties.import-funda-business-html", props.item.id),
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    url: normalizedUrl || null,
+                    html: manualHtml.value,
+                    contact_user_id: form.contact_user_id,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            const message =
+                errorPayload?.message ||
+                errorPayload?.errors?.html?.[0] ||
+                "Importeren mislukt. Probeer het opnieuw.";
+            manualError.value = message;
+            return;
+        }
+
+        const data = await response.json();
+        if (!data?.payload) {
+            manualError.value = "Geen data ontvangen van de importer.";
+            return;
+        }
+
+        applyScrapePayload(data.payload);
+        manualHtml.value = "";
+        showManualImportModal.value = false;
+    } catch (error) {
+        manualError.value = "Importeren mislukt. Probeer het opnieuw.";
+    } finally {
+        isScraping.value = false;
+    }
+};
+
+const handleManualHtmlFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    manualHtml.value = await file.text();
+};
+
+const getImagePreview = (file) => {
+    if (!file || typeof file !== "object" || typeof file.name !== "string") {
+        return "";
+    }
+
+    return safeCreateObjectUrl(file);
+};
+
 const openImagesPicker = () => {
     imagesInput.value?.click();
 };
@@ -298,6 +526,12 @@ const handleDrawingsDrop = (event) => {
     event.preventDefault();
     isDraggingDrawings.value = false;
     setDrawings(event.dataTransfer?.files?.[0] ?? null);
+};
+
+const isPdfFile = (file) => {
+    if (!file) return false;
+    if (file.type === "application/pdf") return true;
+    return file.name?.toLowerCase().endsWith(".pdf");
 };
 
 const handleDragOverDrawings = (event) => {
@@ -576,23 +810,46 @@ onMounted(() => {
 
                         <div>
                             <InputLabel for="url" value="URL" />
-                            <div class="mt-1 flex w-full rounded-base shadow-xs">
-                                <span
-                                    class="inline-flex cursor-pointer items-center rounded-s-lg border border-e-0 border-gray-300 bg-gray-100 px-3 text-sm text-gray-500"
-                                    @click="openUrlInNewTab"
-                                >
-                                    https://
-                                </span>
-                                <input
-                                    id="url"
-                                    v-model="urlInput"
-                                    type="text"
-                                    class="block w-full rounded-e-lg rounded-none border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
-                                    autocomplete="off"
-                                    @blur="handleUrlBlur"
-                                />
+                            <div class="mt-1 flex w-full flex-col gap-2 sm:flex-row">
+                                <div class="flex w-full rounded-base shadow-xs">
+                                    <span
+                                        class="inline-flex cursor-pointer items-center rounded-s-lg border border-e-0 border-gray-300 bg-gray-100 px-3 text-sm text-gray-500"
+                                        @click="openUrlInNewTab"
+                                    >
+                                        https://
+                                    </span>
+                                    <input
+                                        id="url"
+                                        v-model="urlInput"
+                                        type="text"
+                                        class="block w-full rounded-e-lg rounded-none border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                                        autocomplete="off"
+                                        @blur="handleUrlBlur"
+                                    />
+                                </div>
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <PrimaryButton
+                                        type="button"
+                                        class="h-11 justify-center sm:w-36"
+                                        :disabled="isScraping"
+                                        @click="handleScrapeClick"
+                                    >
+                                        {{ isScraping ? "Ophalen..." : "Ophalen" }}
+                                    </PrimaryButton>
+                                    <SecondaryButton
+                                        type="button"
+                                        class="h-11 justify-center sm:w-48"
+                                        :disabled="isScraping"
+                                        @click="openManualImport"
+                                    >
+                                        Handmatig importeren
+                                    </SecondaryButton>
+                                </div>
                             </div>
                             <InputError class="mt-2" :message="form.errors.url" />
+                            <p v-if="scrapeError" class="mt-2 text-sm text-red-600">
+                                {{ scrapeError }}
+                            </p>
                         </div>
 
                         <div>
@@ -612,15 +869,41 @@ onMounted(() => {
                             <InputLabel value="Afbeeldingen *" />
                             <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
                                 <div
-                                    v-for="(file, index) in form.images"
+                                    v-for="(url, index) in remoteImages"
+                                    :key="`${url}-${index}`"
+                                    class="group relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                >
+                                    <img
+                                        :src="url"
+                                        alt=""
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 rounded-full bg-white/90 p-1 text-xs font-semibold text-gray-700 shadow hover:bg-white"
+                                        @click="removeRemoteImage(url)"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div
+                                    v-for="(file, index) in safeImages"
                                     :key="`${file.name}-${index}`"
                                     class="group relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
                                 >
                                     <img
-                                        :src="URL.createObjectURL(file)"
+                                        v-if="getImagePreview(file)"
+                                        :src="getImagePreview(file)"
                                         alt=""
                                         class="h-full w-full object-cover"
                                     />
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                        @click="removeUploadedImage(index)"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                                 <div
                                     class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
@@ -636,9 +919,6 @@ onMounted(() => {
                                     <span class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om afbeeldingen te kiezen of sleep ze hierheen.
                                     </span>
-                                    <span v-if="imageNames.length" class="mt-2 text-[11px] text-gray-500">
-                                        {{ imageNames.join(", ") }}
-                                    </span>
                                 </div>
                             </div>
                             <input
@@ -650,14 +930,20 @@ onMounted(() => {
                                 @change="handleImagesChange"
                             />
                             <InputError class="mt-2" :message="form.errors.images || form.errors['images.*']" />
+                            <InputError class="mt-2" :message="form.errors.remote_images || form.errors['remote_images.*']" />
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div class="space-y-2">
                                 <InputLabel value="Brochure" />
                                 <div
-                                    class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
-                                    :class="isDraggingBrochure ? 'border-gray-900' : 'border-gray-300'"
+                                    class="group flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                    :class="[
+                                        isDraggingBrochure ? 'border-gray-900' : 'border-gray-300',
+                                        form.brochure && brochurePreviewUrl && isPdfFile(form.brochure)
+                                            ? 'border-2 border-solid'
+                                            : 'border-2 border-dashed',
+                                    ]"
                                     role="button"
                                     tabindex="0"
                                     @click="openBrochurePicker"
@@ -666,11 +952,25 @@ onMounted(() => {
                                     @dragleave="handleDragLeaveBrochure"
                                     @drop="handleBrochureDrop"
                                 >
-                                    <span class="px-3 text-center text-xs font-medium text-gray-700">
+                                    <div v-if="form.brochure && brochurePreviewUrl" class="relative h-full w-full">
+                                        <iframe
+                                            v-if="isPdfFile(form.brochure)"
+                                            :src="brochurePreviewUrl"
+                                            class="pointer-events-none h-full w-full"
+                                            title="Brochure preview"
+                                        />
+                                        <img
+                                            v-else
+                                            :src="brochurePreviewUrl"
+                                            alt=""
+                                            class="pointer-events-none h-full w-full object-cover"
+                                        />
+                                        <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                            Klik om te vervangen of sleep een bestand hierheen
+                                        </div>
+                                    </div>
+                                    <span v-else class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om een brochure te kiezen of sleep deze hierheen.
-                                    </span>
-                                    <span v-if="form.brochure" class="mt-2 text-[11px] text-gray-500">
-                                        {{ form.brochure.name }}
                                     </span>
                                 </div>
                                 <input
@@ -685,8 +985,13 @@ onMounted(() => {
                             <div class="space-y-2">
                                 <InputLabel value="Tekeningen" />
                                 <div
-                                    class="flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-gray-50 text-sm text-gray-600"
-                                    :class="isDraggingDrawings ? 'border-gray-900' : 'border-gray-300'"
+                                    class="group flex aspect-[3/2] w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
+                                    :class="[
+                                        isDraggingDrawings ? 'border-gray-900' : 'border-gray-300',
+                                        form.drawings && drawingsPreviewUrl && isPdfFile(form.drawings)
+                                            ? 'border-2 border-solid'
+                                            : 'border-2 border-dashed',
+                                    ]"
                                     role="button"
                                     tabindex="0"
                                     @click="openDrawingsPicker"
@@ -695,11 +1000,25 @@ onMounted(() => {
                                     @dragleave="handleDragLeaveDrawings"
                                     @drop="handleDrawingsDrop"
                                 >
-                                    <span class="px-3 text-center text-xs font-medium text-gray-700">
+                                    <div v-if="form.drawings && drawingsPreviewUrl" class="relative h-full w-full">
+                                        <iframe
+                                            v-if="isPdfFile(form.drawings)"
+                                            :src="drawingsPreviewUrl"
+                                            class="pointer-events-none h-full w-full"
+                                            title="Tekening preview"
+                                        />
+                                        <img
+                                            v-else
+                                            :src="drawingsPreviewUrl"
+                                            alt=""
+                                            class="pointer-events-none h-full w-full object-cover"
+                                        />
+                                        <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 px-4 text-center text-base font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                            Klik om te vervangen of sleep een bestand hierheen
+                                        </div>
+                                    </div>
+                                    <span v-else class="px-3 text-center text-xs font-medium text-gray-700">
                                         Klik om tekeningen te kiezen of sleep deze hierheen.
-                                    </span>
-                                    <span v-if="form.drawings" class="mt-2 text-[11px] text-gray-500">
-                                        {{ form.drawings.name }}
                                     </span>
                                 </div>
                                 <input
@@ -808,6 +1127,140 @@ onMounted(() => {
                         >
                             Begrepen
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="showOverwriteModal"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="overwrite-title"
+            @click.self="showOverwriteModal = false"
+        >
+            <div class="relative w-full max-w-md">
+                <div class="rounded-lg bg-white shadow">
+                    <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                        <h3
+                            id="overwrite-title"
+                            class="text-lg font-semibold text-gray-900"
+                        >
+                            Gegevens overschrijven
+                        </h3>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-900"
+                            aria-label="Sluiten"
+                            @click="showOverwriteModal = false"
+                        >
+                            <span class="sr-only">Sluiten</span>
+                            <svg
+                                class="h-4 w-4"
+                                aria-hidden="true"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 14 14"
+                            >
+                                <path
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="m1 1 12 12M13 1 1 13"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="space-y-3 px-4 py-5 text-sm text-gray-600">
+                        <p>Wil je de bestaande gegevens overschrijven?</p>
+                    </div>
+                    <div class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3">
+                        <SecondaryButton type="button" @click="showOverwriteModal = false">
+                            Annuleren
+                        </SecondaryButton>
+                        <PrimaryButton type="button" :disabled="isScraping" @click="confirmOverwrite">
+                            Ja, overschrijf de gegevens
+                        </PrimaryButton>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="showManualImportModal"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-import-title"
+            @click.self="showManualImportModal = false"
+        >
+            <div class="relative w-full max-w-2xl">
+                <div class="rounded-lg bg-white shadow">
+                    <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                        <h3
+                            id="manual-import-title"
+                            class="text-lg font-semibold text-gray-900"
+                        >
+                            Handmatige import
+                        </h3>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-900"
+                            aria-label="Sluiten"
+                            @click="showManualImportModal = false"
+                        >
+                            <span class="sr-only">Sluiten</span>
+                            <svg
+                                class="h-4 w-4"
+                                aria-hidden="true"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 14 14"
+                            >
+                                <path
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="m1 1 12 12M13 1 1 13"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="space-y-3 px-4 py-5 text-sm text-gray-600">
+                        <p>Plak de HTML van de Funda Business detailpagina hieronder.</p>
+                        <textarea
+                            v-model="manualHtml"
+                            rows="8"
+                            class="block w-full rounded-md border-gray-300 bg-gray-50 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            placeholder="&lt;!doctype html&gt;..."
+                        />
+                        <div class="flex items-center justify-between gap-3">
+                            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+                                <input
+                                    type="file"
+                                    class="hidden"
+                                    accept=".html,.htm,text/html"
+                                    @change="handleManualHtmlFileChange"
+                                />
+                                <span class="rounded-lg border border-gray-300 bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+                                    Upload HTML bestand
+                                </span>
+                            </label>
+                        </div>
+                        <p v-if="manualError" class="text-sm text-red-600">
+                            {{ manualError }}
+                        </p>
+                    </div>
+                    <div class="flex items-center justify-end gap-3 border-t border-gray-200 px-4 py-3">
+                        <SecondaryButton type="button" @click="showManualImportModal = false">
+                            Annuleren
+                        </SecondaryButton>
+                        <PrimaryButton type="button" :disabled="isScraping" @click="fetchManualImport">
+                            Importeren
+                        </PrimaryButton>
                     </div>
                 </div>
             </div>

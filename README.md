@@ -7,6 +7,37 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Funda Business Import
+
+Import a Funda in Business object detail page into `properties`:
+
+```bash
+php artisan zookr:import-funda-business "https://www.fundainbusiness.nl/kantoor/amsterdam/object-89195754-herengracht-206-216/" \
+  --organization_id=1 \
+  --user_id=1
+```
+
+organization_id en user_id komen van de actieve gebruiker (bij web-context). Voor CLI kun je opties of env defaults gebruiken:
+
+- `FUNDA_ORGANIZATION_ID`
+- `FUNDA_USER_ID`
+- `FUNDA_CONTACT_USER_ID`
+- `FUNDA_SEARCH_REQUEST_ID`
+
+Use `--dry-run` to print the payload without saving.
+
+Web wrapper (uses active user):
+
+```bash
+POST /search-requests/{search_request}/properties/import-funda-business
+```
+
+Handmatige import (HTML plakken):
+
+```bash
+POST /search-requests/{search_request}/properties/import-funda-business-html
+```
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
