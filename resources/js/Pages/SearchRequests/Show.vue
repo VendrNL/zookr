@@ -52,6 +52,7 @@ const showDeleteModal = ref(false);
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 const activeTab = ref("search-request");
+const activeTabParam = computed(() => page?.props?.tab || null);
 
 function statusBadgeClass(status) {
     switch (status) {
@@ -170,8 +171,12 @@ function goToProperty(propertyId) {
 const applyTabFromQuery = () => {
     const url = page?.url ?? "";
     const queryString = url.includes("?") ? url.split("?")[1] : "";
-    const params = new URLSearchParams(queryString);
-    const tab = params.get("tab");
+    const params = queryString
+        ? new URLSearchParams(queryString)
+        : typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search)
+            : new URLSearchParams();
+    const tab = params.get("tab") || activeTabParam.value;
     if (tab === "offers") {
         activeTab.value = "offers";
     }
@@ -192,10 +197,13 @@ watch(
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex items-center justify-between gap-4">
-                <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                    {{ item.title }}
-                </h2>
+            <div class="flex min-w-0 items-center justify-between gap-4">
+                <div class="relative min-w-0 max-w-[60vw] overflow-hidden whitespace-nowrap pr-8">
+                    <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                        {{ item.title }}
+                    </h2>
+                    <span class="pointer-events-none absolute right-0 top-0 h-full w-10 bg-gradient-to-l from-white"></span>
+                </div>
                 <Link
                     :href="route('search-requests.index')"
                     class="text-sm font-semibold text-gray-700 hover:text-gray-900"

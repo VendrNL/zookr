@@ -422,11 +422,14 @@ onMounted(() => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <h2 class="text-2xl font-semibold leading-tight text-gray-800">
-                        {{ item.title }}
-                    </h2>
-                    <span class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                <div class="flex min-w-0 items-center gap-3">
+                    <div class="relative min-w-0 max-w-[30vw] overflow-hidden whitespace-nowrap pr-6 sm:max-w-[35vw] lg:max-w-[40vw]">
+                        <h2 class="text-2xl font-semibold leading-tight text-gray-800">
+                            {{ item.title }}
+                        </h2>
+                        <span class="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white"></span>
+                    </div>
+                    <span class="inline-flex shrink-0 items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                         Bewerken
                     </span>
                 </div>

@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
                             </Link>
                             <div
                                 v-if="$slots.header"
-                                class="pl-4 pr-4 text-lg font-semibold text-gray-900 translate-y-[20%] sm:pl-[5rem] max-w-[60vw] truncate"
+                                class="min-w-0 pl-4 pr-4 text-lg font-semibold text-gray-900 translate-y-[20%] sm:pl-[5rem]"
                             >
                                 <slot name="header" />
                             </div>
@@ -133,9 +133,9 @@ onBeforeUnmount(() => {
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-full border border-transparent bg-white px-2 py-1 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center gap-2 rounded-full border border-transparent bg-white px-2 py-1 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
                                             >
-                                                <span class="mr-2 inline-flex h-7 w-7 overflow-hidden rounded-full bg-gray-100">
+                                                <span class="inline-flex h-7 w-7 shrink-0 overflow-hidden rounded-full bg-gray-100">
                                                     <img
                                                         v-if="$page.props.auth.user.avatar_url"
                                                         :src="$page.props.auth.user.avatar_url"
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
                                                         class="h-full w-full object-cover"
                                                     />
                                                 </span>
-                                                <span class="hidden sm:inline">
+                                                <span class="hidden max-w-[180px] truncate lg:inline">
                                                     {{ $page.props.auth.user.name }}
                                                 </span>
 
@@ -332,6 +332,34 @@ onBeforeUnmount(() => {
                                     class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
                                 >
                                     Gebruikers
+                                    <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
+                                </span>
+                            </Link>
+                            <Link
+                                :href="route('admin.mapping.index')"
+                                class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
+                                :class="[
+                                    route().current('admin.mapping.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                                    isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                                ]"
+                                @click="closeSidebar"
+                            >
+                                <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <path stroke="currentColor" stroke-linecap="round" stroke-width="1" d="M4 5h7m-7 4h5m-5 4h7m-7 4h5m5-12h6m-6 4h6m-6 4h6m-6 4h6"/>
+                                </svg>
+                                <span
+                                    class="transition-all duration-200"
+                                    :class="sidebarLabelClass"
+                                >
+                                    Mapping
+                                </span>
+                                <span
+                                    v-if="isSidebarCollapsed"
+                                    class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
+                                >
+                                    Mapping
                                     <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                                 </span>
                             </Link>

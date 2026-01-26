@@ -213,6 +213,7 @@ class SearchRequestController extends Controller
         return Inertia::render('SearchRequests/Show', [
             'item' => $search_request,
             'offeredProperties' => $offeredProperties,
+            'tab' => $request->string('tab')->toString(),
             'can' => [
                 'update' => $request->user()->can('update', $search_request),
                 'assign' => $request->user()->can('assign', $search_request),

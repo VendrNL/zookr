@@ -292,6 +292,9 @@ class PropertyController extends Controller
             'drawings' => $drawings,
         ]);
 
-        return redirect()->route('search-requests.show', $search_request);
+        return redirect()->route('search-requests.show', [
+            'search_request' => $search_request,
+            'tab' => 'offers',
+        ]);
     }
 }
