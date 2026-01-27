@@ -26,6 +26,16 @@ organization_id en user_id komen van de actieve gebruiker (bij web-context). Voo
 
 Use `--dry-run` to print the payload without saving.
 
+## Dev workflow (Vite)
+
+Gebruik **alleen** de Docker‑Vite om cache‑problemen te voorkomen:
+
+```bash
+docker compose exec vite npm run dev
+```
+
+Zie `DEV.md` voor details en troubleshooting.
+
 Web wrapper (uses active user):
 
 ```bash

@@ -335,34 +335,6 @@ onBeforeUnmount(() => {
                                     <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
                                 </span>
                             </Link>
-                            <Link
-                                :href="route('admin.mapping.index')"
-                                class="group relative flex h-14 items-center rounded-lg text-sm font-medium transition"
-                                :class="[
-                                    route().current('admin.mapping.*')
-                                        ? 'bg-blue-50 text-blue-700'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-                                    isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                                ]"
-                                @click="closeSidebar"
-                            >
-                                <svg class="h-[42px] w-[42px] text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <path stroke="currentColor" stroke-linecap="round" stroke-width="1" d="M4 5h7m-7 4h5m-5 4h7m-7 4h5m5-12h6m-6 4h6m-6 4h6m-6 4h6"/>
-                                </svg>
-                                <span
-                                    class="transition-all duration-200"
-                                    :class="sidebarLabelClass"
-                                >
-                                    Mapping
-                                </span>
-                                <span
-                                    v-if="isSidebarCollapsed"
-                                    class="pointer-events-none absolute left-full top-1/2 ml-4 -translate-y-1/2 whitespace-nowrap rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white opacity-0 shadow-xl transition-opacity duration-200 group-hover:opacity-100"
-                                >
-                                    Mapping
-                                    <span class="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-8 border-transparent border-r-gray-900"></span>
-                                </span>
-                            </Link>
                         </template>
                         <div
                             v-if="!isSidebarCollapsed"

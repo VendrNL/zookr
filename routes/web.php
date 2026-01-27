@@ -8,7 +8,6 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\Admin\OrganizationController as AdminOrganizationController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
-use App\Http\Controllers\Admin\MappingController as AdminMappingController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -265,12 +264,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('admin.users.specialism.update')
         ->middleware('can:manageUsers,user');
 
-    Route::get('/admin/mapping', [AdminMappingController::class, 'index'])
-        ->name('admin.mapping.index')
-        ->middleware('can:manageUsers,App\Models\User');
-    Route::patch('/admin/mapping', [AdminMappingController::class, 'update'])
-        ->name('admin.mapping.update')
-        ->middleware('can:manageUsers,App\Models\User');
 });
 
 // Auth routes (login, register, email verification, etc.)
