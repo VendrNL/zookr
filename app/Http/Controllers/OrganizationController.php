@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use App\Notifications\AccountCreatedNotification;
 
 class OrganizationController extends Controller
 {
@@ -144,7 +145,7 @@ class OrganizationController extends Controller
             $avatarPath = $request->file('avatar')->store('avatars', 'public');
         }
 
-        User::create([
+        $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make(Str::random(32)),
@@ -157,7 +158,8 @@ class OrganizationController extends Controller
         ]);
 
         if (! empty($data['invite'])) {
-            Password::sendResetLink(['email' => $data['email']]);
+            $token = Password::broker()->createToken($user);
+            $user->notify(new AccountCreatedNotification($token, $organization->name));
         }
 
         return Redirect::route('makelaardij.edit')->with('status', 'user-created');

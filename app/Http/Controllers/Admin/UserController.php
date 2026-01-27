@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use App\Notifications\AccountCreatedNotification;
 
 class UserController extends Controller
 {
@@ -125,7 +126,7 @@ class UserController extends Controller
         $types = $data['types'] ?? self::SPECIALISM_TYPES;
         $provinces = $data['provinces'] ?? self::SPECIALISM_PROVINCES;
 
-        User::create([
+        $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make(Str::random(32)),
@@ -140,7 +141,8 @@ class UserController extends Controller
         ]);
 
         if (! empty($data['invite'])) {
-            Password::sendResetLink(['email' => $data['email']]);
+            $token = Password::broker()->createToken($user);
+            $user->notify(new AccountCreatedNotification($token, $organization->name));
         }
 
         return Redirect::route('admin.users.index')

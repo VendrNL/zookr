@@ -19,6 +19,9 @@ const submit = () => {
 const verificationLinkSent = computed(
     () => props.status === 'verification-link-sent',
 );
+const verificationLinkExpired = computed(
+    () => props.status === 'verification-link-expired',
+);
 </script>
 
 <template>
@@ -39,6 +42,13 @@ const verificationLinkSent = computed(
             Er is een nieuwe verificatielink gestuurd naar het e-mailadres dat
             je tijdens de registratie hebt opgegeven.
         </div>
+        <div
+            class="mb-4 text-sm font-medium text-amber-600"
+            v-if="verificationLinkExpired"
+        >
+            Deze verificatielink was verlopen. We hebben je een nieuwe e-mail
+            gestuurd om je account te activeren.
+        </div>
 
         <form @submit.prevent="submit">
             <div class="mt-4 flex items-center justify-between">
@@ -46,7 +56,11 @@ const verificationLinkSent = computed(
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
-                    Verificatie-e-mail opnieuw versturen
+                    {{
+                        verificationLinkExpired
+                            ? 'Stuur nieuwe verificatie e-mail'
+                            : 'Verificatie-e-mail opnieuw versturen'
+                    }}
                 </PrimaryButton>
 
                 <Link
