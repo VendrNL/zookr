@@ -200,7 +200,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         [PropertyController::class, 'edit']
     )
         ->name('search-requests.properties.edit')
-        ->middleware('can:update,property');
+        ->middleware('can:view,property');
+
+    Route::get(
+        'search-requests/{search_request}/properties/{property}',
+        [PropertyController::class, 'view']
+    )
+        ->name('search-requests.properties.view')
+        ->middleware('can:view,property');
 
     Route::patch(
         'search-requests/{search_request}/properties/{property}',
@@ -208,6 +215,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     )
         ->name('search-requests.properties.update')
         ->middleware('can:update,property');
+
+    Route::patch(
+        'search-requests/{search_request}/properties/{property}/status',
+        [PropertyController::class, 'setStatus']
+    )
+        ->name('search-requests.properties.status')
+        ->middleware('can:setStatus,property');
 
     Route::redirect('/admin/organizations', '/admin/makelaars')
         ->middleware('can:manageOrganizations,App\Models\User');

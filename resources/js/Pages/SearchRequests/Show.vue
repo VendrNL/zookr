@@ -15,6 +15,8 @@ import TableCard from "@/Components/TableCard.vue";
 import TableCell from "@/Components/TableCell.vue";
 import TableEmptyState from "@/Components/TableEmptyState.vue";
 import TableHeaderCell from "@/Components/TableHeaderCell.vue";
+import Dropdown from "@/Components/Dropdown.vue";
+import DropdownLink from "@/Components/DropdownLink.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/vue3";
 import { computed, onMounted, ref, watch } from "vue";
@@ -41,6 +43,147 @@ const props = defineProps({
 });
 
 const canViewAllOffers = computed(() => props.can?.viewAllOffers || props.viewAllOffers);
+const offeredProperties = computed(() => props.offeredProperties ?? []);
+const statusFilter = ref("all");
+const sortKey = ref("created_at");
+const sortDirection = ref("desc");
+
+const setActiveTab = (tab) => {
+    activeTab.value = tab;
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (tab === "offers") {
+        url.searchParams.set("tab", "offers");
+    } else {
+        url.searchParams.delete("tab");
+    }
+    window.history.replaceState({}, "", url.toString());
+};
+
+const ensureOffersTab = () => {
+    setActiveTab("offers");
+};
+
+const statusFilterLabel = computed(() => {
+    if (statusFilter.value === "geschikt") return "Geschikt";
+    if (statusFilter.value === "ongeschikt") return "Ongeschikt";
+    if (statusFilter.value === "niet_beoordeeld") return "Niet beoordeeld";
+    return "Status";
+});
+
+const setStatusFilter = (value) => {
+    statusFilter.value = value;
+    ensureOffersTab();
+};
+
+const normalizeOfferStatus = (status) => {
+    const normalized = typeof status === "string" ? status.trim().toLowerCase() : "";
+    if (normalized === "geschikt") return "geschikt";
+    if (normalized === "ongeschikt") return "ongeschikt";
+    return "niet_beoordeeld";
+};
+
+const isNotReviewed = (status) => {
+    return status === null || status === undefined || status === "";
+};
+
+const filteredOfferedProperties = computed(() => {
+    if (statusFilter.value === "all") {
+        return offeredProperties.value;
+    }
+    if (statusFilter.value === "niet_beoordeeld") {
+        return offeredProperties.value.filter(
+            (property) => isNotReviewed(property.status)
+        );
+    }
+    return offeredProperties.value.filter(
+        (property) => normalizeOfferStatus(property.status) === statusFilter.value
+    );
+});
+
+const offerStatusLabel = (status) => {
+    switch (normalizeOfferStatus(status)) {
+        case "geschikt":
+            return "Geschikt";
+        case "ongeschikt":
+            return "Ongeschikt";
+        default:
+            return "Niet beoordeeld";
+    }
+};
+
+const offerStatusClass = (status) => {
+    switch (normalizeOfferStatus(status)) {
+        case "geschikt":
+            return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+        case "ongeschikt":
+            return "bg-rose-50 text-rose-700 ring-rose-200";
+        default:
+            return "bg-gray-50 text-gray-700 ring-gray-200";
+    }
+};
+
+const getOfferContactName = (property) =>
+    property?.contact_user?.name || property?.user?.name || "";
+
+const getOfferOrganizationName = (property) =>
+    property?.organization?.name || "";
+
+const setSort = (key) => {
+    if (sortKey.value === key) {
+        sortDirection.value = sortDirection.value === "asc" ? "desc" : "asc";
+        ensureOffersTab();
+        return;
+    }
+    sortKey.value = key;
+    sortDirection.value = "asc";
+    ensureOffersTab();
+};
+
+const sortIndicator = (key) => {
+    if (sortKey.value !== key) return "";
+    return sortDirection.value === "asc" ? "▲" : "▼";
+};
+
+const sortedOfferedProperties = computed(() => {
+    const items = [ ...filteredOfferedProperties.value ];
+    const factor = sortDirection.value === "asc" ? 1 : -1;
+    return items.sort((a, b) => {
+        let left = "";
+        let right = "";
+        if (sortKey.value === "contact") {
+            left = getOfferContactName(a);
+            right = getOfferContactName(b);
+        } else if (sortKey.value === "organization") {
+            left = getOfferOrganizationName(a);
+            right = getOfferOrganizationName(b);
+        } else {
+            left = a?.created_at ?? "";
+            right = b?.created_at ?? "";
+        }
+        return String(left).localeCompare(String(right), "nl", { sensitivity: "base" }) * factor;
+    });
+});
+const avatarErrors = ref({});
+
+const userInitials = (name = "") => {
+    const parts = String(name).trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "";
+    const first = parts[0]?.[0] ?? "";
+    const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+    return `${first}${last}`.toUpperCase();
+};
+
+const getAvatarUrl = (user) => {
+    if (!user) return null;
+    if (user.avatar_url) return user.avatar_url;
+    if (user.avatar_path) return `/storage/${user.avatar_path}`;
+    return null;
+};
+
+const handleAvatarError = (key) => {
+    avatarErrors.value = { ...avatarErrors.value, [key]: true };
+};
 
 const placeholderUsers = [
     { id: 1, name: "Demo admin" },
@@ -169,8 +312,15 @@ function formatCurrency(value) {
 }
 
 function goToProperty(propertyId) {
+    const property = offeredProperties.value.find((item) => item.id === propertyId);
+    if (property && property.can_update) {
+        router.visit(
+            route("search-requests.properties.edit", [props.item.id, propertyId])
+        );
+        return;
+    }
     router.visit(
-        route("search-requests.properties.edit", [props.item.id, propertyId])
+        route("search-requests.properties.view", [props.item.id, propertyId])
     );
 }
 
@@ -235,7 +385,7 @@ watch(
                                 :class="activeTab === 'search-request'
                                     ? 'text-blue-600 border-blue-600'
                                     : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
-                                @click="activeTab = 'search-request'"
+                                @click="setActiveTab('search-request')"
                             >
                                 Zoekvraag
                             </button>
@@ -247,7 +397,7 @@ watch(
                                 :class="activeTab === 'offers'
                                     ? 'text-blue-600 border-blue-600'
                                     : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
-                                @click="activeTab = 'offers'"
+                                @click="setActiveTab('offers')"
                             >
                                 Aangeboden panden
                             </button>
@@ -502,28 +652,127 @@ watch(
                                 <TableHeaderCell :class="canViewAllOffers ? 'w-[45%] min-w-[260px]' : 'w-[60%] min-w-[260px]'">
                                     Pand
                                 </TableHeaderCell>
-                                <TableHeaderCell :class="canViewAllOffers ? 'w-[30%]' : 'w-[40%]'">
-                                    Aangeboden door
-                                </TableHeaderCell>
-                                <TableHeaderCell v-if="canViewAllOffers" class="w-[25%]">
-                                    Makelaarskantoor
-                                </TableHeaderCell>
+                                  <TableHeaderCell :class="canViewAllOffers ? 'w-[26%]' : 'w-[34%]'">
+                                      <button
+                                          type="button"
+                                          class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                          @click="setSort('contact')"
+                                      >
+                                          Aangeboden door
+                                          <svg
+                                              v-if="sortKey === 'contact'"
+                                              class="h-3.5 w-3.5 text-gray-400"
+                                              viewBox="0 0 20 20"
+                                              fill="currentColor"
+                                              aria-hidden="true"
+                                          >
+                                              <path
+                                                  v-if="sortDirection === 'asc'"
+                                                  fill-rule="evenodd"
+                                                  d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L10 5.414 5.707 9.707A1 1 0 014.293 8.293l5-5A1 1 0 0110 3z"
+                                                  clip-rule="evenodd"
+                                              />
+                                              <path
+                                                  v-else
+                                                  fill-rule="evenodd"
+                                                  d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L10 14.586l4.293-4.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z"
+                                                  clip-rule="evenodd"
+                                              />
+                                          </svg>
+                                      </button>
+                                  </TableHeaderCell>
+                                  <TableHeaderCell v-if="canViewAllOffers" class="w-[25%]">
+                                      <button
+                                          type="button"
+                                          class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                          @click="setSort('organization')"
+                                      >
+                                          Makelaarskantoor
+                                          <svg
+                                              v-if="sortKey === 'organization'"
+                                              class="h-3.5 w-3.5 text-gray-400"
+                                              viewBox="0 0 20 20"
+                                              fill="currentColor"
+                                              aria-hidden="true"
+                                          >
+                                              <path
+                                                  v-if="sortDirection === 'asc'"
+                                                  fill-rule="evenodd"
+                                                  d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L10 5.414 5.707 9.707A1 1 0 014.293 8.293l5-5A1 1 0 0110 3z"
+                                                  clip-rule="evenodd"
+                                              />
+                                              <path
+                                                  v-else
+                                                  fill-rule="evenodd"
+                                                  d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L10 14.586l4.293-4.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z"
+                                                  clip-rule="evenodd"
+                                              />
+                                          </svg>
+                                      </button>
+                                  </TableHeaderCell>
+                                  <TableHeaderCell align="left" class="w-[22%]">
+                                      <Dropdown align="right" width="48">
+                                          <template #trigger>
+                                              <button
+                                                  type="button"
+                                                  class="inline-flex w-full items-center gap-2 text-gray-600 uppercase"
+                                                  aria-label="Filter status"
+                                              >
+                                                  {{ statusFilterLabel }}
+                                                  <svg
+                                                      v-if="statusFilter !== 'all'"
+                                                      class="h-4 w-4 text-gray-500"
+                                                      viewBox="0 0 20 20"
+                                                      fill="currentColor"
+                                                      aria-hidden="true"
+                                                  >
+                                                      <path
+                                                          fill-rule="evenodd"
+                                                          d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L10 5.414 5.707 9.707A1 1 0 014.293 8.293l5-5A1 1 0 0110 3z"
+                                                          clip-rule="evenodd"
+                                                      />
+                                                      <path
+                                                          fill-rule="evenodd"
+                                                          d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L10 14.586l4.293-4.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z"
+                                                          clip-rule="evenodd"
+                                                      />
+                                                  </svg>
+                                              </button>
+                                          </template>
+                                          <template #content>
+                                              <div>
+                                                  <DropdownLink href="#" class="normal-case font-normal" @click.prevent="setStatusFilter('all')">
+                                                      Alle statussen
+                                                  </DropdownLink>
+                                                  <DropdownLink href="#" class="normal-case font-normal" @click.prevent="setStatusFilter('niet_beoordeeld')">
+                                                      Niet beoordeeld
+                                                  </DropdownLink>
+                                                  <DropdownLink href="#" class="normal-case font-normal" @click.prevent="setStatusFilter('geschikt')">
+                                                      Geschikt
+                                                  </DropdownLink>
+                                                  <DropdownLink href="#" class="normal-case font-normal" @click.prevent="setStatusFilter('ongeschikt')">
+                                                      Ongeschikt
+                                                  </DropdownLink>
+                                              </div>
+                                          </template>
+                                      </Dropdown>
+                                  </TableHeaderCell>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
-                            <TableEmptyState
-                                v-if="offeredProperties.length === 0"
-                                :colspan="canViewAllOffers ? 3 : 2"
-                                :message="canViewAllOffers
-                                    ? 'Er zijn nog geen panden aangeboden.'
-                                    : 'Er zijn nog geen panden aangeboden door jouw kantoor.'"
-                            />
-                            <tr
-                                v-for="property in offeredProperties"
-                                :key="property.id"
-                                class="cursor-pointer hover:bg-gray-50 focus-within:bg-gray-50"
-                                role="link"
-                                tabindex="0"
+                              <TableEmptyState
+                                  v-if="filteredOfferedProperties.length === 0"
+                                  :colspan="canViewAllOffers ? 4 : 3"
+                                  :message="canViewAllOffers
+                                      ? 'Er zijn nog geen panden aangeboden.'
+                                      : 'Er zijn nog geen panden aangeboden door jouw kantoor.'"
+                              />
+                              <tr
+                                  v-for="property in sortedOfferedProperties"
+                                  :key="property.id"
+                                  class="cursor-pointer hover:bg-gray-50 focus-within:bg-gray-50"
+                                  role="link"
+                                  tabindex="0"
                                 @click="goToProperty(property.id)"
                                 @keydown.enter.prevent="goToProperty(property.id)"
                                 @keydown.space.prevent="goToProperty(property.id)"
@@ -536,26 +785,41 @@ watch(
                                         {{ property.address }} {{ property.city ? `- ${property.city}` : "" }}
                                     </div>
                                 </TableCell>
-                                <TableCell>
-                                    <div class="flex items-center gap-3">
-                                        <div class="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
-                                            <img
-                                                v-if="property.contact_user?.avatar_url || property.user?.avatar_url"
-                                                :src="property.contact_user?.avatar_url || property.user?.avatar_url"
-                                                alt=""
-                                                class="h-full w-full object-cover"
-                                            />
-                                        </div>
-                                        <div class="text-sm font-medium text-gray-900">
-                                            {{ property.contact_user?.name || property.user?.name || "-" }}
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell v-if="canViewAllOffers">
-                                    <div class="text-sm font-medium text-gray-900">
-                                        {{ property.organization?.name || "-" }}
-                                    </div>
-                                </TableCell>
+                                  <TableCell>
+                                      <div class="flex items-center gap-3">
+                                          <div class="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
+                                              <img
+                                                  v-if="getAvatarUrl(property.contact_user || property.user) && !avatarErrors[property.contact_user?.id || property.user?.id || property.id]"
+                                                  :src="getAvatarUrl(property.contact_user || property.user)"
+                                                  alt=""
+                                                  class="h-full w-full object-cover"
+                                                  @error="handleAvatarError(property.contact_user?.id || property.user?.id || property.id)"
+                                              />
+                                              <div
+                                                  v-else
+                                                  class="flex h-full w-full items-center justify-center bg-gray-200 text-[11px] font-semibold text-gray-700"
+                                              >
+                                                  {{ userInitials(property.contact_user?.name || property.user?.name) }}
+                                              </div>
+                                          </div>
+                                          <div class="text-sm font-medium text-gray-900">
+                                              {{ property.contact_user?.name || property.user?.name || "-" }}
+                                          </div>
+                                      </div>
+                                  </TableCell>
+                                  <TableCell v-if="canViewAllOffers">
+                                      <div class="text-sm font-medium text-gray-900">
+                                          {{ property.organization?.name || "-" }}
+                                      </div>
+                                  </TableCell>
+                                    <TableCell>
+                                        <span
+                                            class="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset"
+                                            :class="offerStatusClass(property.status)"
+                                        >
+                                            {{ offerStatusLabel(property.status) }}
+                                        </span>
+                                    </TableCell>
                             </tr>
                         </tbody>
                     </TableCard>

@@ -26,6 +26,7 @@ class Property extends Model
         'rent_price_per_m2',
         'rent_price_parking',
         'asking_price',
+        'status',
         'images',
         'brochure_path',
         'drawings',

@@ -219,8 +219,13 @@ class SearchRequestController extends Controller
                     'acquisition',
                     'rent_price_per_m2',
                     'rent_price_parking',
+                    'status',
                     'created_at',
-                ]);
+                ])
+                ->map(function (Property $property) use ($request) {
+                    $property->can_update = $request->user()->can('update', $property);
+                    return $property;
+                });
         }
 
         return Inertia::render('SearchRequests/Show', [

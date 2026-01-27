@@ -230,7 +230,7 @@ class PropertyController extends Controller
 
     public function edit(Request $request, SearchRequest $search_request, Property $property)
     {
-        $this->authorize('update', $property);
+        $this->authorize('view', $property);
 
         if ($property->search_request_id !== $search_request->id) {
             abort(404);
@@ -412,6 +412,86 @@ class PropertyController extends Controller
             'search_request' => $search_request,
             'tab' => 'offers',
         ]);
+    }
+
+    public function view(Request $request, SearchRequest $search_request, Property $property)
+    {
+        $this->authorize('view', $property);
+
+        if ($property->search_request_id !== $search_request->id) {
+            abort(404);
+        }
+
+        $property->load([
+            'organization:id,name,phone',
+            'contactUser:id,name,email,phone,avatar_path',
+            'user:id,name,email,phone,avatar_path',
+        ]);
+
+        $contactUser = $property->contactUser ?: $property->user;
+
+        return Inertia::render('SearchRequests/ViewProperty', [
+            'item' => $search_request->only(['id', 'title', 'organization_id']),
+            'property' => $property->only([
+                'id',
+                'name',
+                'address',
+                'city',
+                'surface_area',
+                'parking_spots',
+                'availability',
+                'acquisition',
+                'rent_price_per_m2',
+                'rent_price_parking',
+                'notes',
+                'url',
+                'status',
+            ]),
+            'media' => [
+                'images' => collect($property->images ?? [])
+                    ->map(fn ($path) => Storage::disk('public')->url($path))
+                    ->values(),
+                'brochure' => $property->brochure_path
+                    ? Storage::disk('public')->url($property->brochure_path)
+                    : null,
+                'drawings' => collect($property->drawings ?? [])
+                    ->map(fn ($path) => Storage::disk('public')->url($path))
+                    ->values(),
+            ],
+            'contact' => [
+                'name' => $contactUser?->name,
+                'email' => $contactUser?->email,
+                'phone' => $contactUser?->phone,
+                'avatar_url' => $contactUser?->avatar_url,
+                'organization' => [
+                    'name' => $property->organization?->name,
+                    'phone' => $property->organization?->phone,
+                ],
+            ],
+            'can' => [
+                'update' => $request->user()->can('update', $property),
+                'setStatus' => $request->user()->can('setStatus', $property),
+            ],
+        ]);
+    }
+
+    public function setStatus(Request $request, SearchRequest $search_request, Property $property)
+    {
+        $this->authorize('setStatus', $property);
+
+        if ($property->search_request_id !== $search_request->id) {
+            abort(404);
+        }
+
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['geschikt', 'ongeschikt'])],
+        ]);
+
+        $property->update([
+            'status' => $data['status'],
+        ]);
+
+        return redirect()->back();
     }
 
     private function downloadRemoteImage(string $url): ?string
