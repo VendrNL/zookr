@@ -182,15 +182,28 @@ class SearchRequestController extends Controller
         ]);
 
         $organizationId = $request->user()->organization_id;
+        $canViewAllOffers = $request->user()->is_admin
+            || ($organizationId && (int) $organizationId === (int) $search_request->organization_id);
         $offeredProperties = collect();
         if ($organizationId) {
-            $offeredProperties = Property::query()
-                ->where('search_request_id', $search_request->id)
-                ->where('organization_id', $organizationId)
-                ->with([
-                    'user:id,name,avatar_path',
-                    'contactUser:id,name,avatar_path',
-                ])
+            $query = Property::query()
+                ->where('search_request_id', $search_request->id);
+
+            if (! $canViewAllOffers) {
+                $query->where('organization_id', $organizationId);
+            }
+
+            $relations = [
+                'user:id,name,avatar_path',
+                'contactUser:id,name,avatar_path',
+            ];
+
+            if ($canViewAllOffers) {
+                $relations[] = 'organization:id,name';
+            }
+
+            $offeredProperties = $query
+                ->with($relations)
                 ->latest()
                 ->get([
                     'id',
@@ -214,11 +227,13 @@ class SearchRequestController extends Controller
             'item' => $search_request,
             'offeredProperties' => $offeredProperties,
             'tab' => $request->string('tab')->toString(),
+            'viewAllOffers' => $canViewAllOffers,
             'can' => [
                 'update' => $request->user()->can('update', $search_request),
                 'assign' => $request->user()->can('assign', $search_request),
                 'delete' => $request->user()->can('delete', $search_request),
                 'offer' => $request->user()->can('offer', $search_request),
+                'viewAllOffers' => $canViewAllOffers,
             ],
         ]);
     }

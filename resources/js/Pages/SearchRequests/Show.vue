@@ -25,6 +25,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    viewAllOffers: {
+        type: Boolean,
+        default: false,
+    },
     can: {
         type: Object,
         default: () => ({
@@ -35,6 +39,8 @@ const props = defineProps({
         }),
     },
 });
+
+const canViewAllOffers = computed(() => props.can?.viewAllOffers || props.viewAllOffers);
 
 const placeholderUsers = [
     { id: 1, name: "Demo admin" },
@@ -493,19 +499,24 @@ watch(
                     <TableCard>
                         <thead class="bg-gray-50">
                             <tr>
-                                <TableHeaderCell class="w-[60%] min-w-[260px]">
+                                <TableHeaderCell :class="canViewAllOffers ? 'w-[45%] min-w-[260px]' : 'w-[60%] min-w-[260px]'">
                                     Pand
                                 </TableHeaderCell>
-                                <TableHeaderCell class="w-[40%]">
+                                <TableHeaderCell :class="canViewAllOffers ? 'w-[30%]' : 'w-[40%]'">
                                     Aangeboden door
+                                </TableHeaderCell>
+                                <TableHeaderCell v-if="canViewAllOffers" class="w-[25%]">
+                                    Makelaarskantoor
                                 </TableHeaderCell>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             <TableEmptyState
                                 v-if="offeredProperties.length === 0"
-                                :colspan="2"
-                                message="Er zijn nog geen panden aangeboden door jouw kantoor."
+                                :colspan="canViewAllOffers ? 3 : 2"
+                                :message="canViewAllOffers
+                                    ? 'Er zijn nog geen panden aangeboden.'
+                                    : 'Er zijn nog geen panden aangeboden door jouw kantoor.'"
                             />
                             <tr
                                 v-for="property in offeredProperties"
@@ -538,6 +549,11 @@ watch(
                                         <div class="text-sm font-medium text-gray-900">
                                             {{ property.contact_user?.name || property.user?.name || "-" }}
                                         </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell v-if="canViewAllOffers">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ property.organization?.name || "-" }}
                                     </div>
                                 </TableCell>
                             </tr>
