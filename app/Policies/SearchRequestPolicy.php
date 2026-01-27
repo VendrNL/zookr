@@ -44,6 +44,10 @@ class SearchRequestPolicy
 
     public function offer(User $user, SearchRequest $searchRequest): bool
     {
+        if ($user->is_admin) {
+            return false;
+        }
+
         return $this->differentOrganization($user, $searchRequest);
     }
 
