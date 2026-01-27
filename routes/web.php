@@ -243,6 +243,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/admin/users', [AdminUserController::class, 'index'])
         ->name('admin.users.index')
         ->middleware('can:manageUsers,App\Models\User');
+    Route::get('/admin/users/create', [AdminUserController::class, 'create'])
+        ->name('admin.users.create')
+        ->middleware('can:manageUsers,App\Models\User');
     Route::get('/admin/makelaars/{organization}/users/create', [AdminUserController::class, 'create'])
         ->name('admin.organizations.users.create')
         ->middleware('can:manageUsers,App\Models\User');

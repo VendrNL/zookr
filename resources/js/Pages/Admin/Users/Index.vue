@@ -165,7 +165,7 @@ function handleAvatarError(userId) {
                                 class="flex w-full flex-col items-stretch justify-end space-y-2 md:w-auto md:flex-row md:items-center md:space-x-3 md:space-y-0"
                             >
                                 <Link
-                                    :href="route('admin.organizations.index')"
+                                    href="/admin/users/create"
                                     class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                 >
                                     <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class UserController extends Controller
@@ -73,12 +74,24 @@ class UserController extends Controller
         ]);
     }
 
-    public function create(Organization $organization)
+    public function create(?Organization $organization = null)
     {
         return Inertia::render('Admin/Users/Create', [
-            'organization' => [
-                'id' => $organization->id,
-                'name' => $organization->name,
+            'organization' => $organization
+                ? [
+                    'id' => $organization->id,
+                    'name' => $organization->name,
+                ]
+                : null,
+            'specialism' => [
+                'selection' => [
+                    'types' => self::SPECIALISM_TYPES,
+                    'provinces' => self::SPECIALISM_PROVINCES,
+                ],
+                'options' => [
+                    'types' => self::SPECIALISM_TYPES,
+                    'provinces' => self::SPECIALISM_PROVINCES,
+                ],
             ],
             'organizations' => Organization::query()
                 ->orderBy('name')
@@ -97,12 +110,19 @@ class UserController extends Controller
             'is_active' => ['required', 'boolean'],
             'is_admin' => ['required', 'boolean'],
             'invite' => ['nullable', 'boolean'],
+            'types' => ['nullable', 'array'],
+            'types.*' => ['string', Rule::in(self::SPECIALISM_TYPES)],
+            'provinces' => ['nullable', 'array'],
+            'provinces.*' => ['string', Rule::in(self::SPECIALISM_PROVINCES)],
         ]);
 
         $avatarPath = null;
         if ($request->hasFile('avatar')) {
             $avatarPath = $request->file('avatar')->store('avatars', 'public');
         }
+
+        $types = $data['types'] ?? self::SPECIALISM_TYPES;
+        $provinces = $data['provinces'] ?? self::SPECIALISM_PROVINCES;
 
         User::create([
             'name' => $data['name'],
@@ -113,6 +133,8 @@ class UserController extends Controller
             'is_active' => (bool) $data['is_active'],
             'is_admin' => (bool) $data['is_admin'],
             'organization_id' => $organization->id,
+            'specialism_types' => $types,
+            'specialism_provinces' => $provinces,
             'avatar_path' => $avatarPath,
         ]);
 
@@ -120,7 +142,7 @@ class UserController extends Controller
             Password::sendResetLink(['email' => $data['email']]);
         }
 
-        return Redirect::route('admin.organizations.edit', $organization)
+        return Redirect::route('admin.users.index')
             ->with('status', 'user-created');
     }
 
