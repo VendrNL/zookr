@@ -11,8 +11,9 @@ import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
+import useImageDrop from "@/Composables/useImageDrop";
 
 const props = defineProps({
     item: Object,
@@ -47,6 +48,7 @@ const form = useForm({
     rent_price_parking: props.property.rent_price_parking ?? "",
     notes: props.property.notes ?? "",
     images: [],
+    cached_images: [],
     url: props.property.url ?? "",
     brochure: null,
     drawings: null,
@@ -66,11 +68,12 @@ const MAX_TOTAL_SIZE_BYTES = 100 * 1024 * 1024;
 const imagesInput = ref(null);
 const brochureInput = ref(null);
 const drawingsInput = ref(null);
-const isDraggingImages = ref(false);
 const isDraggingBrochure = ref(false);
 const isDraggingDrawings = ref(false);
 const showUploadLimitModal = ref(false);
 const notesInput = ref(null);
+const remoteImageInput = ref("");
+const submitError = ref("");
 
 const safeCreateObjectUrl = (file) => {
     if (!file) return "";
@@ -138,9 +141,25 @@ const selectedFiles = (overrides = {}) => {
     return [ ...(images ?? []), brochure, drawings ].filter(Boolean);
 };
 
+const isImageFile = (file) => {
+    if (!file || typeof file !== "object") return false;
+    if (typeof file.type === "string") {
+        return [
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/svg+xml",
+        ].includes(file.type);
+    }
+    if (typeof file.name !== "string") return false;
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name);
+};
+
 const setImages = (files) => {
     const nextImages = files ? Array.from(files).filter(Boolean) : [];
-    const mergedImages = [ ...safeImages.value, ...nextImages ];
+    const mergedImages = [ ...safeImages.value, ...nextImages ].filter(isImageFile);
 
     if (exceedsUploadLimits(selectedFiles({ images: mergedImages }))) {
         openUploadLimitModal();
@@ -150,23 +169,42 @@ const setImages = (files) => {
     form.images = mergedImages;
 };
 
-const handleImagesChange = (event) => {
-    setImages(event.target.files);
+const sanitizeImages = () => {
+    const filtered = safeImages.value.filter(isImageFile);
+    if (filtered.length !== safeImages.value.length) {
+        form.images = filtered;
+    }
 };
 
-const handleImagesDrop = (event) => {
-    event.preventDefault();
-    isDraggingImages.value = false;
-    setImages(event.dataTransfer?.files);
+const debugImages = () => {
+    if (!new URLSearchParams(window.location.search).has("debug-images")) {
+        return;
+    }
+    const summary = safeImages.value.map((file) => ({
+        name: file?.name,
+        type: file?.type,
+        size: file?.size,
+        isImage: isImageFile(file),
+    }));
+    console.log("[images-debug]", summary);
 };
 
-const handleDragOverImages = (event) => {
-    event.preventDefault();
-    isDraggingImages.value = true;
-};
+const debugImagesEnabled = computed(() =>
+    new URLSearchParams(window.location.search).has("debug-images")
+);
 
-const handleDragLeaveImages = () => {
-    isDraggingImages.value = false;
+const debugImagesSummary = computed(() =>
+    safeImages.value.map((file) => ({
+        name: file?.name,
+        type: file?.type,
+        size: file?.size,
+        isImage: isImageFile(file),
+    }))
+);
+
+const handleImagesChange = async (event) => {
+    const prepared = await prepareImageFiles(event.target.files);
+    setImages(prepared);
 };
 
 const openImagesPicker = () => {
@@ -176,6 +214,71 @@ const openImagesPicker = () => {
 const removeUploadedImage = (index) => {
     const nextImages = safeImages.value.filter((_, idx) => idx !== index);
     form.images = nextImages;
+};
+
+const removeCachedImage = (path) => {
+    cachedImages.value = cachedImages.value.filter((item) => item.path !== path);
+    form.cached_images = cachedImages.value.map((image) => image.path);
+};
+
+const addRemoteImageFromInput = () => {
+    const value = remoteImageInput.value.trim();
+    if (!value) {
+        cacheError.value = "Plak een afbeelding-URL.";
+        return;
+    }
+    const urls = value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+    remoteImageInput.value = "";
+    urls.forEach((url) => cacheRemoteImage(url));
+};
+
+const handleRemoteImagePaste = (event) => {
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (!text) {
+        return;
+    }
+
+    const urls = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+
+    if (!urls.length) {
+        return;
+    }
+
+    event.preventDefault();
+    urls.forEach((url) => cacheRemoteImage(url));
+};
+
+const handleGlobalPaste = (event) => {
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (!text) {
+        return;
+    }
+
+    const urls = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+
+    if (!urls.length) {
+        return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA")) {
+        if (activeElement.id === "remote_image_url") {
+            event.preventDefault();
+        }
+    } else {
+        event.preventDefault();
+    }
+
+    urls.forEach((url) => cacheRemoteImage(url));
 };
 
 const setBrochure = (file) => {
@@ -262,6 +365,9 @@ const submit = (onSuccess) => {
         return;
     }
 
+    sanitizeImages();
+    debugImages();
+    submitError.value = "";
     form.url = normalizeUrl(urlInput.value);
 
     syncNumberField(surfaceAreaInput, "surface_area", formatNumberValue);
@@ -269,6 +375,22 @@ const submit = (onSuccess) => {
     syncNumberField(rentPerM2Input, "rent_price_per_m2", formatCurrencyValue);
     syncNumberField(rentParkingInput, "rent_price_parking", formatCurrencyValue);
 
+    const options = {
+        preserveScroll: true,
+        forceFormData: true,
+        onFinish: () => {
+            form.transform((data) => data);
+        },
+        onError: (errors) => {
+            const messages = Object.values(errors ?? {}).flat();
+            submitError.value = messages.length
+                ? `Opslaan mislukt: ${messages.join(" ")}`
+                : "Opslaan mislukt.";
+        },
+    };
+    if (typeof onSuccess === "function") {
+        options.onSuccess = onSuccess;
+    }
     form
         .transform((data) => ({
             ...data,
@@ -276,14 +398,7 @@ const submit = (onSuccess) => {
         }))
         .post(
             route("search-requests.properties.update", [props.item.id, props.property.id]),
-            {
-                preserveScroll: true,
-                forceFormData: true,
-                onSuccess,
-                onFinish: () => {
-                    form.transform((data) => data);
-                },
-            }
+            options
         );
 };
 
@@ -415,6 +530,23 @@ const stripScheme = (value) => {
 };
 
 const urlInput = ref(stripScheme(form.url));
+const {
+    cachedImages,
+    cacheError,
+    isCachingImage,
+    isDraggingImages,
+    cacheRemoteImage,
+    prepareImageFiles,
+    handleImagesDrop,
+    handleDragOverImages,
+    handleDragLeaveImages,
+} = useImageDrop({
+    form,
+    itemId: props.item.id,
+    setImages,
+    normalizeUrl,
+    debugLabel: "edit",
+});
 
 const openUrlInNewTab = () => {
     const normalized = normalizeUrl(urlInput.value || form.url);
@@ -454,6 +586,11 @@ const autoResizeNotes = () => {
 
 onMounted(() => {
     nextTick(autoResizeNotes);
+    document.addEventListener("paste", handleGlobalPaste);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener("paste", handleGlobalPaste);
 });
 </script>
 
@@ -461,6 +598,9 @@ onMounted(() => {
     <Head title="Aangeboden pand aanpassen" />
 
     <AuthenticatedLayout>
+        <div class="bg-amber-50 text-amber-900 px-3 py-2 text-xs border-b border-amber-200">
+            drag-drop build v1
+        </div>
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <div class="flex min-w-0 items-center gap-3">
@@ -492,6 +632,19 @@ onMounted(() => {
             <PageContainer class="max-w-4xl">
                 <FormSection>
                     <form class="space-y-6" @submit.prevent="submit">
+                        <div
+                            v-if="debugImagesEnabled"
+                            class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"
+                        >
+                            <div class="font-semibold">debug-images actief</div>
+                            <pre class="mt-2 whitespace-pre-wrap">{{ debugImagesSummary }}</pre>
+                        </div>
+                        <div
+                            v-if="submitError"
+                            class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                        >
+                            {{ submitError }}
+                        </div>
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
                                 <InputLabel for="address" value="Adres *" />
@@ -709,7 +862,7 @@ onMounted(() => {
 
 
                         <div class="space-y-2">
-                            <InputLabel value="Afbeeldingen" />
+                            <InputLabel for="property_images" value="Afbeeldingen" />
                             <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
                                 <div
                                     v-for="image in existingImages"
@@ -725,6 +878,24 @@ onMounted(() => {
                                         type="button"
                                         class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
                                         @click="removeExistingImage(image)"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div
+                                    v-for="(image, index) in cachedImages"
+                                    :key="`${image.path}-${index}`"
+                                    class="group relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+                                >
+                                    <img
+                                        :src="image.url"
+                                        alt=""
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-sm font-semibold text-gray-700 shadow-md opacity-0 transition group-hover:opacity-100 hover:bg-white"
+                                        @click="removeCachedImage(image.path)"
                                     >
                                         ✕
                                     </button>
@@ -766,6 +937,8 @@ onMounted(() => {
                             </div>
                             <input
                                 ref="imagesInput"
+                                id="property_images"
+                                name="images"
                                 type="file"
                                 multiple
                                 accept="image/*"
@@ -773,11 +946,18 @@ onMounted(() => {
                                 @change="handleImagesChange"
                             />
                             <InputError class="mt-2" :message="form.errors.images || form.errors['images.*']" />
+                            <InputError class="mt-2" :message="form.errors.cached_images || form.errors['cached_images.*']" />
+                            <p v-if="cacheError" class="mt-2 text-sm text-red-600">
+                                {{ cacheError }}
+                            </p>
+                            <p v-else-if="isCachingImage" class="mt-2 text-sm text-gray-500">
+                                Afbeelding wordt opgeslagen...
+                            </p>
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div class="space-y-2">
-                                <InputLabel value="Brochure" />
+                            <InputLabel for="property_brochure" value="Brochure" />
                                 <div
                                     v-if="form.brochure && brochurePreviewUrl"
                                     class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
@@ -870,6 +1050,8 @@ onMounted(() => {
                                 </div>
                                 <input
                                     ref="brochureInput"
+                                    id="property_brochure"
+                                    name="brochure"
                                     type="file"
                                     class="hidden"
                                     @change="handleBrochureChange"
@@ -878,7 +1060,7 @@ onMounted(() => {
                             </div>
 
                             <div class="space-y-2">
-                                <InputLabel value="Tekeningen" />
+                            <InputLabel for="property_drawings" value="Tekeningen" />
                                 <div
                                     v-if="form.drawings && drawingsPreviewUrl"
                                     class="group relative flex aspect-[3/2] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-50 text-sm text-gray-600"
@@ -979,6 +1161,8 @@ onMounted(() => {
                                 </div>
                                 <input
                                     ref="drawingsInput"
+                                    id="property_drawings"
+                                    name="drawings"
                                     type="file"
                                     class="hidden"
                                     @change="handleDrawingsChange"

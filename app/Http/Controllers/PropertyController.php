@@ -7,6 +7,7 @@ use App\Models\SearchRequest;
 use App\Models\User;
 use App\Services\Funda\ScrapeFundaBusinessService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Http;
@@ -66,10 +67,12 @@ class PropertyController extends Controller
             'rent_price_parking' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'url' => ['nullable', 'url', 'max:2048'],
-            'images' => ['required_without:remote_images', 'array', 'min:1'],
+            'images' => ['required_without_all:remote_images,cached_images', 'array', 'min:1'],
             'images.*' => ['file', 'image', 'max:5120'],
             'remote_images' => ['nullable', 'array'],
             'remote_images.*' => ['url', 'max:2048'],
+            'cached_images' => ['nullable', 'array'],
+            'cached_images.*' => ['string'],
             'brochure' => ['nullable', 'file', 'max:10240'],
             'drawings' => ['nullable', 'file', 'max:10240'],
             'contact_user_id' => [
@@ -91,6 +94,14 @@ class PropertyController extends Controller
             $downloadedPath = $this->downloadRemoteImage($remoteUrl);
             if ($downloadedPath) {
                 $images[] = $downloadedPath;
+            }
+        }
+
+        $cachedImages = $data['cached_images'] ?? [];
+        foreach ($cachedImages as $cachedPath) {
+            $movedPath = $this->moveCachedImage($cachedPath);
+            if ($movedPath) {
+                $images[] = $movedPath;
             }
         }
 
@@ -164,6 +175,24 @@ class PropertyController extends Controller
         return response()->json([
             'payload' => $payload,
         ]);
+    }
+
+    public function cacheRemoteImage(Request $request, SearchRequest $search_request)
+    {
+        $this->authorize('offer', $search_request);
+
+        $data = $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+        ]);
+
+        $cached = $this->downloadRemoteImageToCache($data['url']);
+        if (! $cached) {
+            return response()->json([
+                'message' => 'Afbeelding kon niet worden opgeslagen.',
+            ], 422);
+        }
+
+        return response()->json($cached);
     }
 
     public function importFundaBusinessHtml(Request $request, SearchRequest $search_request, ScrapeFundaBusinessService $service)
@@ -291,6 +320,8 @@ class PropertyController extends Controller
             'url' => ['nullable', 'url', 'max:2048'],
             'images' => ['nullable', 'array'],
             'images.*' => ['file', 'image', 'max:5120'],
+            'cached_images' => ['nullable', 'array'],
+            'cached_images.*' => ['string'],
             'brochure' => ['nullable', 'file', 'max:10240'],
             'drawings' => ['nullable', 'file', 'max:10240'],
             'remove_images' => ['nullable', 'array'],
@@ -317,6 +348,14 @@ class PropertyController extends Controller
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 $images[] = $image->store('properties/images', 'public');
+            }
+        }
+
+        $cachedImages = $data['cached_images'] ?? [];
+        foreach ($cachedImages as $cachedPath) {
+            $movedPath = $this->moveCachedImage($cachedPath);
+            if ($movedPath) {
+                $images[] = $movedPath;
             }
         }
 
@@ -394,6 +433,51 @@ class PropertyController extends Controller
         Storage::disk('public')->put($path, $response->body());
 
         return $path;
+    }
+
+    private function downloadRemoteImageToCache(string $url): ?array
+    {
+        $response = Http::retry(2, 300)->get($url);
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $contentType = $response->header('Content-Type', '');
+        if (! str_starts_with($contentType, 'image/')) {
+            return null;
+        }
+
+        $extension = $this->guessImageExtension($contentType, $url);
+        $filename = uniqid('cached_', true).'.'.$extension;
+        $path = 'properties/tmp/'.$filename;
+
+        Storage::disk('public')->put($path, $response->body());
+
+        return [
+            'path' => $path,
+            'url' => Storage::disk('public')->url($path),
+        ];
+    }
+
+    private function moveCachedImage(string $path): ?string
+    {
+        if (! Str::startsWith($path, 'properties/tmp/')) {
+            return null;
+        }
+
+        if (! Storage::disk('public')->exists($path)) {
+            return null;
+        }
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $extension = $extension !== '' ? $extension : 'jpg';
+        $newPath = 'properties/images/'.uniqid('cached_', true).'.'.$extension;
+
+        if (Storage::disk('public')->move($path, $newPath)) {
+            return $newPath;
+        }
+
+        return null;
     }
 
     private function guessImageExtension(string $contentType, string $url): string

@@ -188,6 +188,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search-requests.properties.import-funda-business-html')
         ->middleware('can:offer,search_request');
 
+    Route::post(
+        'search-requests/{search_request}/properties/cache-remote-image',
+        [PropertyController::class, 'cacheRemoteImage']
+    )
+        ->name('search-requests.properties.cache-remote-image')
+        ->middleware('can:offer,search_request');
+
     Route::get(
         'search-requests/{search_request}/properties/{property}/edit',
         [PropertyController::class, 'edit']
