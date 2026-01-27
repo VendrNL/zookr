@@ -263,6 +263,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/admin/users/{user}/specialism', [AdminUserController::class, 'updateSpecialism'])
         ->name('admin.users.specialism.update')
         ->middleware('can:manageUsers,user');
+    Route::post('/admin/users/{user}/password-reset', [AdminUserController::class, 'sendPasswordReset'])
+        ->name('admin.users.password-reset')
+        ->middleware('can:manageUsers,user');
+    Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])
+        ->name('admin.users.destroy')
+        ->middleware('can:manageUsers,user');
 
 });
 

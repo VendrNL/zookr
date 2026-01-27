@@ -7,7 +7,10 @@ import InputError from "@/Components/InputError.vue";
 import InputLabel from "@/Components/InputLabel.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
+import DangerButton from "@/Components/DangerButton.vue";
 import TextInput from "@/Components/TextInput.vue";
+import Modal from "@/Components/Modal.vue";
+import ModalCard from "@/Components/ModalCard.vue";
 import { Head, router, useForm, usePage } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
@@ -59,6 +62,8 @@ const linkedinHandle = ref(
         : form.linkedin_url?.replace("linkedin.com/in/", "") || ""
 );
 const avatarInput = ref(null);
+const showDeleteModal = ref(false);
+const isSendingReset = ref(false);
 
 const page = usePage();
 const isSelf = computed(() => page.props.auth?.user?.id === props.user.id);
@@ -152,6 +157,31 @@ const submitSpecialism = (callbacks = {}) => {
         preserveScroll: true,
         onSuccess: callbacks.onSuccess,
         onError: callbacks.onError,
+    });
+};
+
+const sendPasswordReset = () => {
+    router.post(
+        route("admin.users.password-reset", props.user.id),
+        {},
+        {
+            preserveScroll: true,
+            onStart: () => {
+                isSendingReset.value = true;
+            },
+            onFinish: () => {
+                isSendingReset.value = false;
+            },
+        }
+    );
+};
+
+const deleteUser = () => {
+    router.delete(route("admin.users.destroy", props.user.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            showDeleteModal.value = false;
+        },
     });
 };
 
@@ -386,24 +416,42 @@ const provinceFill = (key) =>
                             <InputError class="mt-2" :message="form.errors.linkedin_url" />
                         </div>
 
-                        <FormActions align="left">
-                            <PrimaryButton :disabled="form.processing">
-                                Opslaan
-                            </PrimaryButton>
-                            <SecondaryButton
-                                type="button"
-                                @click="handleCancel"
-                            >
-                                Annuleren
-                            </SecondaryButton>
-
-                            <span
-                                v-if="form.recentlySuccessful"
-                                class="text-sm text-gray-600"
-                            >
-                                Opgeslagen.
-                            </span>
-                        </FormActions>
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <SecondaryButton
+                                    type="button"
+                                    :disabled="isSendingReset"
+                                    @click="sendPasswordReset"
+                                >
+                                    Stuur password reset
+                                </SecondaryButton>
+                                <DangerButton
+                                    v-if="!isSelf"
+                                    type="button"
+                                    @click="showDeleteModal = true"
+                                >
+                                    Verwijder gebruiker
+                                </DangerButton>
+                            </div>
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <SecondaryButton
+                                    type="button"
+                                    :disabled="form.processing"
+                                    @click="handleCancel"
+                                >
+                                    Annuleren
+                                </SecondaryButton>
+                                <PrimaryButton :disabled="form.processing">
+                                    Opslaan
+                                </PrimaryButton>
+                            </div>
+                        </div>
+                        <span
+                            v-if="form.recentlySuccessful"
+                            class="text-sm text-gray-600"
+                        >
+                            Opgeslagen.
+                        </span>
                     </form>
                 </FormSection>
                 
@@ -648,6 +696,36 @@ const provinceFill = (key) =>
             </PageContainer>
         </div>
     </AuthenticatedLayout>
+
+    <Modal
+        v-if="!isSelf"
+        :show="showDeleteModal"
+        maxWidth="md"
+        @close="showDeleteModal = false"
+    >
+        <ModalCard>
+            <template #title>
+                <h2 class="text-2xl font-semibold text-gray-900">
+                    Verijder gebruiker
+                </h2>
+            </template>
+            <template #body>
+                <p class="text-base font-normal text-gray-900">
+                    Weet je zeker dat je deze gebruiker wilt verwijderen?
+                </p>
+            </template>
+            <template #actions>
+                <FormActions align="center">
+                    <SecondaryButton type="button" @click="showDeleteModal = false">
+                        Annuleer
+                    </SecondaryButton>
+                    <DangerButton type="button" @click="deleteUser">
+                        Verwijder permanent
+                    </DangerButton>
+                </FormActions>
+            </template>
+        </ModalCard>
+    </Modal>
 </template>
 
 

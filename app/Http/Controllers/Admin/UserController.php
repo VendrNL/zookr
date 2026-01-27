@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -309,6 +310,26 @@ class UserController extends Controller
             'user' => $user->id,
             'return_to' => $returnTo,
         ])->with('status', 'specialism-updated');
+    }
+
+    public function sendPasswordReset(User $user)
+    {
+        Password::sendResetLink(['email' => $user->email]);
+
+        return Redirect::back()->with('status', 'password-reset-sent');
+    }
+
+    public function destroy(User $user)
+    {
+        if (Auth::id() === $user->id) {
+            return Redirect::back()
+                ->with('status', 'user-delete-self-denied');
+        }
+
+        $user->delete();
+
+        return Redirect::route('admin.users.index')
+            ->with('status', 'user-deleted');
     }
 
     private function resolveReturnTo(?string $returnTo): string
