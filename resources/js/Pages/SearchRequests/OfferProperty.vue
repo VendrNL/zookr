@@ -740,9 +740,6 @@ onBeforeUnmount(() => {
     <Head title="Pand aanbieden" />
 
     <AuthenticatedLayout>
-        <div class="bg-amber-50 text-amber-900 px-3 py-2 text-xs border-b border-amber-200">
-            drag-drop build v1
-        </div>
         <template #header>
             <div class="flex items-center justify-between gap-4">
                 <div class="flex min-w-0 items-center gap-3">
