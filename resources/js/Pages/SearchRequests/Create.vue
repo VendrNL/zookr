@@ -11,6 +11,7 @@ import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 
 const props = defineProps({
     options: {
@@ -81,6 +82,29 @@ const { confirmLeave } = useDirtyConfirm(form, undefined, {
     onSave: (done) => submitConcept(done),
 });
 
+const propertyTypeMenuOpen = ref(false);
+const propertyTypeMenuRef = ref(null);
+
+function selectedPropertyTypeLabel() {
+    return form.property_type ? formatLabel(form.property_type) : "";
+}
+
+function togglePropertyTypeMenu() {
+    propertyTypeMenuOpen.value = !propertyTypeMenuOpen.value;
+}
+
+function selectPropertyType(option) {
+    form.property_type = option;
+    propertyTypeMenuOpen.value = false;
+}
+
+function handlePropertyTypeOutsideClick(event) {
+    if (!propertyTypeMenuRef.value) return;
+    if (!propertyTypeMenuRef.value.contains(event.target)) {
+        propertyTypeMenuOpen.value = false;
+    }
+}
+
 const handleCancel = () => {
     confirmLeave({
         onConfirm: () => {
@@ -88,6 +112,14 @@ const handleCancel = () => {
         },
     });
 };
+
+onMounted(() => {
+    document.addEventListener("click", handlePropertyTypeOutsideClick);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener("click", handlePropertyTypeOutsideClick);
+});
 </script>
 
 <template>
@@ -174,11 +206,11 @@ const handleCancel = () => {
                             <label
                                 v-for="option in options.provinces"
                                 :key="option"
-                                class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                class="flex min-h-[42px] items-center gap-3 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                     :checked="form.provinces.includes(option)"
                                     @change="
                                         form.provinces = form.provinces.includes(option)
@@ -203,23 +235,49 @@ const handleCancel = () => {
                                 for="property_type"
                                 value="Type vastgoed *"
                             />
-                            <select
-                                id="property_type"
-                                v-model="form.property_type"
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                required
+                            <div
+                                ref="propertyTypeMenuRef"
+                                class="relative mt-1"
                             >
-                                <option value="" disabled>
-                                    Kies een type vastgoed
-                                </option>
-                                <option
-                                    v-for="option in options.types"
-                                    :key="option"
-                                    :value="option"
+                                <button
+                                    id="property_type"
+                                    type="button"
+                                    class="inline-flex w-full items-center justify-between rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-left text-sm text-heading shadow-xs focus:outline-none focus:ring-1 focus:ring-brand"
+                                    :aria-expanded="propertyTypeMenuOpen ? 'true' : 'false'"
+                                    @click="togglePropertyTypeMenu"
                                 >
-                                    {{ formatLabel(option) }}
-                                </option>
-                            </select>
+                                    <span :class="form.property_type ? 'text-heading' : 'text-body'">
+                                        {{ selectedPropertyTypeLabel() || "Kies een type vastgoed" }}
+                                    </span>
+                                    <svg
+                                        class="h-4 w-4 text-gray-500"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 20 20"
+                                        fill="currentColor"
+                                    >
+                                        <path
+                                            fill-rule="evenodd"
+                                            d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+                                            clip-rule="evenodd"
+                                        />
+                                    </svg>
+                                </button>
+
+                                <div
+                                    v-if="propertyTypeMenuOpen"
+                                    class="absolute z-20 mt-1 w-full rounded-md bg-white py-1 ring-1 ring-black ring-opacity-5"
+                                >
+                                    <button
+                                        v-for="option in options.types"
+                                        :key="option"
+                                        type="button"
+                                        class="block w-full px-4 py-2 text-start text-sm leading-5 text-gray-700 transition duration-150 ease-in-out hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                                        @click="selectPropertyType(option)"
+                                    >
+                                        {{ formatLabel(option) }}
+                                    </button>
+                                </div>
+                            </div>
                             <InputError
                                 class="mt-2"
                                 :message="form.errors.property_type"
@@ -306,11 +364,11 @@ const handleCancel = () => {
                             <label
                                 v-for="option in options.acquisitions"
                                 :key="option"
-                                class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                class="flex min-h-[42px] items-center gap-2 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                     :checked="form.acquisitions.includes(option)"
                                     @change="
                                         form.acquisitions = form.acquisitions.includes(option)
@@ -336,7 +394,7 @@ const handleCancel = () => {
                             v-model="form.notes"
                             rows="5"
                             maxlength="800"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            class="mt-1 block w-full rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                         />
                         <InputError class="mt-2" :message="form.errors.notes" />
                     </div>

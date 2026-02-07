@@ -228,15 +228,15 @@ const toggleMemberStatus = (member) => {
                         <div>
                             <InputLabel for="website" value="Website" />
                             <div
-                                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-base border border-default-medium bg-neutral-secondary-medium shadow-xs focus-within:border-brand focus-within:ring-1 focus-within:ring-brand"
                             >
-                                <span class="select-none pl-2 text-base text-gray-500">
+                                <span class="select-none pl-3 pr-0 py-2.5 text-sm text-body">
                                     https://
                                 </span>
                                 <input
                                     id="website"
                                     type="text"
-                                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent pl-0 pr-3 py-2.5 text-sm text-heading focus:border-0 focus:outline-none focus:ring-0 placeholder:text-body"
                                     v-model="form.website"
                                     autocomplete="url"
                                     placeholder="www.example.com"
@@ -469,6 +469,5 @@ const toggleMemberStatus = (member) => {
         </div>
     </AuthenticatedLayout>
 </template>
-
 
 

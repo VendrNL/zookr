@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center gap-2 rounded-full border border-transparent bg-white px-2 py-1 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center gap-2 rounded-md !bg-white px-3 py-2 text-sm font-medium leading-4 !text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-900 focus:outline-none"
                                             >
                                                 <span class="inline-flex h-7 w-7 shrink-0 overflow-hidden rounded-full bg-gray-100">
                                                     <img
@@ -483,6 +483,4 @@ onBeforeUnmount(() => {
         </Modal>
     </div>
 </template>
-
-
 

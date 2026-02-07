@@ -89,11 +89,11 @@ const handleCancel = () => {
                             <label
                                 v-for="option in options.types"
                                 :key="option"
-                                class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                class="flex min-h-[42px] items-center gap-3 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                     :checked="form.types.includes(option)"
                                     @change="toggle('types', option)"
                                 />
@@ -119,11 +119,11 @@ const handleCancel = () => {
                             <label
                                 v-for="option in options.provinces"
                                 :key="option"
-                                class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                class="flex min-h-[42px] items-center gap-3 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                     :checked="form.provinces.includes(option)"
                                     @change="toggle('provinces', option)"
                                 />

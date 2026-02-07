@@ -5,6 +5,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep native selects neutral: no blue focus ring/highlight styling. */
+select {
+    outline: none;
+    box-shadow: none;
+}
+
+select:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+    background: #f3f4f6;
+    color: #111827;
+}
+
 @layer base {
     body {
         @apply font-sans;

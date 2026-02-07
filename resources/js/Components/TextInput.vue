@@ -1,30 +1,33 @@
 <script setup>
-import { onMounted, ref, useAttrs } from 'vue';
+import { onMounted, ref } from 'vue';
 
 const model = defineModel({
-    type: String,
+    type: [String, Number],
     required: true,
 });
 
 const emit = defineEmits(['blur']);
 const input = ref(null);
-const attrs = useAttrs();
 
 onMounted(() => {
-    if (input.value.hasAttribute('autofocus')) {
+    if (input.value?.hasAttribute('autofocus')) {
         input.value.focus();
     }
 });
 
-defineExpose({ focus: () => input.value.focus() });
+defineExpose({
+    focus: () => {
+        input.value?.focus();
+    },
+});
 </script>
 
 <template>
     <input
-        class="w-full min-w-0 rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+        class="block w-full px-3 py-2.5 bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand shadow-xs placeholder:text-body"
         v-model="model"
         ref="input"
-        v-bind="attrs"
+        v-bind="$attrs"
         @blur="emit('blur', $event)"
     />
 </template>

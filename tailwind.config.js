@@ -16,9 +16,19 @@ export default {
     theme: {
         extend: {
             colors: {
+                heading: 'var(--color-surface-text)',
+                neutral: {
+                    secondary: {
+                        medium: 'var(--color-surface-muted)',
+                    },
+                },
+                default: {
+                    medium: 'var(--color-surface-border)',
+                },
                 'neutral-tertiary': 'var(--color-surface-border)',
                 body: 'var(--color-surface-text-muted)',
                 brand: {
+                    DEFAULT: 'var(--color-brand-500)',
                     50: 'var(--color-brand-50)',
                     100: 'var(--color-brand-100)',
                     200: 'var(--color-brand-200)',
@@ -39,9 +49,13 @@ export default {
                 },
             },
             borderRadius: {
+                base: 'var(--radius-md)',
                 sm: 'var(--radius-sm)',
                 md: 'var(--radius-md)',
                 lg: 'var(--radius-lg)',
+            },
+            boxShadow: {
+                xs: '0 1px 2px 0 rgba(15, 23, 42, 0.06)',
             },
             spacing: {
                 xs: 'var(--spacing-xs)',
