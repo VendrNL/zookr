@@ -109,6 +109,16 @@ function userInitials(name) {
 function handleAvatarError(userId) {
     avatarErrors.value = { ...avatarErrors.value, [userId]: true };
 }
+
+function isPreviousLabel(label) {
+    const normalized = String(label ?? "").toLowerCase();
+    return normalized.includes("previous") || normalized.includes("pagination.previous");
+}
+
+function isNextLabel(label) {
+    const normalized = String(label ?? "").toLowerCase();
+    return normalized.includes("next") || normalized.includes("pagination.next");
+}
 </script>
 
 <template>
@@ -395,8 +405,17 @@ function handleAvatarError(userId) {
                                             ? 'pointer-events-none opacity-40'
                                             : '',
                                     ]"
-                                    v-html="link.label"
-                                />
+                                >
+                                    <template v-if="isPreviousLabel(link.label)">
+                                        <MaterialIcon name="chevron_left" class="h-4 w-4" />
+                                        <span class="sr-only">Vorige</span>
+                                    </template>
+                                    <template v-else-if="isNextLabel(link.label)">
+                                        <MaterialIcon name="chevron_right" class="h-4 w-4" />
+                                        <span class="sr-only">Volgende</span>
+                                    </template>
+                                    <span v-else v-html="link.label"></span>
+                                </Link>
                             </div>
                         </nav>
                     </div>

@@ -557,7 +557,7 @@ watch(
                             <Link
                                 v-if="can.offer"
                                 :href="route('search-requests.properties.create', item.id)"
-                                class="inline-flex items-center justify-center rounded-base border border-transparent bg-brand px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
+                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 Pand aanbieden
                             </Link>

@@ -227,9 +227,14 @@ function statusLabel(status) {
     return map[status] ?? status;
 }
 
-function paginationLabel(label) {
-    if (!label) return "";
-    return label.replace("Previous", "Vorige").replace("Next", "Volgende");
+function isPreviousLabel(label) {
+    const normalized = String(label ?? "").toLowerCase();
+    return normalized.includes("previous") || normalized.includes("pagination.previous");
+}
+
+function isNextLabel(label) {
+    const normalized = String(label ?? "").toLowerCase();
+    return normalized.includes("next") || normalized.includes("pagination.next");
 }
 
 </script>
@@ -668,8 +673,17 @@ function paginationLabel(label) {
                                                     ? 'pointer-events-none opacity-40'
                                                     : '',
                                             ]"
-                                            v-html="paginationLabel(link.label)"
-                                        />
+                                        >
+                                            <template v-if="isPreviousLabel(link.label)">
+                                                <MaterialIcon name="chevron_left" class="h-4 w-4" />
+                                                <span class="sr-only">Vorige</span>
+                                            </template>
+                                            <template v-else-if="isNextLabel(link.label)">
+                                                <MaterialIcon name="chevron_right" class="h-4 w-4" />
+                                                <span class="sr-only">Volgende</span>
+                                            </template>
+                                            <span v-else v-html="link.label"></span>
+                                        </Link>
                                     </div>
                                 </nav>
                     </div>
