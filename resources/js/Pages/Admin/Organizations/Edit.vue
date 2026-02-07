@@ -198,7 +198,7 @@ const toggleMemberStatus = (member) => {
                                 <button
                                     type="button"
                                     class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                                    :class="form.is_active ? 'bg-blue-600' : 'bg-gray-300'"
+                                    :class="form.is_active ? 'bg-blue-700' : 'bg-gray-300'"
                                     role="switch"
                                     :aria-checked="form.is_active"
                                     tabindex="0"
@@ -252,15 +252,15 @@ const toggleMemberStatus = (member) => {
                         <div>
                             <InputLabel for="website" value="Website" />
                             <div
-                                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-base border border-default-medium bg-neutral-secondary-medium shadow-xs focus-within:border-brand focus-within:ring-1 focus-within:ring-brand"
                             >
-                                <span class="select-none pl-2 text-base text-gray-500">
+                                <span class="select-none pl-3 pr-0 py-2.5 text-sm text-body">
                                     https://
                                 </span>
                                 <input
                                     id="website"
                                     type="text"
-                                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent pl-0 pr-3 py-2.5 text-sm text-heading focus:border-0 focus:outline-none focus:ring-0 placeholder:text-body"
                                     v-model="form.website"
                                     autocomplete="url"
                                     placeholder="www.example.com"
@@ -302,7 +302,7 @@ const toggleMemberStatus = (member) => {
                             </div>
                             <Link
                                 :href="route('admin.organizations.users.create', organization.id)"
-                                class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
                                 Nieuwe medewerker
@@ -400,7 +400,7 @@ const toggleMemberStatus = (member) => {
                                                         :checked="member.is_active"
                                                         @change="toggleMemberStatus(member)"
                                                     />
-                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-700 transition-colors"></div>
                                                     <div class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
                                                 </label>
                                             </div>
@@ -478,6 +478,4 @@ const toggleMemberStatus = (member) => {
         </div>
     </AuthenticatedLayout>
 </template>
-
-
 

@@ -9,6 +9,7 @@ import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import DangerButton from "@/Components/DangerButton.vue";
 import TextInput from "@/Components/TextInput.vue";
+import TokenDropdown from "@/Components/TokenDropdown.vue";
 import Modal from "@/Components/Modal.vue";
 import ModalCard from "@/Components/ModalCard.vue";
 import { Head, router, useForm, usePage } from "@inertiajs/vue3";
@@ -67,6 +68,13 @@ const isSendingReset = ref(false);
 
 const page = usePage();
 const isSelf = computed(() => page.props.auth?.user?.id === props.user.id);
+const organizationOptions = computed(() => [
+    { value: "", label: "Selecteer Makelaar" },
+    ...(props.organizations ?? []).map((organization) => ({
+        value: organization.id,
+        label: organization.name,
+    })),
+]);
 
 const submit = (callbacks = {}) => {
     form
@@ -256,7 +264,7 @@ const provinceFill = (key) =>
                             <button
                                 type="button"
                                 class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                                :class="form.is_active ? 'bg-gray-900' : 'bg-gray-300'"
+                                :class="form.is_active ? 'bg-blue-700' : 'bg-gray-300'"
                                 role="switch"
                                 :aria-checked="form.is_active"
                                 tabindex="0"
@@ -273,7 +281,7 @@ const provinceFill = (key) =>
                                 <button
                                     type="button"
                                     class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                                    :class="form.is_admin ? 'bg-gray-900' : 'bg-gray-300'"
+                                    :class="form.is_admin ? 'bg-blue-700' : 'bg-gray-300'"
                                     role="switch"
                                     :aria-checked="form.is_admin"
                                     tabindex="0"
@@ -345,22 +353,12 @@ const provinceFill = (key) =>
 
                         <div>
                             <InputLabel for="organization_id" value="Makelaar" />
-                            <select
+                            <TokenDropdown
                                 id="organization_id"
                                 v-model="form.organization_id"
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                            >
-                                <option value="">
-                                    Selecteer Makelaar
-                                </option>
-                                <option
-                                    v-for="organization in organizations"
-                                    :key="organization.id"
-                                    :value="organization.id"
-                                >
-                                    {{ organization.name }}
-                                </option>
-                            </select>
+                                :options="organizationOptions"
+                                placeholder="Selecteer Makelaar"
+                            />
                             <InputError
                                 class="mt-2"
                                 :message="form.errors.organization_id"
@@ -399,15 +397,15 @@ const provinceFill = (key) =>
                         <div>
                             <InputLabel for="linkedin_url" value="LinkedIn-profiel" />
                             <div
-                                class="mt-1 flex w-full min-w-0 items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-base border border-default-medium bg-neutral-secondary-medium shadow-xs focus-within:border-brand focus-within:ring-1 focus-within:ring-brand"
                             >
-                                <span class="select-none pr-0 pl-2 py-2 text-base text-gray-500">
+                                <span class="select-none pl-3 pr-0 py-2.5 text-sm text-body">
                                     {{ LINKEDIN_PREFIX }}
                                 </span>
                                 <input
                                     id="linkedin_url"
                                     type="text"
-                                    class="flex-1 min-w-0 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent pl-0 pr-3 py-2.5 text-sm text-heading focus:border-0 focus:outline-none focus:ring-0 placeholder:text-body"
                                     v-model="linkedinHandle"
                                     autocomplete="url"
                                     placeholder="gebruikersnaam"
@@ -468,11 +466,11 @@ const provinceFill = (key) =>
                                                 <label
                                                     v-for="option in specialism.options.types"
                                                     :key="option"
-                                                    class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                                    class="flex min-h-[42px] items-center gap-3 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                                                 >
                                                     <input
                                                         type="checkbox"
-                                                        class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                                        class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                                         :checked="specialismForm.types.includes(option)"
                                                         @change="toggleSpecialism('types', option)"
                                                     />
@@ -498,11 +496,11 @@ const provinceFill = (key) =>
                                                 <label
                                                     v-for="option in specialism.options.provinces"
                                                     :key="option"
-                                                    class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm hover:border-gray-300"
+                                                    class="flex min-h-[42px] items-center gap-3 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs"
                                                 >
                                                     <input
                                                         type="checkbox"
-                                                        class="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                                        class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
                                                         :checked="specialismForm.provinces.includes(option)"
                                                         @change="toggleSpecialism('provinces', option)"
                                                     />
@@ -727,5 +725,3 @@ const provinceFill = (key) =>
         </ModalCard>
     </Modal>
 </template>
-
-

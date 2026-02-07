@@ -18,6 +18,7 @@ import TableHeaderCell from "@/Components/TableHeaderCell.vue";
 import Dropdown from "@/Components/Dropdown.vue";
 import DropdownLink from "@/Components/DropdownLink.vue";
 import TextInput from "@/Components/TextInput.vue";
+import TokenDropdown from "@/Components/TokenDropdown.vue";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/vue3";
 import { computed, onMounted, ref, watch } from "vue";
 
@@ -190,6 +191,14 @@ const placeholderUsers = [
     { id: 2, name: "Demo medewerker" },
     { id: 3, name: "Demo toegewezen" },
 ];
+
+const assignmentOptions = computed(() => [
+    { value: null, label: "Geen toewijzing" },
+    ...placeholderUsers.map((user) => ({
+        value: user.id,
+        label: user.name,
+    })),
+]);
 
 const assignForm = useForm({
     assigned_to: props.item.assigned_to,
@@ -594,22 +603,12 @@ watch(
                                         for="assigned_to"
                                         value="Toegewezen aan"
                                     />
-                                    <select
+                                    <TokenDropdown
                                         id="assigned_to"
-                                        v-model.number="assignForm.assigned_to"
-                                        class="mt-1 block w-full px-3 py-2.5 bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand shadow-xs placeholder:text-body"
-                                    >
-                                        <option :value="null">
-                                            Geen toewijzing
-                                        </option>
-                                        <option
-                                            v-for="user in placeholderUsers"
-                                            :key="user.id"
-                                            :value="user.id"
-                                        >
-                                            {{ user.name }}
-                                        </option>
-                                    </select>
+                                        v-model="assignForm.assigned_to"
+                                        :options="assignmentOptions"
+                                        placeholder="Toegewezen aan"
+                                    />
                                     <InputError
                                         class="mt-2"
                                         :message="assignForm.errors.assigned_to"

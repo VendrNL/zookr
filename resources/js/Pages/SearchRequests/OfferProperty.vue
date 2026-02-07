@@ -10,6 +10,7 @@ import PageContainer from "@/Components/PageContainer.vue";
 import PrimaryButton from "@/Components/PrimaryButton.vue";
 import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
+import TokenDropdown from "@/Components/TokenDropdown.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
@@ -87,6 +88,14 @@ const acquisitionOptionLabel = (value) => (value === "huur" ? "Huur" : "Koop");
 const selectedAcquisitionLabel = computed(() =>
     form.acquisition ? acquisitionOptionLabel(form.acquisition) : "Kies huur of koop"
 );
+
+const contactUserOptions = computed(() => [
+    { value: "", label: "Kies een contactpersoon", disabled: true },
+    ...(props.users ?? []).map((user) => ({
+        value: user.id,
+        label: user.name,
+    })),
+]);
 
 const openUploadLimitModal = () => {
     showUploadLimitModal.value = true;
@@ -1239,23 +1248,12 @@ onBeforeUnmount(() => {
                                 for="contact_user_id"
                                 value="Contactpersoon *"
                             />
-                            <select
+                            <TokenDropdown
                                 id="contact_user_id"
-                                v-model.number="form.contact_user_id"
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
-                                required
-                            >
-                                <option value="" disabled>
-                                    Kies een contactpersoon
-                                </option>
-                                <option
-                                    v-for="user in users"
-                                    :key="user.id"
-                                    :value="user.id"
-                                >
-                                    {{ user.name }}
-                                </option>
-                            </select>
+                                v-model="form.contact_user_id"
+                                :options="contactUserOptions"
+                                placeholder="Kies een contactpersoon"
+                            />
                             <InputError class="mt-2" :message="form.errors.contact_user_id" />
                         </div>
 
