@@ -257,11 +257,11 @@ function paginationLabel(label) {
                             v-model="form.q"
                             type="text"
                             placeholder="Titel, klant of locatie."
-                            class="h-[38px] w-full min-w-0 rounded-md border-gray-300 bg-white text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            class="h-[42px] w-full min-w-0 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                         />
                         <button
                             type="button"
-                            class="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md bg-gray-900 p-0 text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                            class="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-base bg-brand p-0 text-white hover:bg-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-300"
                             @click="applyFilters"
                         >
                             <MaterialIcon name="search" class="h-5 w-5" />
@@ -271,7 +271,7 @@ function paginationLabel(label) {
 
                 <!-- Tabel -->
                 <div class="mt-6 hidden sm:block">
-                    <div class="relative rounded-lg bg-white shadow-md">
+                    <div class="relative rounded-base bg-white shadow-xs ring-1 ring-default-medium">
                                 <div
                                     class="flex flex-col items-center justify-between gap-3 p-4 md:flex-row md:gap-4"
                                 >
@@ -302,7 +302,7 @@ function paginationLabel(label) {
                                                     id="simple-search"
                                                     v-model="form.q"
                                                     type="text"
-                                                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 pl-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                                                    class="block w-full rounded-base border border-default-medium bg-neutral-secondary-medium p-2.5 pl-10 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                                                     placeholder="Zoek op titel, klant of locatie"
                                                 />
                                             </div>
@@ -314,7 +314,7 @@ function paginationLabel(label) {
                                         <Link
                                             v-if="can.create"
                                             :href="route('search-requests.create')"
-                                            class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                            class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                         >
                                             <MaterialIcon name="add" class="mr-2 h-4 w-4" />
                                             Nieuwe zoekvraag
@@ -414,7 +414,7 @@ function paginationLabel(label) {
                                                                         :id="`type-${option}`"
                                                                         type="checkbox"
                                                                         :checked="form.property_type.includes(option)"
-                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                                                         @change="toggleSelection(form.property_type, option)"
                                                                     />
                                                             <label
@@ -467,7 +467,7 @@ function paginationLabel(label) {
                                                                         :id="`province-${option}`"
                                                                         type="checkbox"
                                                                         :checked="form.province.includes(option)"
-                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                                                         @change="toggleSelection(form.province, option)"
                                                                     />
                                                             <label
@@ -551,7 +551,7 @@ function paginationLabel(label) {
                                                                         :id="`status-${status.value}`"
                                                                         type="checkbox"
                                                                         :checked="form.status.includes(status.value)"
-                                                                        class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-blue-500"
+                                                                        class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                                                         @change="toggleSelection(form.status, status.value)"
                                                                     />
                                                             <label
@@ -662,7 +662,7 @@ function paginationLabel(label) {
                                                 i === 0 ? 'rounded-l-lg' : '',
                                                 i === lastLinkIndex ? 'rounded-r-lg' : '',
                                                 link.active
-                                                    ? 'z-10 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800'
+                                                    ? 'z-10 border-brand-medium bg-brand-soft text-fg-brand hover:bg-brand-medium hover:text-white'
                                                     : '',
                                                 !link.url
                                                     ? 'pointer-events-none opacity-40'
@@ -755,3 +755,6 @@ function paginationLabel(label) {
         </div>
     </AuthenticatedLayout>
 </template>
+
+
+

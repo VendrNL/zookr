@@ -166,7 +166,7 @@ const handleCancel = () => {
                                 <button
                                     type="button"
                                     class="relative inline-flex h-6 w-11 items-center rounded-full transition"
-                                    :class="form.is_active ? 'bg-gray-900' : 'bg-gray-300'"
+                                    :class="form.is_active ? 'bg-blue-700' : 'bg-gray-300'"
                                     role="switch"
                                     :aria-checked="form.is_active"
                                     tabindex="0"
@@ -223,15 +223,15 @@ const handleCancel = () => {
                         <div>
                             <InputLabel for="website" value="Website" />
                             <div
-                                class="mt-1 flex w-full items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-base border border-default-medium bg-neutral-secondary-medium shadow-xs focus-within:border-brand focus-within:ring-1 focus-within:ring-brand"
                             >
-                                <span class="select-none pl-2 text-base text-gray-500">
+                                <span class="select-none pl-3 pr-0 py-2.5 text-sm text-body">
                                     https://
                                 </span>
                                 <input
                                     id="website"
                                     type="text"
-                                    class="flex-1 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent pl-0 pr-3 py-2.5 text-sm text-heading focus:border-0 focus:outline-none focus:ring-0 placeholder:text-body"
                                     v-model="form.website"
                                     autocomplete="url"
                                     placeholder="www.example.com"
@@ -241,16 +241,16 @@ const handleCancel = () => {
                             <InputError class="mt-2" :message="form.errors.website" />
                         </div>
 
-                        <FormActions class="pt-2">
-                            <PrimaryButton :disabled="form.processing">
-                                Opslaan
-                            </PrimaryButton>
+                        <FormActions align="right" class="pt-2">
                             <SecondaryButton
                                 type="button"
                                 @click="handleCancel"
                             >
                                 Annuleren
                             </SecondaryButton>
+                            <PrimaryButton :disabled="form.processing">
+                                Opslaan
+                            </PrimaryButton>
                         </FormActions>
                     </form>
                 </FormSection>
@@ -258,4 +258,3 @@ const handleCancel = () => {
         </div>
     </AuthenticatedLayout>
 </template>
-

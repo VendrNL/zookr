@@ -31,7 +31,7 @@ const submit = () => {
 
         <div
             v-if="status"
-            class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+            class="rounded-base border border-green-200 bg-green-50 p-4 text-sm text-green-800 shadow-xs"
             role="alert"
         >
             {{ status }}
@@ -45,7 +45,7 @@ const submit = () => {
             <div>
                 <label
                     for="email"
-                    class="mb-2 block text-sm font-medium text-gray-900"
+                    class="mb-2.5 block text-sm font-medium text-heading"
                 >
                     E-mail
                 </label>
@@ -54,7 +54,7 @@ const submit = () => {
                     id="email"
                     type="email"
                     v-model="form.email"
-                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                    class="block w-full rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs placeholder:text-body focus:border-brand focus:ring-brand"
                     placeholder="name@bedrijf.nl"
                     required
                     autofocus
@@ -67,7 +67,7 @@ const submit = () => {
             <div>
                 <label
                     for="password"
-                    class="mb-2 block text-sm font-medium text-gray-900"
+                    class="mb-2.5 block text-sm font-medium text-heading"
                 >
                     Wachtwoord
                 </label>
@@ -76,7 +76,7 @@ const submit = () => {
                     id="password"
                     type="password"
                     v-model="form.password"
-                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                    class="block w-full rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs placeholder:text-body focus:border-brand focus:ring-brand"
                     placeholder="••••••••"
                     required
                     autocomplete="current-password"
@@ -93,10 +93,10 @@ const submit = () => {
                             name="remember"
                             type="checkbox"
                             v-model="form.remember"
-                            class="h-4 w-4 rounded border border-gray-300 bg-gray-100 text-blue-600 focus:ring-4 focus:ring-blue-300"
+                            class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                         />
                     </div>
-                    <span class="ms-2 text-sm text-gray-600">
+                    <span class="ms-2 text-sm text-heading">
                         Onthoud mij
                     </span>
                 </label>
@@ -104,7 +104,7 @@ const submit = () => {
                 <Link
                     v-if="canResetPassword"
                     :href="route('password.request')"
-                    class="text-sm font-medium text-blue-600 hover:underline"
+                    class="text-sm font-medium text-fg-brand hover:underline"
                 >
                     Wachtwoord vergeten?
                 </Link>
@@ -112,7 +112,7 @@ const submit = () => {
 
             <button
                 type="submit"
-                class="w-full rounded-lg bg-blue-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                class="w-full rounded-base border border-transparent bg-brand px-4 py-2.5 text-center text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
                 :class="{ 'opacity-50': form.processing }"
                 :disabled="form.processing"
             >

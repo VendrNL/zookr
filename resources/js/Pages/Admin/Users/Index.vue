@@ -126,7 +126,7 @@ function handleAvatarError(userId) {
         <div class="py-8">
             <PageContainer>
                 <div class="hidden sm:block mt-6">
-                    <div class="relative rounded-lg bg-white shadow-md">
+                    <div class="relative rounded-base bg-white shadow-xs ring-1 ring-default-medium">
                         <div class="flex flex-col items-center justify-between gap-3 p-4 md:flex-row md:gap-4">
                             <div class="w-full md:w-5/12">
                                 <form class="flex items-center" @submit.prevent="applyFilters">
@@ -155,7 +155,7 @@ function handleAvatarError(userId) {
                                             id="simple-search"
                                             v-model="form.q"
                                             type="text"
-                                            class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2 pl-10 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
+                                            class="block w-full rounded-base border border-default-medium bg-neutral-secondary-medium p-2.5 pl-10 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                                             placeholder="Zoek gebruiker"
                                         />
                                     </div>
@@ -166,7 +166,7 @@ function handleAvatarError(userId) {
                             >
                                 <Link
                                     href="/admin/users/create"
-                                    class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                    class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                                 >
                                     <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
                                     Gebruiker toevoegen
@@ -353,7 +353,7 @@ function handleAvatarError(userId) {
                                                         :checked="user.is_active"
                                                         @change="toggleStatus(user)"
                                                     />
-                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-700 transition-colors"></div>
                                                     <div class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
                                                 </label>
                                             </div>
@@ -389,7 +389,7 @@ function handleAvatarError(userId) {
                                         i === 0 ? 'rounded-l-lg' : '',
                                         i === lastLinkIndex ? 'rounded-r-lg' : '',
                                         link.active
-                                            ? 'z-10 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800'
+                                            ? 'z-10 border-brand-medium bg-brand-soft text-fg-brand hover:bg-brand-medium hover:text-white'
                                             : '',
                                         !link.url
                                             ? 'pointer-events-none opacity-40'
@@ -408,12 +408,12 @@ function handleAvatarError(userId) {
                             v-model="form.q"
                             type="text"
                             placeholder="Zoek gebruiker"
-                            class="h-[38px] w-full min-w-0 rounded-md border-gray-300 bg-white text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            class="h-[42px] w-full min-w-0 rounded-base border border-default-medium bg-neutral-secondary-medium px-3 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                             @keyup.enter="applyFilters"
                         />
                         <button
                             type="button"
-                            class="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md bg-gray-900 p-0 text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                            class="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-base bg-brand p-0 text-white hover:bg-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-300"
                             @click="applyFilters"
                         >
                             <MaterialIcon name="search" class="h-5 w-5" />
@@ -479,7 +479,7 @@ function handleAvatarError(userId) {
                                             :checked="user.is_active"
                                             @change="toggleStatus(user)"
                                         />
-                                        <div class="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                                        <div class="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-700 transition-colors"></div>
                                         <div class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
                                     </label>
                                 </div>
@@ -487,7 +487,7 @@ function handleAvatarError(userId) {
                             <div class="mt-3 grid w-full grid-cols-3 grid-flow-col gap-2">
                                 <a
                                     :href="user.email ? `mailto:${user.email}` : '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="user.email ? '' : 'pointer-events-none opacity-40'"
                                     @click.stop
                                 >
@@ -495,7 +495,7 @@ function handleAvatarError(userId) {
                                 </a>
                                 <a
                                     :href="user.phone ? `tel:${user.phone}` : '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="user.phone ? '' : 'pointer-events-none opacity-40'"
                                     @click.stop
                                 >
@@ -503,7 +503,7 @@ function handleAvatarError(userId) {
                                 </a>
                                 <a
                                     :href="user.linkedin_url || '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="user.linkedin_url ? '' : 'pointer-events-none opacity-40'"
                                     target="_blank"
                                     rel="noreferrer"
@@ -557,4 +557,5 @@ function handleAvatarError(userId) {
         </div>
     </AuthenticatedLayout>
 </template>
+
 

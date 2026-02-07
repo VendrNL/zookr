@@ -251,7 +251,7 @@ const clearAvatar = () => {
             </div>
         </div>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center justify-end gap-4">
             <PrimaryButton :disabled="form.processing">Opslaan</PrimaryButton>
 
             <Transition
@@ -260,10 +260,7 @@ const clearAvatar = () => {
                 leave-active-class="transition ease-in-out"
                 leave-to-class="opacity-0"
             >
-                <p
-                    v-if="form.recentlySuccessful"
-                    class="text-sm text-gray-600"
-                >
+                <p v-if="form.recentlySuccessful" class="text-sm text-gray-600">
                     Opgeslagen.
                 </p>
             </Transition>

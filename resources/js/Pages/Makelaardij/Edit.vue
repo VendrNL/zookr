@@ -267,7 +267,7 @@ const toggleMemberStatus = (member) => {
                 </FormSection>
 
                 <div class="hidden sm:block">
-                    <div class="relative rounded-lg bg-white shadow-md">
+                    <div class="relative rounded-base bg-white shadow-xs ring-1 ring-default-medium">
                         <div class="flex items-center justify-between gap-4 p-4">
                             <div>
                                 <h2 class="text-xl font-semibold text-gray-900">
@@ -280,7 +280,7 @@ const toggleMemberStatus = (member) => {
                             <Link
                                 v-if="organization.id"
                                 :href="route('makelaardij.users.create')"
-                                class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
                                 Nieuwe medewerker
@@ -378,7 +378,7 @@ const toggleMemberStatus = (member) => {
                                                         :checked="member.is_active"
                                                         @change="toggleMemberStatus(member)"
                                                     />
-                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                                                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-700 transition-colors"></div>
                                                     <div class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></div>
                                                 </label>
                                             </div>
@@ -433,7 +433,7 @@ const toggleMemberStatus = (member) => {
                             <div class="mt-3 grid w-full grid-cols-3 gap-2">
                                 <a
                                     :href="member.email ? `mailto:${member.email}` : '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="member.email ? '' : 'pointer-events-none opacity-40'"
                                     @click.stop
                                 >
@@ -441,7 +441,7 @@ const toggleMemberStatus = (member) => {
                                 </a>
                                 <a
                                     :href="member.phone ? `tel:${member.phone}` : '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="member.phone ? '' : 'pointer-events-none opacity-40'"
                                     @click.stop
                                 >
@@ -449,7 +449,7 @@ const toggleMemberStatus = (member) => {
                                 </a>
                                 <a
                                     :href="member.linkedin_url || '#'"
-                                    class="inline-flex items-center justify-center rounded-md border border-gray-200 py-2 text-gray-700 hover:bg-gray-50"
+                                    class="inline-flex items-center justify-center rounded-base border border-default-medium bg-white py-2 text-body shadow-xs hover:bg-neutral-tertiary-medium"
                                     :class="member.linkedin_url ? '' : 'pointer-events-none opacity-40'"
                                     target="_blank"
                                     rel="noreferrer"

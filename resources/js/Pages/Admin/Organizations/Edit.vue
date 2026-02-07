@@ -290,7 +290,7 @@ const toggleMemberStatus = (member) => {
                 </FormSection>
 
                 <div class="hidden sm:block">
-                    <div class="relative rounded-lg bg-white shadow-md">
+                    <div class="relative rounded-base bg-white shadow-xs ring-1 ring-default-medium">
                         <div class="flex items-center justify-between gap-4 p-4">
                             <div>
                                 <h2 class="text-xl font-semibold text-gray-900">
@@ -302,7 +302,7 @@ const toggleMemberStatus = (member) => {
                             </div>
                             <Link
                                 :href="route('admin.organizations.users.create', organization.id)"
-                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center justify-center rounded-base border border-transparent bg-brand px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
                             >
                                 <MaterialIcon name="person_add" class="mr-2 h-4 w-4" />
                                 Nieuwe medewerker
@@ -478,4 +478,5 @@ const toggleMemberStatus = (member) => {
         </div>
     </AuthenticatedLayout>
 </template>
+
 

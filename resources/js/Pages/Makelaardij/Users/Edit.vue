@@ -248,15 +248,15 @@ const confirmDiscard = () => {
                         <div>
                             <InputLabel for="linkedin_url" value="LinkedIn-profiel" />
                             <div
-                                class="mt-1 flex w-full min-w-0 items-center rounded-md border border-gray-300 bg-white shadow-sm focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900"
+                                class="mt-1 flex w-full min-w-0 items-center rounded-base border border-default-medium bg-neutral-secondary-medium shadow-xs focus-within:border-brand focus-within:ring-1 focus-within:ring-brand"
                             >
-                                <span class="select-none pr-0 pl-2 py-2 text-base text-gray-500">
+                                <span class="select-none pl-3 pr-0 py-2.5 text-sm text-body">
                                     {{ LINKEDIN_PREFIX }}
                                 </span>
                                 <input
                                     id="linkedin_url"
                                     type="text"
-                                    class="flex-1 min-w-0 border-0 bg-transparent px-0 py-2 text-base text-gray-900 focus:border-0 focus:outline-none focus:ring-0"
+                                    class="flex-1 min-w-0 border-0 bg-transparent pl-0 pr-3 py-2.5 text-sm text-heading focus:border-0 focus:outline-none focus:ring-0 placeholder:text-body"
                                     v-model="linkedinHandle"
                                     autocomplete="url"
                                     placeholder="gebruikersnaam"
@@ -311,5 +311,4 @@ const confirmDiscard = () => {
         </ModalCard>
     </Modal>
 </template>
-
 

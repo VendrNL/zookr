@@ -75,7 +75,7 @@ const handleCancel = () => {
         <div class="py-8">
             <PageContainer>
                 <form
-                    class="space-y-6 rounded-lg bg-white p-6"
+                    class="space-y-6 rounded-base bg-white p-6 shadow-xs ring-1 ring-default-medium"
                     @submit.prevent="submit"
                 >
                     <div>
@@ -93,7 +93,7 @@ const handleCancel = () => {
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                    class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                     :checked="form.types.includes(option)"
                                     @change="toggle('types', option)"
                                 />
@@ -123,7 +123,7 @@ const handleCancel = () => {
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                    class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                     :checked="form.provinces.includes(option)"
                                     @change="toggle('provinces', option)"
                                 />

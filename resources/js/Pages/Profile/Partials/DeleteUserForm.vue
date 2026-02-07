@@ -57,7 +57,9 @@ const closeModal = () => {
             </p>
         </header>
 
-        <DangerButton @click="confirmUserDeletion">Verwijder account</DangerButton>
+        <div class="flex justify-end">
+            <DangerButton @click="confirmUserDeletion">Verwijder account</DangerButton>
+        </div>
 
         <Modal :show="confirmingUserDeletion" maxWidth="md" @close="closeModal">
             <ModalCard>

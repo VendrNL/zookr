@@ -205,7 +205,7 @@ onBeforeUnmount(() => {
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                    class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                     :checked="form.provinces.includes(option)"
                                     @change="
                                         form.provinces = form.provinces.includes(option)
@@ -363,7 +363,7 @@ onBeforeUnmount(() => {
                             >
                                 <input
                                     type="checkbox"
-                                    class="h-4 w-4 rounded-sm border border-default-medium bg-white text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                    class="h-4 w-4 rounded-xs border border-default-medium bg-white text-blue-700 checked:border-blue-700 checked:bg-blue-700 focus:ring-2 focus:ring-brand-soft"
                                     :checked="form.acquisitions.includes(option)"
                                     @change="
                                         form.acquisitions = form.acquisitions.includes(option)
@@ -424,3 +424,4 @@ onBeforeUnmount(() => {
         </div>
     </AuthenticatedLayout>
 </template>
+

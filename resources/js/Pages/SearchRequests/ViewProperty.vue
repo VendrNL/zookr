@@ -133,7 +133,7 @@ const setStatus = (nextStatus) => {
                     <Link
                         v-if="can.update"
                         :href="route('search-requests.properties.edit', [item.id, property.id])"
-                        class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        class="inline-flex items-center justify-center rounded-base border border-transparent bg-brand px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
                     >
                         Bewerken
                     </Link>
@@ -240,7 +240,7 @@ const setStatus = (nextStatus) => {
                                 :href="property.url"
                                 target="_blank"
                                 rel="noopener"
-                                class="inline-flex items-center gap-2 font-medium text-blue-700 hover:underline"
+                                class="inline-flex items-center gap-2 font-medium text-fg-brand hover:underline"
                             >
                                 <svg class="w-8 h-8 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M13.213 9.787a3.391 3.391 0 0 0-4.795 0l-3.425 3.426a3.39 3.39 0 0 0 4.795 4.794l.321-.304m-.321-4.49a3.39 3.39 0 0 0 4.795 0l3.424-3.426a3.39 3.39 0 0 0-4.794-4.795l-1.028.961"/>
@@ -252,7 +252,7 @@ const setStatus = (nextStatus) => {
                                 :href="media.brochure"
                                 target="_blank"
                                 rel="noopener"
-                                class="inline-flex items-center gap-2 font-medium text-blue-700 hover:underline"
+                                class="inline-flex items-center gap-2 font-medium text-fg-brand hover:underline"
                             >
                                 <svg class="w-8 h-8 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M5 17v-5h1.5a1.5 1.5 0 1 1 0 3H5m12 2v-5h2m-2 3h2M5 10V7.914a1 1 0 0 1 .293-.707l3.914-3.914A1 1 0 0 1 9.914 3H18a1 1 0 0 1 1 1v6M5 19v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1M10 3v4a1 1 0 0 1-1 1H5m6 4v5h1.375A1.627 1.627 0 0 0 14 15.375v-1.75A1.627 1.627 0 0 0 12.375 12H11Z"/>
@@ -265,7 +265,7 @@ const setStatus = (nextStatus) => {
                                 :href="drawing"
                                 target="_blank"
                                 rel="noopener"
-                                class="inline-flex items-center gap-2 font-medium text-blue-700 hover:underline"
+                                class="inline-flex items-center gap-2 font-medium text-fg-brand hover:underline"
                             >
                                 <svg class="w-8 h-8 text-gray-800" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M5 17v-5h1.5a1.5 1.5 0 1 1 0 3H5m12 2v-5h2m-2 3h2M5 10V7.914a1 1 0 0 1 .293-.707l3.914-3.914A1 1 0 0 1 9.914 3H18a1 1 0 0 1 1 1v6M5 19v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1M10 3v4a1 1 0 0 1-1 1H5m6 4v5h1.375A1.627 1.627 0 0 0 14 15.375v-1.75A1.627 1.627 0 0 0 12.375 12H11Z"/>
@@ -374,7 +374,7 @@ const setStatus = (nextStatus) => {
                                 <div class="text-sm text-gray-700">
                                     {{ contact?.phone || "-" }}
                                 </div>
-                                <div class="text-sm text-blue-700">
+                                <div class="text-sm text-fg-brand">
                                     <a v-if="contact?.email" :href="`mailto:${contact.email}`" class="hover:underline">
                                         {{ contact.email }}
                                     </a>

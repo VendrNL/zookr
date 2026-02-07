@@ -392,7 +392,7 @@ watch(
                                 type="button"
                                 class="inline-block p-4 border-b-2 rounded-t-lg"
                                 :class="activeTab === 'search-request'
-                                    ? 'text-blue-600 border-blue-600'
+                                    ? 'text-fg-brand border-brand'
                                     : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
                                 @click="setActiveTab('search-request')"
                             >
@@ -404,7 +404,7 @@ watch(
                                 type="button"
                                 class="inline-block p-4 border-b-2 rounded-t-lg"
                                 :class="activeTab === 'offers'
-                                    ? 'text-blue-600 border-blue-600'
+                                    ? 'text-fg-brand border-brand'
                                     : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
                                 @click="setActiveTab('offers')"
                             >
@@ -557,14 +557,14 @@ watch(
                             <Link
                                 v-if="can.offer"
                                 :href="route('search-requests.properties.create', item.id)"
-                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center justify-center rounded-base border border-transparent bg-brand px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
                             >
                                 Pand aanbieden
                             </Link>
                             <button
                                 v-if="can.delete"
                                 type="button"
-                                class="inline-flex items-center justify-center text-white bg-red-600 box-border border border-transparent hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-xs font-medium leading-5 rounded-lg text-sm px-4 py-2.5 focus:outline-none"
+                                class="inline-flex items-center justify-center rounded-base border border-transparent bg-red-600 px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300"
                                 :disabled="deleteForm.processing"
                                 @click="confirmDelete"
                             >
@@ -573,7 +573,7 @@ watch(
                             <Link
                                 v-if="can.update"
                                 :href="route('search-requests.edit', item.id)"
-                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center justify-center rounded-base border border-transparent bg-brand px-4 py-2.5 text-sm font-medium leading-5 text-white shadow-xs transition duration-150 ease-in-out hover:bg-brand-strong focus:outline-none focus:ring-4 focus:ring-brand-medium"
                             >
                                 Bewerk
                             </Link>

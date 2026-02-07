@@ -938,7 +938,7 @@ onBeforeUnmount(() => {
                                         <button
                                             id="acquisition"
                                             type="button"
-                                            class="mt-1 flex w-full items-center justify-between rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                            class="mt-1 flex w-full items-center justify-between rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs focus:border-brand focus:ring-2 focus:ring-brand"
                                         >
                                             <span :class="form.acquisition ? 'text-gray-900' : 'text-gray-500'">
                                                 {{ selectedAcquisitionLabel }}
@@ -967,7 +967,7 @@ onBeforeUnmount(() => {
                                             @click="form.acquisition = option"
                                         >
                                             <span>{{ acquisitionOptionLabel(option) }}</span>
-                                            <span v-if="form.acquisition === option" class="text-blue-600">•</span>
+                                            <span v-if="form.acquisition === option" class="text-fg-brand">•</span>
                                         </button>
                                     </template>
                                 </Dropdown>
@@ -980,7 +980,7 @@ onBeforeUnmount(() => {
                             <div class="mt-1 flex w-full flex-col gap-2 sm:flex-row">
                                 <div class="flex w-full rounded-base shadow-xs">
                                     <span
-                                        class="inline-flex cursor-pointer items-center rounded-s-lg border border-e-0 border-gray-300 bg-gray-100 px-3 text-sm text-gray-500"
+                                        class="inline-flex cursor-pointer items-center rounded-s-lg border border-e-0 border-default-medium bg-neutral-secondary-medium px-3 text-sm text-body"
                                         @click="openUrlInNewTab"
                                     >
                                         https://
@@ -989,7 +989,7 @@ onBeforeUnmount(() => {
                                         id="url"
                                         v-model="urlInput"
                                         type="text"
-                                        class="block w-full rounded-e-lg rounded-none border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                                        class="block w-full rounded-e-lg rounded-none border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading placeholder:text-body focus:border-brand focus:ring-brand"
                                         autocomplete="off"
                                         @blur="handleUrlBlur"
                                     />
@@ -1026,7 +1026,7 @@ onBeforeUnmount(() => {
                                 ref="notesInput"
                                 v-model="form.notes"
                                 rows="5"
-                                class="mt-1 block w-full resize-none rounded-md border-gray-300 bg-gray-50 shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                class="mt-1 block w-full resize-none rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                                 @input="autoResizeNotes"
                             />
                             <InputError class="mt-2" :message="form.errors.notes" />
@@ -1435,7 +1435,7 @@ onBeforeUnmount(() => {
                         <textarea
                             v-model="manualHtml"
                             rows="8"
-                            class="block w-full rounded-md border-gray-300 bg-gray-50 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                            class="block w-full rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-2.5 text-sm text-heading shadow-xs focus:border-brand focus:ring-brand placeholder:text-body"
                             placeholder="&lt;!doctype html&gt;..."
                         />
                         <div class="flex items-center justify-between gap-3">
@@ -1446,7 +1446,7 @@ onBeforeUnmount(() => {
                                     accept=".html,.htm,text/html"
                                     @change="handleManualHtmlFileChange"
                                 />
-                                <span class="rounded-lg border border-gray-300 bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+                                <span class="rounded-base border border-default-medium bg-neutral-secondary-medium px-3 py-1.5 text-xs font-semibold text-heading hover:bg-neutral-secondary-medium/80">
                                     Upload HTML bestand
                                 </span>
                             </label>
@@ -1468,3 +1468,4 @@ onBeforeUnmount(() => {
         </div>
     </AuthenticatedLayout>
 </template>
+
