@@ -5,8 +5,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
-        "dev": "vite",
+        "tokens:sync": "node scripts/sync-design-tokens.mjs",
+        "build": "npm run tokens:sync && vite build",
+        "dev": "npm run tokens:sync && vite",
         "up": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1"
     },
     "devDependencies": {
@@ -24,6 +25,7 @@
         "vue": "^3.4.0"
     },
     "dependencies": {
-        "flowbite": "^4.0.1"
+        "flowbite": "^4.0.1",
+        "flowbite-vue": "^0.2.3"
     }
 }

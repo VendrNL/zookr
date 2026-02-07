@@ -149,4 +149,12 @@ Als je als agent wijzigingen voorstelt:
     -   welke routes/policies geraakt worden
     -   welke commands ik moet draaien om te valideren
 
+## 10) Design system afspraken (Flowbite + tokens)
+
+-   Gebruik voor nieuwe UI bij voorkeur `flowbite-vue` componenten.
+-   Design tokens hebben 1 bron: `resources/design/tokens.json`.
+-   Sync tokens altijd met `npm run tokens:sync` (genereert `resources/css/design-tokens.css`).
+-   In nieuwe code geen hardcoded hex-kleuren als er al een token voor bestaat.
+-   Tailwind classes moeten zoveel mogelijk uit token-mapped waarden komen (bijv. `bg-surface-base`, `text-surface-text`, `text-brand-600`).
+
 Einde.

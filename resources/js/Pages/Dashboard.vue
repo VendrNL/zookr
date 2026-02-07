@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DesignSystemShowcase from '@/Components/DesignSystemShowcase.vue';
 import PageContainer from '@/Components/PageContainer.vue';
 import { Head } from '@inertiajs/vue3';
 </script>
@@ -16,14 +17,7 @@ import { Head } from '@inertiajs/vue3';
 
         <div class="py-8">
             <PageContainer>
-                <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        Zoekvragen
-                    </h3>
-                    <p class="mt-2 text-sm text-gray-600">
-                        Bekijk en beheer je zoekvragen.
-                    </p>
-                </div>
+                <DesignSystemShowcase />
             </PageContainer>
         </div>
     </AuthenticatedLayout>
