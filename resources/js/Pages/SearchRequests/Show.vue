@@ -544,30 +544,29 @@ watch(
                             <p v-else class="text-gray-900">-</p>
                         </div>
 
-                        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-                            <div class="flex flex-wrap gap-3">
-                                <Link
-                                    v-if="can.update"
-                                    :href="route('search-requests.edit', item.id)"
-                                    class="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                                >
-                                    Bewerk
-                                </Link>
-                                <DangerButton
-                                    v-if="can.delete"
-                                    type="button"
-                                    @click="confirmDelete"
-                                    :disabled="deleteForm.processing"
-                                >
-                                    Verwijderen
-                                </DangerButton>
-                            </div>
+                        <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
                             <Link
                                 v-if="can.offer"
                                 :href="route('search-requests.properties.create', item.id)"
-                                class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
                             >
                                 Pand aanbieden
+                            </Link>
+                            <button
+                                v-if="can.delete"
+                                type="button"
+                                class="inline-flex items-center justify-center text-white bg-red-600 box-border border border-transparent hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-xs font-medium leading-5 rounded-lg text-sm px-4 py-2.5 focus:outline-none"
+                                :disabled="deleteForm.processing"
+                                @click="confirmDelete"
+                            >
+                                Verwijderen
+                            </button>
+                            <Link
+                                v-if="can.update"
+                                :href="route('search-requests.edit', item.id)"
+                                class="inline-flex items-center rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition duration-150 ease-in-out hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                            >
+                                Bewerk
                             </Link>
                         </div>
                     </FormSection>
@@ -598,7 +597,7 @@ watch(
                                     <select
                                         id="assigned_to"
                                         v-model.number="assignForm.assigned_to"
-                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-gray-900 focus:ring-gray-900"
+                                        class="mt-1 block w-full px-3 py-2.5 bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand shadow-xs placeholder:text-body"
                                     >
                                         <option :value="null">
                                             Geen toewijzing
@@ -863,4 +862,3 @@ watch(
         </Modal>
     </AuthenticatedLayout>
 </template>
-
