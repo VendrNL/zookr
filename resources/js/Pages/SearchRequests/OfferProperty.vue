@@ -31,6 +31,7 @@ const props = defineProps({
 const form = useForm({
     address: "",
     city: "",
+    bag_address_id: "",
     name: "",
     surface_area: "",
     availability: "",
@@ -66,6 +67,31 @@ const manualError = ref("");
 const notesInput = ref(null);
 const remoteImageInput = ref("");
 const submitError = ref("");
+const addressSuggestions = ref([]);
+const isAddressLookupBusy = ref(false);
+const showAddressSuggestions = ref(false);
+const addressLookupError = ref("");
+const addressLookupInfo = ref("");
+const addressLookupTimer = ref(null);
+const addressLookupAbortController = ref(null);
+const enrichmentData = ref(null);
+const isEnrichmentLoading = ref(false);
+const enrichmentError = ref("");
+const mapContainer = ref(null);
+const mapInstance = ref(null);
+const mapMarker = ref(null);
+const mapOverlay = ref(null);
+const mapMode = ref("kaart");
+const mapApiLoading = ref(false);
+
+const diagnosticBadgeClass = (status) => {
+    if (status === "ok") return "bg-green-100 text-green-800";
+    if (status === "missing_key") return "bg-amber-100 text-amber-800";
+    if (status === "failed") return "bg-red-100 text-red-800";
+    if (status === "skipped") return "bg-gray-200 text-gray-700";
+    if (status === "no_data") return "bg-blue-100 text-blue-800";
+    return "bg-gray-100 text-gray-700";
+};
 
 const safeImages = computed(() =>
     Array.isArray(form.images) ? form.images.filter(Boolean) : []
@@ -331,6 +357,340 @@ const handleUrlBlur = () => {
     urlInput.value = stripScheme(form.url);
 };
 
+const resetAddressSelection = () => {
+    form.bag_address_id = "";
+    form.city = "";
+};
+
+const fetchAddressSuggestions = async (query) => {
+    if (addressLookupAbortController.value) {
+        addressLookupAbortController.value.abort();
+    }
+
+    const controller = new AbortController();
+    addressLookupAbortController.value = controller;
+    isAddressLookupBusy.value = true;
+    addressLookupError.value = "";
+
+    try {
+        const params = new URLSearchParams({ q: query });
+        const response = await fetch(
+            `${route("search-requests.properties.bag-addresses", props.item.id)}?${params.toString()}`,
+            {
+                method: "GET",
+                headers: {
+                    Accept: "application/json",
+                },
+                signal: controller.signal,
+            }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            addressLookupError.value =
+                data?.message || "Adres suggesties ophalen is mislukt.";
+            addressLookupInfo.value = "";
+            addressSuggestions.value = [];
+            return;
+        }
+
+        addressSuggestions.value = Array.isArray(data?.items) ? data.items : [];
+        const fallbackMessage = typeof data?.message === "string" ? data.message : "";
+        addressLookupInfo.value = /PDOK Locatieserver/i.test(fallbackMessage)
+            ? "BAG offline, fallback via PDOK actief"
+            : "";
+        showAddressSuggestions.value = true;
+    } catch (error) {
+        if (error?.name !== "AbortError") {
+            addressLookupError.value = "Adres suggesties ophalen is mislukt.";
+            addressLookupInfo.value = "";
+            addressSuggestions.value = [];
+        }
+    } finally {
+        if (addressLookupAbortController.value === controller) {
+            addressLookupAbortController.value = null;
+        }
+        isAddressLookupBusy.value = false;
+    }
+};
+
+const scheduleAddressLookup = () => {
+    if (addressLookupTimer.value) {
+        clearTimeout(addressLookupTimer.value);
+    }
+
+    const query = (form.address ?? "").trim();
+
+    if (query.length < 3) {
+        if (addressLookupAbortController.value) {
+            addressLookupAbortController.value.abort();
+            addressLookupAbortController.value = null;
+        }
+        addressSuggestions.value = [];
+        showAddressSuggestions.value = false;
+        addressLookupError.value = "";
+        addressLookupInfo.value = "";
+        isAddressLookupBusy.value = false;
+        return;
+    }
+
+    addressLookupTimer.value = setTimeout(() => {
+        fetchAddressSuggestions(query);
+    }, 250);
+};
+
+const handleAddressInput = () => {
+    if (addressLookupAbortController.value) {
+        addressLookupAbortController.value.abort();
+        addressLookupAbortController.value = null;
+    }
+    resetAddressSelection();
+    enrichmentData.value = null;
+    enrichmentError.value = "";
+    form.clearErrors("address", "bag_address_id", "city");
+    scheduleAddressLookup();
+};
+
+const selectAddressSuggestion = async (item) => {
+    form.address = item.label ?? item.address ?? "";
+    form.city = item.city ?? "";
+    form.bag_address_id = item.id ?? "";
+    showAddressSuggestions.value = false;
+    addressSuggestions.value = [];
+    addressLookupError.value = "";
+    addressLookupInfo.value = "";
+    form.clearErrors("address", "bag_address_id", "city");
+    mapMode.value = "kaart";
+    await fetchAddressEnrichment();
+};
+
+const handleAddressBlur = () => {
+    if (!form.bag_address_id && addressSuggestions.value.length > 0) {
+        selectAddressSuggestion(addressSuggestions.value[0]);
+        return;
+    }
+
+    setTimeout(() => {
+        showAddressSuggestions.value = false;
+    }, 120);
+};
+
+const handleAddressFocus = () => {
+    if (addressSuggestions.value.length > 0) {
+        showAddressSuggestions.value = true;
+    }
+};
+
+const parsePointWkt = (wkt) => {
+    if (typeof wkt !== "string") return null;
+    const match = wkt.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
+    if (!match) return null;
+    const lng = Number.parseFloat(match[1]);
+    const lat = Number.parseFloat(match[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+};
+
+const ensureGoogleMapsApi = async () => {
+    if (globalThis.google?.maps) {
+        return true;
+    }
+    if (mapApiLoading.value) {
+        return false;
+    }
+
+    mapApiLoading.value = true;
+    try {
+        const apiKey = enrichmentData.value?.map?.google_maps_api_key;
+        if (!apiKey) {
+            return false;
+        }
+
+        if (document.getElementById("google-maps-script")) {
+            return true;
+        }
+
+        await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.id = "google-maps-script";
+            script.src =
+                "https://maps.googleapis.com/maps/api/js?key=" +
+                encodeURIComponent(apiKey);
+            script.async = true;
+            script.defer = true;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+
+        return Boolean(globalThis.google?.maps);
+    } catch {
+        return false;
+    } finally {
+        mapApiLoading.value = false;
+    }
+};
+
+const tileToMercatorBbox = (x, y, z) => {
+    const originShift = 20037508.342789244;
+    const tiles = 2 ** z;
+    const resolution = (2 * originShift) / (256 * tiles);
+    const minx = x * 256 * resolution - originShift;
+    const maxx = (x + 1) * 256 * resolution - originShift;
+    const maxy = originShift - y * 256 * resolution;
+    const miny = originShift - (y + 1) * 256 * resolution;
+    return [ minx, miny, maxx, maxy ];
+};
+
+const createWmsOverlay = (baseUrl, layerName) => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 0.85,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            const [ minx, miny, maxx, maxy ] = tileToMercatorBbox(coord.x, coord.y, zoom);
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetMap",
+                version: "1.3.0",
+                layers: layerName,
+                styles: "",
+                crs: "EPSG:3857",
+                bbox: `${minx},${miny},${maxx},${maxy}`,
+                width: "256",
+                height: "256",
+                format: "image/png",
+                transparent: "true",
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const updateMapMode = () => {
+    if (!mapInstance.value) return;
+
+    const mapConfig = enrichmentData.value?.map ?? {};
+    mapInstance.value.overlayMapTypes.clear();
+
+    if (mapMode.value === "earth") {
+        mapInstance.value.setMapTypeId("satellite");
+        return;
+    }
+
+    mapInstance.value.setMapTypeId("roadmap");
+
+    if (mapMode.value === "kadaster") {
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.kadastraal_wms_url,
+            mapConfig.kadastraal_wms_layer || "KadastraleGrens"
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        }
+    }
+
+    if (mapMode.value === "bodemkaart") {
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.bodemkaart_wms_url,
+            mapConfig.bodemkaart_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        }
+    }
+};
+
+const renderMap = async () => {
+    const geocode = enrichmentData.value?.geocode;
+    if (!geocode?.lat || !geocode?.lng || !mapContainer.value) {
+        return;
+    }
+
+    const mapConfig = enrichmentData.value?.map ?? {};
+    if (!mapConfig.google_maps_api_key_available) {
+        return;
+    }
+
+    const ok = await ensureGoogleMapsApi();
+    if (!ok || !globalThis.google?.maps) {
+        return;
+    }
+
+    const center = { lat: geocode.lat, lng: geocode.lng };
+    if (!mapInstance.value) {
+        mapInstance.value = new globalThis.google.maps.Map(mapContainer.value, {
+            center,
+            zoom: 17,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true,
+        });
+        mapMarker.value = new globalThis.google.maps.Marker({
+            map: mapInstance.value,
+            position: center,
+        });
+    } else {
+        mapInstance.value.setCenter(center);
+        mapMarker.value?.setPosition(center);
+    }
+
+    updateMapMode();
+};
+
+const fetchAddressEnrichment = async () => {
+    if (!form.bag_address_id) {
+        enrichmentData.value = null;
+        enrichmentError.value = "";
+        return;
+    }
+
+    isEnrichmentLoading.value = true;
+    enrichmentError.value = "";
+
+    try {
+        const response = await fetch(
+            route("search-requests.properties.address-enrichment", props.item.id) +
+                `?bag_address_id=${encodeURIComponent(form.bag_address_id)}`,
+            {
+                method: "GET",
+                headers: { Accept: "application/json" },
+            }
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            enrichmentData.value = null;
+            enrichmentError.value =
+                payload?.message || "Adresverrijking ophalen is mislukt.";
+            return;
+        }
+
+        enrichmentData.value = payload;
+
+        const bagArea = payload?.bag?.oppervlakte_m2;
+        if (
+            (form.surface_area === "" || form.surface_area === null) &&
+            Number.isFinite(Number(bagArea))
+        ) {
+            form.surface_area = Number(bagArea);
+            surfaceAreaInput.value = formatNumberValue(form.surface_area);
+        }
+
+        await nextTick();
+        await renderMap();
+    } catch {
+        enrichmentData.value = null;
+        enrichmentError.value = "Adresverrijking ophalen is mislukt.";
+    } finally {
+        isEnrichmentLoading.value = false;
+    }
+};
+
 const hasScrapeData = computed(() => {
     return Boolean(
         form.address ||
@@ -420,6 +780,7 @@ const applyScrapePayload = (payload) => {
 
     form.address = payload.address ?? "";
     form.city = payload.city ?? "";
+    form.bag_address_id = "";
     form.name = payload.name ?? "";
     form.availability = payload.availability ?? "";
     form.acquisition = payload.acquisition ?? "";
@@ -700,6 +1061,12 @@ const submit = (onSuccess) => {
     syncNumberField(rentPerM2Input, "rent_price_per_m2", formatCurrencyValue);
     syncNumberField(rentParkingInput, "rent_price_parking", formatCurrencyValue);
 
+    if (!form.bag_address_id) {
+        form.setError("address", "Kies een adres uit de BAG-suggesties.");
+        submitError.value = "Opslaan mislukt: kies een adres uit de BAG-suggesties.";
+        return;
+    }
+
     const options = {
         preserveScroll: true,
         forceFormData: true,
@@ -742,6 +1109,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     document.removeEventListener("paste", handleGlobalPaste);
+    if (addressLookupTimer.value) {
+        clearTimeout(addressLookupTimer.value);
+    }
+    if (addressLookupAbortController.value) {
+        addressLookupAbortController.value.abort();
+    }
 });
 </script>
 
@@ -796,15 +1169,49 @@ onBeforeUnmount(() => {
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
                                 <InputLabel for="address" value="Adres *" />
-                                <TextInput
-                                    id="address"
-                                    v-model="form.address"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    required
-                                    autocomplete="street-address"
-                                />
+                                <div class="relative mt-1">
+                                    <TextInput
+                                        id="address"
+                                        v-model="form.address"
+                                        type="text"
+                                        class="block w-full"
+                                        required
+                                        autocomplete="street-address"
+                                        placeholder="Zoek op straat, huisnummer, postcode of plaats"
+                                        @input="handleAddressInput"
+                                        @focus="handleAddressFocus"
+                                        @blur="handleAddressBlur"
+                                    />
+                                    <div
+                                        v-if="showAddressSuggestions && addressSuggestions.length"
+                                        class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-base border border-default-medium bg-white shadow-lg"
+                                    >
+                                        <button
+                                            v-for="item in addressSuggestions"
+                                            :key="item.id"
+                                            type="button"
+                                            class="block w-full px-3 py-2 text-left text-sm text-heading hover:bg-neutral-secondary-medium"
+                                            @mousedown.prevent="selectAddressSuggestion(item)"
+                                        >
+                                            <div class="font-medium">{{ item.label }}</div>
+                                            <div v-if="item.postcode" class="text-xs text-body">{{ item.postcode }}</div>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p v-if="isAddressLookupBusy" class="mt-2 text-xs text-body">
+                                    BAG adressen laden...
+                                </p>
+                                <p
+                                    v-else-if="addressLookupInfo"
+                                    class="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                                >
+                                    {{ addressLookupInfo }}
+                                </p>
+                                <p v-else-if="addressLookupError" class="mt-2 text-xs text-red-600">
+                                    {{ addressLookupError }}
+                                </p>
                                 <InputError class="mt-2" :message="form.errors.address" />
+                                <InputError class="mt-2" :message="form.errors.bag_address_id" />
                             </div>
                             <div>
                                 <InputLabel for="name" value="Projectnaam" />
@@ -819,20 +1226,271 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div>
-                                <InputLabel for="city" value="Plaats *" />
-                                <TextInput
-                                    id="city"
-                                    v-model="form.city"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    required
-                                    autocomplete="address-level2"
-                                />
-                                <InputError class="mt-2" :message="form.errors.city" />
+                        <input v-model="form.city" type="hidden" />
+                        <input v-model="form.bag_address_id" type="hidden" />
+
+                        <div v-if="isEnrichmentLoading" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                            Adresgegevens worden verrijkt...
+                        </div>
+                        <div v-else-if="enrichmentError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {{ enrichmentError }}
+                        </div>
+                        <div
+                            v-else-if="enrichmentData"
+                            class="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                        >
+                            <div
+                                v-if="enrichmentData?.diagnostics"
+                                class="rounded-lg border border-gray-300 bg-white p-3"
+                            >
+                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Debug status externe bronnen
+                                </div>
+                                <div class="mt-2 space-y-2">
+                                    <div
+                                        v-for="(diag, key) in enrichmentData.diagnostics"
+                                        :key="key"
+                                        class="flex items-start justify-between gap-3 rounded border border-gray-200 p-2"
+                                    >
+                                        <div class="text-sm text-gray-800">
+                                            <div class="font-semibold">{{ key }}</div>
+                                            <div class="text-xs text-gray-600">{{ diag?.detail || "-" }}</div>
+                                        </div>
+                                        <span
+                                            class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                                            :class="diagnosticBadgeClass(diag?.status)"
+                                        >
+                                            {{ diag?.status || "unknown" }}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="hidden md:block"></div>
+
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-base font-semibold text-gray-900">Locatie-informatie</h3>
+                                <a
+                                    v-if="enrichmentData?.zoning?.omgevingsplan_url"
+                                    :href="enrichmentData.zoning.omgevingsplan_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                >
+                                    Open omgevingsplangegevens
+                                </a>
+                            </div>
+
+                            <div class="grid gap-3 md:grid-cols-2">
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Geocode</div>
+                                    <div class="mt-1 text-sm text-gray-800">
+                                        {{ enrichmentData?.geocode?.lat ?? "-" }}, {{ enrichmentData?.geocode?.lng ?? "-" }}
+                                    </div>
+                                    <div class="mt-1 text-xs text-gray-600">
+                                        Bron: {{ enrichmentData?.geocode?.source === "bag_geometry_rd" ? "BAG geometrie" : "Google geocoding" }}
+                                    </div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Kadastrale aanduiding</div>
+                                    <div class="mt-1 text-sm text-gray-800">
+                                        {{ enrichmentData?.cadastre?.kadastrale_aanduiding ?? "-" }}
+                                    </div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwjaar</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.bouwjaar ?? "-" }}</div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Gebruiksfunctie</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.gebruiksfunctie ?? "-" }}</div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Oppervlakte</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.oppervlakte_m2 ?? "-" }} m2</div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Perceelsgrootte</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.cadastre?.perceelsgrootte_m2 ?? "-" }} m2</div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Energielabel</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.energielabel ?? "Niet automatisch beschikbaar" }}</div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">WOZ-waarde</div>
+                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.woz?.toelichting ?? "-" }}</div>
+                                    <a
+                                        v-if="enrichmentData?.woz?.waardeloket_url"
+                                        :href="enrichmentData.woz.waardeloket_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                    >
+                                        Open WOZ Waardeloket
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="rounded bg-white p-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        Kaartlagen
+                                    </div>
+                                    <select
+                                        v-model="mapMode"
+                                        class="rounded-base border border-default-medium bg-white px-2 py-1 text-xs text-heading"
+                                        @change="updateMapMode"
+                                    >
+                                        <option value="kaart">Kaart</option>
+                                        <option value="earth">Earth</option>
+                                        <option value="kadaster">Kadaster</option>
+                                        <option value="bodemkaart">Bodemkaart</option>
+                                    </select>
+                                </div>
+                                <div
+                                    v-if="enrichmentData?.map?.google_maps_api_key_available"
+                                    ref="mapContainer"
+                                    class="mt-3 h-72 w-full overflow-hidden rounded-lg border border-gray-200"
+                                ></div>
+                                <div v-else class="mt-3 text-sm text-gray-600">
+                                    Google Maps API-key ontbreekt; kaart kan niet geladen worden.
+                                </div>
+                            </div>
+
+                            <div class="grid gap-3 md:grid-cols-2">
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemmingsplan / WKBP</div>
+                                    <div class="mt-1 text-sm text-gray-700">{{ enrichmentData?.zoning?.toelichting }}</div>
+                                    <div
+                                        v-if="enrichmentData?.zoning?.planobjecten?.length"
+                                        class="mt-3 space-y-2"
+                                    >
+                                        <div
+                                            v-for="plan in enrichmentData.zoning.planobjecten"
+                                            :key="plan.identificatie || plan.naam"
+                                            class="rounded border border-gray-200 bg-gray-50 p-2"
+                                        >
+                                            <div class="text-sm font-semibold text-gray-900">
+                                                {{ plan.naam || plan.identificatie || "Planobject" }}
+                                            </div>
+                                            <div class="mt-1 text-xs text-gray-700">
+                                                {{ plan.typeplan || "Onbekend type" }} | {{ plan.planstatus || "Onbekende status" }}
+                                            </div>
+                                            <div class="mt-1 text-xs text-gray-700">
+                                                {{ plan.naamoverheid || "Onbekende overheid" }}
+                                            </div>
+                                            <a
+                                                v-if="plan.verwijzing_tekst_urls?.[0]"
+                                                :href="plan.verwijzing_tekst_urls[0]"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open plantekst
+                                            </a>
+                                            <a
+                                                v-if="plan.verwijzing_vaststellingsbesluit_urls?.[0]"
+                                                :href="plan.verwijzing_vaststellingsbesluit_urls[0]"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-2 mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open vaststellingsbesluit
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Monumentenstatus</div>
+                                    <div class="mt-1 text-sm text-gray-700">
+                                        Rijksmonument: {{ enrichmentData?.heritage?.is_monument ? "Ja" : "Nee" }}
+                                    </div>
+                                    <div class="text-sm text-gray-700">
+                                        Beschermd gezicht: {{ enrichmentData?.heritage?.beschermd_stads_dorpsgezicht ? "Ja" : "Nee" }}
+                                    </div>
+                                    <div
+                                        v-if="enrichmentData?.heritage?.rijksmonumenten?.length"
+                                        class="mt-2 space-y-2"
+                                    >
+                                        <div
+                                            v-for="monument in enrichmentData.heritage.rijksmonumenten"
+                                            :key="monument.resource || monument.nummer"
+                                            class="rounded border border-gray-200 bg-gray-50 p-2"
+                                        >
+                                            <div class="text-sm font-semibold text-gray-900">
+                                                {{ monument.naam || "Rijksmonument" }}
+                                            </div>
+                                            <div class="text-xs text-gray-700">
+                                                Nummer: {{ monument.nummer || "-" }}
+                                            </div>
+                                            <a
+                                                v-if="monument.detail_url"
+                                                :href="monument.detail_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open detail
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-if="enrichmentData?.heritage?.gezichten?.length"
+                                        class="mt-2 space-y-2"
+                                    >
+                                        <div
+                                            v-for="gezicht in enrichmentData.heritage.gezichten"
+                                            :key="gezicht.resource || gezicht.nummer"
+                                            class="rounded border border-gray-200 bg-gray-50 p-2"
+                                        >
+                                            <div class="text-sm font-semibold text-gray-900">
+                                                {{ gezicht.naam || "Beschermd gezicht" }}
+                                            </div>
+                                            <div class="text-xs text-gray-700">
+                                                Gezichtsnummer: {{ gezicht.nummer || "-" }}
+                                            </div>
+                                            <div class="text-xs text-gray-700">
+                                                Registratiedatum: {{ gezicht.registratiedatum || "-" }}
+                                            </div>
+                                            <a
+                                                v-if="gezicht.detail_url"
+                                                :href="gezicht.detail_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open detail
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <a
+                                        v-if="enrichmentData?.heritage?.monumentenregister_url"
+                                        :href="enrichmentData.heritage.monumentenregister_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-2 inline-block text-sm font-semibold text-blue-700 hover:text-blue-800"
+                                    >
+                                        Open monumentenregister
+                                    </a>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bodemvervuiling</div>
+                                    <a
+                                        v-if="enrichmentData?.soil?.bodemloket_url"
+                                        :href="enrichmentData.soil.bodemloket_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-1 inline-block text-sm font-semibold text-blue-700 hover:text-blue-800"
+                                    >
+                                        Open Bodemloket
+                                    </a>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bereikbaarheid</div>
+                                    <div class="mt-1 text-sm text-gray-700">
+                                        OV/auto/knooppunten via open bronnen (PDOK/CBS) zijn als bronlinks toegevoegd.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">

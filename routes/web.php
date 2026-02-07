@@ -196,6 +196,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:offer,search_request');
 
     Route::get(
+        'search-requests/{search_request}/properties/bag-addresses',
+        [PropertyController::class, 'bagAddressSuggestions']
+    )
+        ->name('search-requests.properties.bag-addresses')
+        ->middleware('can:offer,search_request');
+
+    Route::get(
+        'search-requests/{search_request}/properties/address-enrichment',
+        [PropertyController::class, 'addressEnrichment']
+    )
+        ->name('search-requests.properties.address-enrichment')
+        ->middleware('can:offer,search_request');
+
+    Route::get(
         'search-requests/{search_request}/properties/{property}/edit',
         [PropertyController::class, 'edit']
     )

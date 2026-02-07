@@ -35,4 +35,24 @@ return [
         ],
     ],
 
+    'bag' => [
+        'base_url' => env('BAG_API_BASE_URL', 'https://api.bag.kadaster.nl/lvbag/individuelebevragingen/v2'),
+        'api_key' => env('BAG_API_KEY'),
+    ],
+
+    'google_maps' => [
+        'api_key' => env('GOOGLE_MAPS_API_KEY'),
+    ],
+
+    'pdok' => [
+        'kadastraal_wms_url' => env('PDOK_KADASTRAAL_WMS_URL', 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0'),
+        'bodemkaart_wms_url' => env('PDOK_BODEMKAART_WMS_URL'),
+        'bodemkaart_wms_layer' => env('PDOK_BODEMKAART_WMS_LAYER', 'bodemkaart'),
+        'ruimtelijke_plannen_wms_url' => env('PDOK_RUIMTELIJKE_PLANNEN_WMS_URL', 'https://service.pdok.nl/kadaster/ruimtelijke-plannen/wms/v1_0'),
+    ],
+
+    'rce' => [
+        'sparql_url' => env('RCE_SPARQL_URL', 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/cho/services/cho/sparql'),
+    ],
+
 ];
