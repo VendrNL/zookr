@@ -8,4 +8,10 @@
     body {
         @apply font-sans text-gray-900;
     }
+
+    h1.text-2xl,
+    h2.text-2xl {
+        font-weight: 700;
+        letter-spacing: -0.6px;
+    }
 }
