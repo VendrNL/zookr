@@ -86,6 +86,10 @@ const mapStreetView = ref(null);
 const mapApiLoading = ref(false);
 const mapLoadError = ref("");
 const mapRenderRetryTimer = ref(null);
+const mapFeatureInfoItems = ref([]);
+const mapFeatureInfoLoading = ref(false);
+const mapFeatureInfoMessage = ref("");
+const mapFeatureInfoNotice = ref("");
 
 const diagnosticBadgeClass = (status) => {
     if (status === "ok") return "bg-green-100 text-green-800";
@@ -95,6 +99,65 @@ const diagnosticBadgeClass = (status) => {
     if (status === "no_data") return "bg-blue-100 text-blue-800";
     return "bg-gray-100 text-gray-700";
 };
+
+const isDiagnosticErrorStatus = (status) => {
+    const normalized = String(status ?? "").trim().toLowerCase();
+    return ![ "ok", "skipped", "pending", "no_data" ].includes(normalized);
+};
+
+const errorDiagnostics = computed(() => {
+    const diagnostics = enrichmentData.value?.diagnostics;
+    if (!diagnostics || typeof diagnostics !== "object") {
+        return [];
+    }
+
+    return Object.entries(diagnostics)
+        .filter(([, diag]) => isDiagnosticErrorStatus(diag?.status))
+        .map(([ key, diag ]) => ({ key, diag }));
+});
+
+const energyLabelOrder = [ "A++++", "A+++", "A++", "A+", "A", "B", "C", "D", "E", "F", "G" ];
+
+const energyLabelColorMap = {
+    "A++++": "#1d8f45",
+    "A+++": "#1f9546",
+    "A++": "#229b47",
+    "A+": "#24a24a",
+    A: "#2fab4d",
+    B: "#49ad49",
+    C: "#9cb83b",
+    D: "#dfdb66",
+    E: "#e2c543",
+    F: "#ef8a1f",
+    G: "#e1472c",
+};
+
+const normalizeEnergyLabel = (value) => {
+    if (typeof value !== "string") return "";
+    const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
+    if (normalized === "A4+") return "A++++";
+    if (normalized === "A3+") return "A+++";
+    if (normalized === "A2+") return "A++";
+    if (normalized === "A1+") return "A+";
+    return normalized;
+};
+
+const selectedEnergyLabel = computed(() =>
+    normalizeEnergyLabel(enrichmentData.value?.bag?.energielabel ?? "")
+);
+
+const hasGraphicalEnergyLabel = computed(() =>
+    energyLabelOrder.includes(selectedEnergyLabel.value)
+);
+
+const selectedEnergyLabelIndex = computed(() =>
+    energyLabelOrder.indexOf(selectedEnergyLabel.value)
+);
+
+const selectedEnergyLabelWidth = computed(() => {
+    if (selectedEnergyLabelIndex.value < 0) return 76;
+    return 56 + selectedEnergyLabelIndex.value * 4;
+});
 
 const safeImages = computed(() =>
     Array.isArray(form.images) ? form.images.filter(Boolean) : []
@@ -580,6 +643,348 @@ const createWmsOverlay = (baseUrl, layerName) => {
     });
 };
 
+const tileToLonLatBbox = (x, y, z) => {
+    const tiles = 2 ** z;
+    const lonLeft = (x / tiles) * 360 - 180;
+    const lonRight = ((x + 1) / tiles) * 360 - 180;
+    const latTop = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / tiles))) * 180) / Math.PI;
+    const latBottom =
+        (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 1)) / tiles))) * 180) / Math.PI;
+    return [ lonLeft, latBottom, lonRight, latTop ];
+};
+
+const createWmsOverlayCrs84 = (baseUrl, layerName) => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 0.9,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            const [ minLon, minLat, maxLon, maxLat ] = tileToLonLatBbox(
+                coord.x,
+                coord.y,
+                zoom
+            );
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetMap",
+                version: "1.3.0",
+                layers: layerName,
+                styles: "",
+                crs: "CRS:84",
+                bbox: `${minLon},${minLat},${maxLon},${maxLat}`,
+                width: "256",
+                height: "256",
+                format: "image/png",
+                transparent: "true",
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const createWmtsOverlay = (baseUrl, layerName, matrixSet = "EPSG:3857", format = "image/png") => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 1,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            if (zoom < 0 || zoom > 19) return "";
+            const maxTile = 2 ** zoom;
+            if (coord.y < 0 || coord.y >= maxTile) return "";
+            const normalizedX = ((coord.x % maxTile) + maxTile) % maxTile;
+            const tileMatrix = String(zoom).padStart(2, "0");
+
+            const params = new URLSearchParams({
+                SERVICE: "WMTS",
+                REQUEST: "GetTile",
+                VERSION: "1.0.0",
+                LAYER: layerName,
+                STYLE: "default",
+                FORMAT: format,
+                TILEMATRIXSET: matrixSet,
+                TILEMATRIX: tileMatrix,
+                TILEROW: String(coord.y),
+                TILECOL: String(normalizedX),
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const mapLegendContainerClass = computed(() =>
+    mapMode.value === "energielabels"
+        ? "pointer-events-none absolute bottom-2 left-2 z-[5] max-h-[78%] max-w-[85%] overflow-auto rounded-md border border-gray-300 bg-white/95 p-3 shadow-sm"
+        : "pointer-events-none absolute bottom-2 left-2 z-[5] max-w-[60%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
+);
+
+const mapLegendImageClass = computed(() =>
+    mapMode.value === "energielabels" ? "max-h-[55vh] w-auto" : "max-h-24 w-auto"
+);
+
+const neutralOverlayBaseMapStyles = [
+    { elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "poi", stylers: [{ visibility: "off" }] },
+    { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
+const legendImageErrors = ref({});
+
+const buildWmsLegendItems = (baseUrl, layerNames) => {
+    if (!baseUrl || !layerNames) {
+        return [];
+    }
+
+    return String(layerNames)
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value !== "")
+        .map((layer) => {
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetLegendGraphic",
+                format: "image/png",
+                layer,
+            });
+
+            return {
+                layer,
+                url: `${baseUrl}?${params.toString()}`,
+            };
+        });
+};
+
+const mapLegend = computed(() => {
+    const mapConfig = enrichmentData.value?.map ?? {};
+
+    if (mapMode.value === "kadaster") {
+        return {
+            title: "Legenda Kadaster",
+            items: buildWmsLegendItems(
+                mapConfig.kadastraal_wms_url,
+                mapConfig.kadastraal_wms_layer || "Perceel,Label,KadastraleGrens"
+            ),
+        };
+    }
+
+    if (mapMode.value === "bodemkaart") {
+        return {
+            title: "Legenda Bodemkaart",
+            items: buildWmsLegendItems(
+                mapConfig.bodemkaart_wms_url,
+                mapConfig.bodemkaart_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        return {
+            title: "Legenda Bodemverontreiniging",
+            items: buildWmsLegendItems(
+                mapConfig.bodemverontreiniging_wms_url,
+                mapConfig.bodemverontreiniging_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "energielabels") {
+        return {
+            title: "Legenda Energielabels",
+            items: buildWmsLegendItems(
+                mapConfig.energielabel_wms_url,
+                mapConfig.energielabel_wms_layer
+            ),
+        };
+    }
+
+    return {
+        title: "",
+        items: [],
+    };
+});
+
+const visibleLegendItems = computed(() =>
+    (mapLegend.value.items ?? []).filter(
+        (item) => item?.url && !legendImageErrors.value[item.url]
+    )
+);
+
+const layerLabel = (name) => String(name ?? "").replace(/_/g, " ");
+
+const fallbackLegendItems = computed(() => {
+    if (mapMode.value === "kadaster") {
+        return [
+            {
+                label: "Perceelvlak",
+                style: {
+                    backgroundColor: "rgba(37, 99, 235, 0.10)",
+                    border: "1px solid #2563eb",
+                },
+            },
+            {
+                label: "Kadastrale grens",
+                style: {
+                    backgroundColor: "transparent",
+                    border: "2px solid #1d4ed8",
+                },
+            },
+            {
+                label: "Perceelnummer (label)",
+                style: {
+                    backgroundColor: "#f3f4f6",
+                    border: "1px dashed #6b7280",
+                },
+            },
+        ];
+    }
+
+    if (mapMode.value === "bodemkaart") {
+        const names = (mapLegend.value.items ?? []).map((item) => item.layer);
+        return names.map((name) => ({
+            label: layerLabel(name),
+            style: {
+                backgroundColor: "#f3f4f6",
+                border: "1px solid #9ca3af",
+            },
+        }));
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        return [
+            {
+                label: "Saneringsactiviteit",
+                style: {
+                    backgroundColor: "#e7f8ea",
+                    border: "2px solid #22c55e",
+                },
+            },
+            {
+                label: "Voldoende onderzocht/gesaneerd",
+                style: {
+                    backgroundColor: "#f3e8ff",
+                    border: "2px solid #a855f7",
+                },
+            },
+            {
+                label: "Onderzoek uitvoeren",
+                style: {
+                    backgroundColor: "#fff3e6",
+                    border: "2px solid #f59e0b",
+                },
+            },
+            {
+                label: "Historie bekend",
+                style: {
+                    backgroundColor: "#e0f2fe",
+                    border: "2px solid #06b6d4",
+                },
+            },
+            {
+                label: "Gegevens aanwezig, status onbekend",
+                style: {
+                    backgroundColor: "#e8edff",
+                    border: "2px solid #4f46e5",
+                },
+            },
+        ];
+    }
+
+    if (mapMode.value === "energielabels") {
+        return [
+            { label: "Geen label", style: { backgroundColor: "#f3f4f6", border: "1px solid #9ca3af" } },
+            { label: "Klasse A+++++", style: { backgroundColor: "#14532d", border: "1px solid #14532d" } },
+            { label: "Klasse A++++", style: { backgroundColor: "#166534", border: "1px solid #166534" } },
+            { label: "Klasse A+++", style: { backgroundColor: "#15803d", border: "1px solid #15803d" } },
+            { label: "Klasse A++", style: { backgroundColor: "#16a34a", border: "1px solid #16a34a" } },
+            { label: "Klasse A+", style: { backgroundColor: "#22c55e", border: "1px solid #22c55e" } },
+            { label: "Klasse A", style: { backgroundColor: "#65a30d", border: "1px solid #65a30d" } },
+            { label: "Klasse B", style: { backgroundColor: "#a3e635", border: "1px solid #84cc16" } },
+            { label: "Klasse C", style: { backgroundColor: "#facc15", border: "1px solid #eab308" } },
+            { label: "Klasse D", style: { backgroundColor: "#f59e0b", border: "1px solid #d97706" } },
+            { label: "Klasse E", style: { backgroundColor: "#fb923c", border: "1px solid #ea580c" } },
+            { label: "Klasse F", style: { backgroundColor: "#f97316", border: "1px solid #ea580c" } },
+            { label: "Klasse G", style: { backgroundColor: "#ef4444", border: "1px solid #dc2626" } },
+        ];
+    }
+
+    return [];
+});
+
+const handleLegendImageError = (url) => {
+    legendImageErrors.value = {
+        ...legendImageErrors.value,
+        [url]: true,
+    };
+};
+
+const clearMapFeatureInfo = () => {
+    mapFeatureInfoItems.value = [];
+    mapFeatureInfoLoading.value = false;
+    mapFeatureInfoMessage.value = "";
+    mapFeatureInfoNotice.value = "";
+};
+
+const fetchMapFeatureInfo = async (lat, lng) => {
+    const interactiveModes = ["kadaster", "bodemkaart", "bodemverontreiniging", "energielabels"];
+    if (!interactiveModes.includes(mapMode.value)) {
+        clearMapFeatureInfo();
+        return;
+    }
+
+    mapFeatureInfoLoading.value = true;
+    mapFeatureInfoMessage.value = "";
+    mapFeatureInfoNotice.value = "";
+    mapFeatureInfoItems.value = [];
+
+    try {
+        const params = new URLSearchParams({
+            mode: mapMode.value,
+            lat: String(lat),
+            lng: String(lng),
+        });
+        const response = await fetch(
+            `${route("search-requests.properties.map-feature-info", props.item.id)}?${params.toString()}`,
+            {
+                method: "GET",
+                headers: { Accept: "application/json" },
+            }
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            mapFeatureInfoMessage.value =
+                payload?.message || "Kaartinformatie ophalen is mislukt.";
+            return;
+        }
+
+        mapFeatureInfoNotice.value =
+            typeof payload?.notice === "string" ? payload.notice : "";
+
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        mapFeatureInfoItems.value = items.filter(
+            (item) =>
+                item &&
+                item.title &&
+                (
+                    (item.value !== null && item.value !== "") ||
+                    (typeof item.url === "string" && item.url !== "")
+                )
+        );
+        if (mapFeatureInfoItems.value.length === 0) {
+            mapFeatureInfoMessage.value = "Geen aanvullende kaartinformatie op dit punt.";
+        }
+    } catch {
+        mapFeatureInfoMessage.value = "Kaartinformatie ophalen is mislukt.";
+    } finally {
+        mapFeatureInfoLoading.value = false;
+    }
+};
+
 const getEnrichmentCoordinates = () => {
     const markerData = enrichmentData.value?.map?.marker;
     const fallbackGeocode = enrichmentData.value?.geocode;
@@ -658,11 +1063,13 @@ const updateMapMode = () => {
 
     const mapConfig = enrichmentData.value?.map ?? {};
     const coords = getEnrichmentCoordinates();
+    mapLoadError.value = "";
     mapInstance.value.overlayMapTypes.clear();
     mapInstance.value.setOptions({ styles: null });
     if (mapStreetView.value) {
         mapStreetView.value.setVisible(false);
     }
+    clearMapFeatureInfo();
 
     if (mapMode.value === "streetview") {
         if (!coords) {
@@ -683,11 +1090,7 @@ const updateMapMode = () => {
 
     if (mapMode.value === "kadaster") {
         mapInstance.value.setOptions({
-            styles: [
-                { elementType: "labels", stylers: [{ visibility: "off" }] },
-                { featureType: "poi", stylers: [{ visibility: "off" }] },
-                { featureType: "transit", stylers: [{ visibility: "off" }] },
-            ],
+            styles: neutralOverlayBaseMapStyles,
         });
 
         mapOverlay.value = createWmsOverlay(
@@ -700,12 +1103,60 @@ const updateMapMode = () => {
     }
 
     if (mapMode.value === "bodemkaart") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
         mapOverlay.value = createWmsOverlay(
             mapConfig.bodemkaart_wms_url,
             mapConfig.bodemkaart_wms_layer
         );
         if (mapOverlay.value) {
             mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Bodemkaart-laag niet beschikbaar. Stel PDOK_BODEMKAART_WMS_URL en PDOK_BODEMKAART_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.bodemverontreiniging_wms_url,
+            mapConfig.bodemverontreiniging_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Bodemverontreiniging-laag niet beschikbaar. Stel PDOK_BODEMVERONTREINIGING_WMS_URL en PDOK_BODEMVERONTREINIGING_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "energielabels") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        const wmtsOverlay = createWmtsOverlay(
+            mapConfig.wegenkaart_grijs_wmts_url,
+            mapConfig.wegenkaart_grijs_wmts_layer || "grijs",
+            mapConfig.wegenkaart_grijs_wmts_matrixset || "EPSG:3857"
+        );
+        if (wmtsOverlay) {
+            mapInstance.value.overlayMapTypes.push(wmtsOverlay);
+        }
+
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.energielabel_wms_url,
+            mapConfig.energielabel_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Energielabel-laag niet beschikbaar. Stel PDOK_ENERGIELABEL_WMS_URL en PDOK_ENERGIELABEL_WMS_LAYER in.";
         }
     }
 };
@@ -740,13 +1191,29 @@ const renderMap = async () => {
     mapLoadError.value = "";
 
     const center = coords;
-    if (!mapInstance.value) {
+    const currentMapDiv =
+        mapInstance.value && typeof mapInstance.value.getDiv === "function"
+            ? mapInstance.value.getDiv()
+            : null;
+    const needsNewMapInstance = !mapInstance.value || currentMapDiv !== mapContainer.value;
+
+    if (needsNewMapInstance) {
         mapInstance.value = new globalThis.google.maps.Map(mapContainer.value, {
             center,
             zoom: 19,
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: true,
+        });
+        mapStreetView.value = null;
+        mapOverlay.value = null;
+        mapInstance.value.addListener("click", (event) => {
+            const lat = event?.latLng?.lat?.();
+            const lng = event?.latLng?.lng?.();
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                return;
+            }
+            fetchMapFeatureInfo(lat, lng);
         });
         mapMarker.value = new globalThis.google.maps.Marker({
             map: mapInstance.value,
@@ -1229,9 +1696,19 @@ onMounted(() => {
 watch(
     () => [enrichmentData.value?.map?.google_maps_api_key_available, mapContainer.value],
     () => {
+        legendImageErrors.value = {};
+        clearMapFeatureInfo();
         if (enrichmentData.value?.map?.google_maps_api_key_available) {
             renderMap();
         }
+    }
+);
+
+watch(
+    () => mapMode.value,
+    () => {
+        legendImageErrors.value = {};
+        clearMapFeatureInfo();
     }
 );
 
@@ -1371,7 +1848,7 @@ onBeforeUnmount(() => {
                             class="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
                         >
                             <div
-                                v-if="enrichmentData?.diagnostics"
+                                v-if="errorDiagnostics.length"
                                 class="rounded-lg border border-gray-300 bg-white p-3"
                             >
                                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -1379,19 +1856,19 @@ onBeforeUnmount(() => {
                                 </div>
                                 <div class="mt-2 space-y-2">
                                     <div
-                                        v-for="(diag, key) in enrichmentData.diagnostics"
-                                        :key="key"
+                                        v-for="item in errorDiagnostics"
+                                        :key="item.key"
                                         class="flex items-start justify-between gap-3 rounded border border-gray-200 p-2"
                                     >
                                         <div class="text-sm text-gray-800">
-                                            <div class="font-semibold">{{ key }}</div>
-                                            <div class="text-xs text-gray-600">{{ diag?.detail || "-" }}</div>
+                                            <div class="font-semibold">{{ item.key }}</div>
+                                            <div class="text-xs text-gray-600">{{ item.diag?.detail || "-" }}</div>
                                         </div>
                                         <span
                                             class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
-                                            :class="diagnosticBadgeClass(diag?.status)"
+                                            :class="diagnosticBadgeClass(item.diag?.status)"
                                         >
-                                            {{ diag?.status || "unknown" }}
+                                            {{ item.diag?.status || "unknown" }}
                                         </span>
                                     </div>
                                 </div>
@@ -1427,6 +1904,21 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
                                 <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">BAG-ID</div>
+                                    <div class="mt-1 text-sm text-gray-800">
+                                        {{ enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id ?? "-" }}
+                                    </div>
+                                    <a
+                                        v-if="enrichmentData?.bag?.bag_viewer_url"
+                                        :href="enrichmentData.bag.bag_viewer_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                    >
+                                        Open in BAG Viewer
+                                    </a>
+                                </div>
+                                <div class="rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwjaar</div>
                                     <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.bouwjaar ?? "-" }}</div>
                                 </div>
@@ -1444,7 +1936,21 @@ onBeforeUnmount(() => {
                                 </div>
                                 <div class="rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Energielabel</div>
-                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.energielabel ?? "Niet automatisch beschikbaar" }}</div>
+                                    <div v-if="hasGraphicalEnergyLabel" class="mt-2">
+                                        <div
+                                            class="h-8 text-white"
+                                            :style="{
+                                                width: `${selectedEnergyLabelWidth}%`,
+                                                backgroundColor: energyLabelColorMap[selectedEnergyLabel] ?? '#9ca3af',
+                                                clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)',
+                                            }"
+                                        >
+                                            <div class="flex h-full items-center px-2 text-sm font-bold drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
+                                                {{ selectedEnergyLabel }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-else class="mt-1 text-sm text-gray-800">Niet automatisch beschikbaar</div>
                                 </div>
                                 <div class="rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">WOZ-waarde</div>
@@ -1476,13 +1982,94 @@ onBeforeUnmount(() => {
                                         <option value="streetview">StreetView</option>
                                         <option value="kadaster">Kadaster</option>
                                         <option value="bodemkaart">Bodemkaart</option>
+                                        <option value="bodemverontreiniging">Bodemverontreiniging en sanering</option>
+                                        <option value="energielabels">Energielabels</option>
                                     </select>
                                 </div>
                                 <div
                                     v-if="enrichmentData?.map?.google_maps_api_key_available"
-                                    ref="mapContainer"
-                                    class="mt-3 aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200"
-                                ></div>
+                                    class="relative mt-3 aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200"
+                                >
+                                    <div ref="mapContainer" class="h-full w-full"></div>
+                                    <div
+                                        v-if="mapLegend.items?.length"
+                                        :class="mapLegendContainerClass"
+                                    >
+                                        <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                                            {{ mapLegend.title }}
+                                        </div>
+                                        <div v-if="visibleLegendItems.length" class="space-y-1">
+                                            <img
+                                                v-for="item in visibleLegendItems"
+                                                :key="item.url"
+                                                :src="item.url"
+                                                :alt="`${mapLegend.title} ${item.layer}`"
+                                                :class="mapLegendImageClass"
+                                                @error="handleLegendImageError(item.url)"
+                                            />
+                                        </div>
+                                        <div v-else-if="fallbackLegendItems.length" class="space-y-1">
+                                            <div
+                                                v-for="item in fallbackLegendItems"
+                                                :key="item.label"
+                                                class="flex items-center gap-2 text-xs text-gray-700"
+                                            >
+                                                <span
+                                                    class="inline-block h-3 w-4 shrink-0 rounded-[2px]"
+                                                    :style="item.style"
+                                                ></span>
+                                                <span>{{ item.label }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-else class="text-xs text-gray-600">
+                                            Geen legenda beschikbaar voor deze laag.
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-if="['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels'].includes(mapMode)"
+                                        class="absolute right-2 top-2 z-[5] max-w-[55%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
+                                    >
+                                        <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                                            Patroon Uitleg (klik op kaart)
+                                        </div>
+                                        <div v-if="mapFeatureInfoLoading" class="mt-1 text-xs text-gray-600">
+                                            Informatie ophalen...
+                                        </div>
+                                        <div v-else>
+                                            <div
+                                                v-if="mapFeatureInfoNotice"
+                                                class="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800"
+                                            >
+                                                {{ mapFeatureInfoNotice }}
+                                            </div>
+                                            <div
+                                                v-if="mapFeatureInfoItems.length"
+                                                class="mt-1 space-y-1 text-xs text-gray-700"
+                                            >
+                                            <div
+                                                v-for="item in mapFeatureInfoItems"
+                                                :key="`${item.title}:${item.value}`"
+                                                class="flex gap-1"
+                                            >
+                                                <span class="font-semibold">{{ item.title }}:</span>
+                                                <a
+                                                    v-if="item.url"
+                                                    :href="item.url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="break-words text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ item.value || "Open" }}
+                                                </a>
+                                                <span v-else class="break-words">{{ item.value }}</span>
+                                            </div>
+                                            </div>
+                                            <div v-else class="mt-1 text-xs text-gray-600">
+                                                {{ mapFeatureInfoMessage || "Klik op een vlak/patroon voor detailuitleg." }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div v-if="mapLoadError" class="mt-2 text-sm text-red-700">
                                     {{ mapLoadError }}
                                 </div>

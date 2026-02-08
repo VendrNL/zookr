@@ -202,6 +202,13 @@ class PropertyController extends Controller
         $buildingMarker = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null)
             ?? $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null)
             ?? $geocode;
+        $bag = $this->enrichBagCoreData($bag, $geocode['lat'] ?? null, $geocode['lng'] ?? null);
+        $bagId = $bag['adresseerbaar_object_identificatie']
+            ?? $bag['nummeraanduiding_identificatie']
+            ?? (($bag['pand_identificaties'][0] ?? null) ?: null);
+        $bagViewerUrl = $bagId
+            ? 'https://bagviewer.kadaster.nl/?objectId='.urlencode((string) $bagId)
+            : null;
 
         $parcel = $this->fetchParcelByPoint(
             $geocode['lat'] ?? null,
@@ -259,6 +266,7 @@ class PropertyController extends Controller
         }
 
         return response()->json([
+            'bag_id' => $bagId,
             'bag' => [
                 'address' => $bag['address'],
                 'postcode' => $bag['postcode'],
@@ -270,7 +278,9 @@ class PropertyController extends Controller
                 'gebruiksfunctie' => $bag['gebruiksfunctie'],
                 'oppervlakte_m2' => $bag['oppervlakte_m2'],
                 'adresseerbaar_object_status' => $bag['adresseerbaar_object_status'],
-                'energielabel' => null,
+                'energielabel' => $bag['energielabel'],
+                'bag_id' => $bagId,
+                'bag_viewer_url' => $bagViewerUrl,
             ],
             'geocode' => $geocode,
             'cadastre' => $parcel,
@@ -312,9 +322,175 @@ class PropertyController extends Controller
                 ] : null,
                 'kadastraal_wms_url' => (string) config('services.pdok.kadastraal_wms_url'),
                 'kadastraal_wms_layer' => (string) config('services.pdok.kadastraal_wms_layer'),
+                'wegenkaart_grijs_wmts_url' => (string) config('services.pdok.wegenkaart_grijs_wmts_url'),
+                'wegenkaart_grijs_wmts_layer' => (string) config('services.pdok.wegenkaart_grijs_wmts_layer'),
+                'wegenkaart_grijs_wmts_matrixset' => (string) config('services.pdok.wegenkaart_grijs_wmts_matrixset'),
                 'bodemkaart_wms_url' => (string) config('services.pdok.bodemkaart_wms_url'),
                 'bodemkaart_wms_layer' => (string) config('services.pdok.bodemkaart_wms_layer'),
+                'bodemverontreiniging_wms_url' => (string) config('services.pdok.bodemverontreiniging_wms_url'),
+                'bodemverontreiniging_wms_layer' => (string) config('services.pdok.bodemverontreiniging_wms_layer'),
+                'energielabel_wms_url' => (string) config('services.pdok.energielabel_wms_url'),
+                'energielabel_wms_layer' => (string) config('services.pdok.energielabel_wms_layer'),
             ],
+        ]);
+    }
+
+    public function mapFeatureInfo(Request $request, SearchRequest $search_request)
+    {
+        $this->authorize('offer', $search_request);
+
+        $data = $request->validate([
+            'mode' => ['required', 'string', Rule::in(['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels'])],
+            'lat' => ['required', 'numeric'],
+            'lng' => ['required', 'numeric'],
+        ]);
+
+        $lat = (float) $data['lat'];
+        $lng = (float) $data['lng'];
+
+        if ($data['mode'] === 'kadaster') {
+            $parcel = $this->fetchParcelByPoint($lat, $lng);
+            $notice = null;
+            if ($parcel && (($parcel['selection_source'] ?? null) === 'nearest' || ($parcel['near_boundary'] ?? false))) {
+                $notice = 'Klikpunt ligt op of zeer dicht bij een perceelgrens. Klik iets verder binnen het perceel voor eenduidige selectie.';
+            }
+
+            return response()->json([
+                'mode' => 'kadaster',
+                'items' => $parcel ? [
+                    [
+                        'title' => 'Kadastrale aanduiding',
+                        'value' => $parcel['kadastrale_aanduiding'] ?? null,
+                    ],
+                    [
+                        'title' => 'Perceelsgrootte (m2)',
+                        'value' => $parcel['perceelsgrootte_m2'] ?? null,
+                    ],
+                    [
+                        'title' => 'Identificatie lokaal id',
+                        'value' => $parcel['identificatie_lokaal_id'] ?? null,
+                    ],
+                ] : [],
+                'notice' => $notice,
+            ]);
+        }
+
+        if ($data['mode'] === 'bodemkaart') {
+            $rawItems = $this->fetchWmsFeatureInfoAtPoint(
+                (string) config('services.pdok.bodemkaart_wms_url'),
+                (string) config('services.pdok.bodemkaart_wms_layer'),
+                $lat,
+                $lng
+            );
+
+            $normalized = collect($rawItems)
+                ->filter(fn ($item) => is_array($item))
+                ->keyBy(function (array $item) {
+                    $title = is_string($item['title'] ?? null) ? $item['title'] : '';
+                    return Str::lower(str_replace([' ', '_'], '', $title));
+                });
+
+            $items = collect([
+                [
+                    'title' => 'Beschrijving',
+                    'value' => data_get($normalized->get('firstsoilname'), 'value'),
+                ],
+                [
+                    'title' => 'Methode',
+                    'value' => data_get($normalized->get('mapareacollection'), 'value'),
+                ],
+                [
+                    'title' => 'Helling',
+                    'value' => data_get($normalized->get('soilslope'), 'value'),
+                ],
+            ])
+                ->filter(fn (array $item) => is_string($item['value']) && trim($item['value']) !== '')
+                ->values()
+                ->all();
+
+            return response()->json([
+                'mode' => 'bodemkaart',
+                'items' => $items,
+            ]);
+        }
+
+        if ($data['mode'] === 'energielabels') {
+            $rawItems = $this->fetchWmsFeatureInfoAtPoint(
+                (string) config('services.pdok.energielabel_wms_url'),
+                (string) config('services.pdok.energielabel_wms_layer'),
+                $lat,
+                $lng
+            );
+
+            $normalized = collect($rawItems)
+                ->filter(fn ($item) => is_array($item))
+                ->keyBy(function (array $item) {
+                    $title = is_string($item['title'] ?? null) ? $item['title'] : '';
+                    return Str::lower(str_replace([' ', '_'], '', $title));
+                });
+
+            $bagIdentificatie = data_get($normalized->get('identificatie'), 'value');
+            $bagViewerUrl = is_string($bagIdentificatie) && trim($bagIdentificatie) !== ''
+                ? 'https://bagviewer.kadaster.nl/lvbag/bag-viewer/?searchQuery='.urlencode(trim($bagIdentificatie))
+                : null;
+
+            $items = collect([
+                [
+                    'title' => 'Energielabel',
+                    'value' => data_get($normalized->get('dominantlabel'), 'value'),
+                ],
+                [
+                    'title' => 'Hoogste label',
+                    'value' => data_get($normalized->get('hoogstelabel'), 'value'),
+                ],
+                [
+                    'title' => 'Laagste label',
+                    'value' => data_get($normalized->get('laagstelabel'), 'value'),
+                ],
+                [
+                    'title' => 'Aantal labels',
+                    'value' => data_get($normalized->get('aantlabels'), 'value'),
+                ],
+                [
+                    'title' => 'BAG identificatie',
+                    'value' => $bagIdentificatie,
+                ],
+                [
+                    'title' => 'Open in BAG Viewer',
+                    'value' => $bagViewerUrl ? 'Bekijk BAG object' : null,
+                    'url' => $bagViewerUrl,
+                ],
+                [
+                    'title' => 'Bron',
+                    'value' => 'RVO Energielabels (WMS)',
+                    'url' => 'https://data.rivm.nl/geo/nl/wms?service=WMS&request=GetCapabilities',
+                ],
+            ])
+                ->filter(fn (array $item) => is_string($item['value']) && trim($item['value']) !== '')
+                ->values()
+                ->all();
+
+            return response()->json([
+                'mode' => 'energielabels',
+                'items' => $items,
+            ]);
+        }
+
+        $items = $this->fetchWmsFeatureInfoAtPoint(
+            (string) config('services.pdok.bodemverontreiniging_wms_url'),
+            (string) config('services.pdok.bodemverontreiniging_wms_layer'),
+            $lat,
+            $lng
+        );
+
+        $bodemloketItems = $this->fetchBodemverontreinigingSummary($lat, $lng);
+        if (count($bodemloketItems) > 0) {
+            $items = $bodemloketItems;
+        }
+
+        return response()->json([
+            'mode' => 'bodemverontreiniging',
+            'items' => $items,
         ]);
     }
 
@@ -954,21 +1130,7 @@ class PropertyController extends Controller
             ['Accept-Crs' => 'epsg:28992']
         );
         $extended = ($extendedResponse && $extendedResponse->successful()) ? $extendedResponse->json() : [];
-
-        $bouwjaar = data_get($extended, 'oorspronkelijkBouwjaar');
-        if (is_array($bouwjaar)) {
-            $bouwjaar = count($bouwjaar) ? (string) $bouwjaar[0] : null;
-        } else {
-            $bouwjaar = $bouwjaar !== null && $bouwjaar !== '' ? (string) $bouwjaar : null;
-        }
-
-        $gebruiksdoelen = collect(data_get($extended, 'gebruiksdoelen', []))
-            ->filter(fn ($item) => is_string($item) && $item !== '')
-            ->values()
-            ->all();
-
-        $oppervlakte = data_get($extended, 'oppervlakte');
-        $oppervlakte = is_numeric($oppervlakte) ? (int) $oppervlakte : null;
+        $details = $this->extractBagExtendedDetails($extended);
 
         return [
             'address' => $address,
@@ -976,12 +1138,15 @@ class PropertyController extends Controller
             'postcode' => $postcode,
             'nummeraanduiding_identificatie' => $nummeraanduidingIdentificatie,
             'adresseerbaar_object_identificatie' => $adresseerbaarObjectIdentificatie !== '' ? $adresseerbaarObjectIdentificatie : null,
-            'pand_identificaties' => $pandIdentificaties,
-            'bouwjaar' => $bouwjaar,
-            'gebruiksfunctie' => count($gebruiksdoelen) ? implode(', ', $gebruiksdoelen) : null,
-            'oppervlakte_m2' => $oppervlakte,
-            'adresseerbaar_object_status' => data_get($extended, 'adresseerbaarObjectStatus'),
-            'geometry_rd' => data_get($extended, 'adresseerbaarObjectGeometrie.punt.coordinates'),
+            'pand_identificaties' => count($details['pand_identificaties']) > 0
+                ? $details['pand_identificaties']
+                : $pandIdentificaties,
+            'bouwjaar' => $details['bouwjaar'],
+            'gebruiksfunctie' => $details['gebruiksfunctie'],
+            'oppervlakte_m2' => $details['oppervlakte_m2'],
+            'adresseerbaar_object_status' => $details['adresseerbaar_object_status'],
+            'geometry_rd' => $details['geometry_rd'],
+            'energielabel' => $details['energielabel'],
         ];
     }
 
@@ -1133,13 +1298,316 @@ class PropertyController extends Controller
         ];
     }
 
+    private function wgs84ToWebMercator(float $lat, float $lng): ?array
+    {
+        $originShift = 20037508.342789244;
+
+        $x = ($lng * $originShift) / 180.0;
+        $safeLat = max(min($lat, 85.05112878), -85.05112878);
+        $y = log(tan((90.0 + $safeLat) * M_PI / 360.0)) / (M_PI / 180.0);
+        $y = ($y * $originShift) / 180.0;
+
+        if (! is_finite($x) || ! is_finite($y)) {
+            return null;
+        }
+
+        return [
+            'x' => $x,
+            'y' => $y,
+        ];
+    }
+
+    private function fetchWmsFeatureInfoAtPoint(string $wmsUrl, string $layerNames, float $lat, float $lng): array
+    {
+        $wmsUrl = trim($wmsUrl);
+        $layerNames = trim($layerNames);
+
+        if ($wmsUrl === '' || $layerNames === '') {
+            return [];
+        }
+
+        $mercator = $this->wgs84ToWebMercator($lat, $lng);
+        if (! $mercator) {
+            return [];
+        }
+
+        $delta = 60.0; // meters around click point
+        $bbox = implode(',', [
+            number_format($mercator['x'] - $delta, 3, '.', ''),
+            number_format($mercator['y'] - $delta, 3, '.', ''),
+            number_format($mercator['x'] + $delta, 3, '.', ''),
+            number_format($mercator['y'] + $delta, 3, '.', ''),
+        ]);
+
+        $formatCandidates = [
+            'application/json',
+            'application/geo+json',
+            'application/vnd.esri.wms_featureinfo_xml',
+            'application/vnd.esri.wms_raw_xml',
+            'text/xml',
+            'text/plain',
+            'text/html',
+        ];
+
+        foreach ($formatCandidates as $infoFormat) {
+            $response = Http::timeout(10)
+                ->retry(1, 250)
+                ->get($wmsUrl, [
+                    'service' => 'WMS',
+                    'request' => 'GetFeatureInfo',
+                    'version' => '1.3.0',
+                    'crs' => 'EPSG:3857',
+                    'bbox' => $bbox,
+                    'width' => 101,
+                    'height' => 101,
+                    'i' => 50,
+                    'j' => 50,
+                    'layers' => $layerNames,
+                    'query_layers' => $layerNames,
+                    'feature_count' => 5,
+                    'info_format' => $infoFormat,
+                ]);
+
+            if (! $response->successful()) {
+                continue;
+            }
+
+            $items = $this->parseWmsFeatureInfoItems($response);
+            if (count($items) > 0) {
+                return $items;
+            }
+        }
+
+        return [];
+    }
+
+    private function parseWmsFeatureInfoItems(Response $response): array
+    {
+        $contentType = strtolower((string) $response->header('Content-Type'));
+        $body = (string) $response->body();
+
+        if (str_contains($contentType, 'json')) {
+            $features = collect(data_get($response->json(), 'features', []))
+                ->filter(fn ($feature) => is_array($feature))
+                ->values();
+            if ($features->isEmpty()) {
+                return [];
+            }
+
+            $properties = data_get($features->first(), 'properties', []);
+            if (! is_array($properties)) {
+                return [];
+            }
+
+            return $this->mapPropertiesToInfoItems($properties);
+        }
+
+        if (str_contains($contentType, 'xml')) {
+            return $this->parseFeatureInfoXml($body);
+        }
+
+        if (str_contains($contentType, 'text/plain')) {
+            return $this->parseFeatureInfoPlainText($body);
+        }
+
+        if (str_contains($contentType, 'text/html')) {
+            $text = trim(strip_tags($body));
+            if ($text === '') {
+                return [];
+            }
+
+            // Try to parse simple "key: value" lines after stripping tags.
+            return $this->parseFeatureInfoPlainText($text);
+        }
+
+        return [];
+    }
+
+    private function parseFeatureInfoXml(string $xml): array
+    {
+        if (trim($xml) === '') {
+            return [];
+        }
+
+        libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string($xml);
+        if (! $sxml) {
+            return [];
+        }
+
+        $result = [];
+
+        // ArcGIS WMS commonly returns <FIELDS .../> nodes with attributes as properties.
+        $fieldsNodes = $sxml->xpath('//*[local-name()="FIELDS"]');
+        if (is_array($fieldsNodes) && count($fieldsNodes) > 0) {
+            $attributes = (array) ($fieldsNodes[0]->attributes() ?? []);
+            $first = $attributes['@attributes'] ?? [];
+            if (is_array($first) && count($first) > 0) {
+                return $this->mapPropertiesToInfoItems($first);
+            }
+        }
+
+        // Generic fallback: try Key/Value style elements.
+        $members = $sxml->xpath('//*[local-name()="FeatureInfo"]/*');
+        if (is_array($members)) {
+            foreach ($members as $member) {
+                $key = trim((string) $member->getName());
+                $value = trim((string) $member);
+                if ($key !== '' && $value !== '') {
+                    $result[$key] = $value;
+                }
+            }
+        }
+
+        return $this->mapPropertiesToInfoItems($result);
+    }
+
+    private function parseFeatureInfoPlainText(string $body): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $body) ?: [];
+        $pairs = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, 'GetFeatureInfo')) {
+                continue;
+            }
+
+            if (str_contains($line, '=')) {
+                [$key, $value] = array_map('trim', explode('=', $line, 2));
+            } elseif (str_contains($line, ':')) {
+                [$key, $value] = array_map('trim', explode(':', $line, 2));
+            } else {
+                continue;
+            }
+
+            if ($key !== '' && $value !== '') {
+                $pairs[$key] = $value;
+            }
+        }
+
+        return $this->mapPropertiesToInfoItems($pairs);
+    }
+
+    private function mapPropertiesToInfoItems(array $properties): array
+    {
+        return collect($properties)
+            ->map(fn ($value, $key) => [
+                'title' => Str::headline((string) $key),
+                'value' => is_scalar($value) ? trim((string) $value) : null,
+            ])
+            ->filter(fn (array $item) => $item['value'] !== null && $item['value'] !== '')
+            ->take(12)
+            ->values()
+            ->all();
+    }
+
+    private function fetchBodemverontreinigingSummary(float $lat, float $lng): array
+    {
+        $endpoint = 'https://gis.gdngeoservices.nl/standalone/rest/services/blk_gdn/lks_blk_rd_v1/MapServer/0/query';
+        $response = Http::timeout(10)
+            ->retry(1, 250)
+            ->get($endpoint, [
+                'f' => 'json',
+                'where' => '1=1',
+                'geometry' => $lng.','.$lat,
+                'geometryType' => 'esriGeometryPoint',
+                'inSR' => 4326,
+                'spatialRel' => 'esriSpatialRelIntersects',
+                'outFields' => 'WBB_DOSSIER_DBK,TYPE_CD,VERVOLG_WBB,STATUSVER,STATUS_OORD',
+                'returnGeometry' => 'false',
+                'resultRecordCount' => 1,
+            ]);
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        $attributes = data_get($response->json(), 'features.0.attributes');
+        if (! is_array($attributes)) {
+            return [];
+        }
+
+        $typeCode = $this->nullableString($attributes['TYPE_CD'] ?? null);
+        $typeDescriptionMap = $this->fetchBodemverontreinigingTypeDescriptionMap();
+        $typeDescription = $typeCode !== null
+            ? ($typeDescriptionMap[$typeCode] ?? 'Onbekend')
+            : 'Onbekend';
+
+        $severity = $this->nullableString($attributes['STATUS_OORD'] ?? null) ?? 'Onbekend';
+        $followUp = $this->nullableString($attributes['VERVOLG_WBB'] ?? null) ?? 'Onbekend';
+        $status = $this->nullableString($attributes['STATUSVER'] ?? null) ?? 'Onbekend';
+        $dossier = $this->nullableString($attributes['WBB_DOSSIER_DBK'] ?? null);
+
+        $bodemloketUrl = 'https://www.bodemloket.nl/kaart';
+        if ($dossier !== null) {
+            $bodemloketUrl .= '?dossier=' . urlencode($dossier);
+        }
+
+        return [
+            [
+                'title' => 'Type verontreiniging',
+                'value' => $typeDescription,
+            ],
+            [
+                'title' => 'Ernst',
+                'value' => $severity,
+            ],
+            [
+                'title' => 'Vervolgstappen',
+                'value' => $followUp,
+            ],
+            [
+                'title' => 'Status',
+                'value' => $status,
+            ],
+            [
+                'title' => 'Naar Bodemloket',
+                'value' => 'Open rapport/kaart',
+                'url' => $bodemloketUrl,
+            ],
+        ];
+    }
+
+    private function fetchBodemverontreinigingTypeDescriptionMap(): array
+    {
+        $endpoint = 'https://gis.gdngeoservices.nl/standalone/rest/services/blk_gdn/lks_blk_rd_v1/MapServer/0';
+        $response = Http::timeout(10)
+            ->retry(1, 250)
+            ->get($endpoint, [
+                'f' => 'json',
+            ]);
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        $infos = data_get($response->json(), 'drawingInfo.renderer.uniqueValueInfos', []);
+        if (! is_array($infos)) {
+            return [];
+        }
+
+        return collect($infos)
+            ->filter(fn ($row) => is_array($row))
+            ->mapWithKeys(function (array $row) {
+                $value = $this->nullableString($row['value'] ?? null);
+                $label = $this->nullableString($row['label'] ?? null);
+                if ($value === null || $label === null) {
+                    return [];
+                }
+
+                return [$value => $label];
+            })
+            ->all();
+    }
+
     private function fetchParcelByPoint(?float $lat, ?float $lng): ?array
     {
         if ($lat === null || $lng === null) {
             return null;
         }
 
-        $delta = 0.0002;
+        $delta = 0.00008;
         $bbox = implode(',', [
             number_format($lng - $delta, 6, '.', ''),
             number_format($lat - $delta, 6, '.', ''),
@@ -1151,7 +1619,7 @@ class PropertyController extends Controller
             ->retry(1, 250)
             ->get('https://api.pdok.nl/kadaster/brk-kadastrale-kaart/ogc/v1/collections/perceel/items', [
                 'bbox' => $bbox,
-                'limit' => 1,
+                'limit' => 25,
                 'f' => 'json',
             ]);
 
@@ -1159,7 +1627,38 @@ class PropertyController extends Controller
             return null;
         }
 
-        $properties = data_get($response->json(), 'features.0.properties');
+        $features = collect(data_get($response->json(), 'features', []))
+            ->filter(fn ($feature) => is_array($feature))
+            ->values();
+
+        if ($features->isEmpty()) {
+            return null;
+        }
+
+        $selectedFeature = $features
+            ->first(fn (array $feature) => $this->featureContainsPoint($feature, $lat, $lng));
+        $selectionSource = $selectedFeature ? 'contains' : 'nearest';
+
+        if (! $selectedFeature) {
+            // Fallback: choose the nearest feature by first ring centroid when geometry check does not match.
+            $selectedFeature = $features
+                ->sortBy(function (array $feature) use ($lat, $lng) {
+                    $centroid = $this->featureApproximateCentroid($feature);
+                    if (! $centroid) {
+                        return PHP_FLOAT_MAX;
+                    }
+
+                    $dLat = $centroid['lat'] - $lat;
+                    $dLng = $centroid['lng'] - $lng;
+
+                    return ($dLat * $dLat) + ($dLng * $dLng);
+                })
+                ->first();
+        }
+
+        $properties = is_array(data_get($selectedFeature, 'properties'))
+            ? data_get($selectedFeature, 'properties')
+            : null;
         if (! is_array($properties)) {
             return null;
         }
@@ -1173,13 +1672,270 @@ class PropertyController extends Controller
             $aanduiding = null;
         }
 
+        $nearBoundary = $this->featureIsNearBoundary($selectedFeature, $lat, $lng, 1.0);
+
         return [
             'kadastrale_aanduiding' => $aanduiding,
             'perceelsgrootte_m2' => isset($properties['kadastrale_grootte_waarde']) && is_numeric($properties['kadastrale_grootte_waarde'])
                 ? (int) $properties['kadastrale_grootte_waarde']
                 : null,
             'identificatie_lokaal_id' => $properties['identificatie_lokaal_id'] ?? null,
+            'selection_source' => $selectionSource,
+            'near_boundary' => $nearBoundary,
         ];
+    }
+
+    private function featureContainsPoint(array $feature, float $lat, float $lng): bool
+    {
+        $geometry = data_get($feature, 'geometry');
+        if (! is_array($geometry)) {
+            return false;
+        }
+
+        $type = (string) ($geometry['type'] ?? '');
+        $coordinates = $geometry['coordinates'] ?? null;
+
+        if ($type === 'Polygon' && is_array($coordinates)) {
+            return $this->polygonContainsPoint($coordinates, $lat, $lng);
+        }
+
+        if ($type === 'MultiPolygon' && is_array($coordinates)) {
+            foreach ($coordinates as $polygon) {
+                if (is_array($polygon) && $this->polygonContainsPoint($polygon, $lat, $lng)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function polygonContainsPoint(array $polygon, float $lat, float $lng): bool
+    {
+        if (! isset($polygon[0]) || ! is_array($polygon[0])) {
+            return false;
+        }
+
+        // Point must be inside outer ring and outside any hole rings.
+        if (! $this->ringContainsPoint($polygon[0], $lat, $lng)) {
+            return false;
+        }
+
+        foreach (array_slice($polygon, 1) as $hole) {
+            if (is_array($hole) && $this->ringContainsPoint($hole, $lat, $lng)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function ringContainsPoint(array $ring, float $lat, float $lng): bool
+    {
+        $inside = false;
+        $count = count($ring);
+        if ($count < 3) {
+            return false;
+        }
+
+        for ($i = 0, $j = $count - 1; $i < $count; $j = $i++) {
+            $pi = $ring[$i] ?? null;
+            $pj = $ring[$j] ?? null;
+            if (! is_array($pi) || ! is_array($pj)) {
+                continue;
+            }
+
+            $xi = isset($pi[0]) && is_numeric($pi[0]) ? (float) $pi[0] : null;
+            $yi = isset($pi[1]) && is_numeric($pi[1]) ? (float) $pi[1] : null;
+            $xj = isset($pj[0]) && is_numeric($pj[0]) ? (float) $pj[0] : null;
+            $yj = isset($pj[1]) && is_numeric($pj[1]) ? (float) $pj[1] : null;
+
+            if ($xi === null || $yi === null || $xj === null || $yj === null) {
+                continue;
+            }
+
+            $intersects = (($yi > $lat) !== ($yj > $lat))
+                && ($lng < (($xj - $xi) * ($lat - $yi)) / (($yj - $yi) ?: 1.0E-12) + $xi);
+
+            if ($intersects) {
+                $inside = ! $inside;
+            }
+        }
+
+        return $inside;
+    }
+
+    private function featureApproximateCentroid(array $feature): ?array
+    {
+        $geometry = data_get($feature, 'geometry');
+        if (! is_array($geometry)) {
+            return null;
+        }
+
+        $type = (string) ($geometry['type'] ?? '');
+        $coordinates = $geometry['coordinates'] ?? null;
+        if (! is_array($coordinates)) {
+            return null;
+        }
+
+        $ring = null;
+        if ($type === 'Polygon') {
+            $ring = $coordinates[0] ?? null;
+        } elseif ($type === 'MultiPolygon') {
+            $ring = $coordinates[0][0] ?? null;
+        }
+
+        if (! is_array($ring) || count($ring) === 0) {
+            return null;
+        }
+
+        $sumLng = 0.0;
+        $sumLat = 0.0;
+        $n = 0;
+        foreach ($ring as $point) {
+            if (! is_array($point)) {
+                continue;
+            }
+
+            $lng = isset($point[0]) && is_numeric($point[0]) ? (float) $point[0] : null;
+            $lat = isset($point[1]) && is_numeric($point[1]) ? (float) $point[1] : null;
+            if ($lng === null || $lat === null) {
+                continue;
+            }
+
+            $sumLng += $lng;
+            $sumLat += $lat;
+            $n++;
+        }
+
+        if ($n === 0) {
+            return null;
+        }
+
+        return [
+            'lat' => $sumLat / $n,
+            'lng' => $sumLng / $n,
+        ];
+    }
+
+    private function featureIsNearBoundary(array $feature, float $lat, float $lng, float $thresholdMeters): bool
+    {
+        $geometry = data_get($feature, 'geometry');
+        if (! is_array($geometry)) {
+            return false;
+        }
+
+        $type = (string) ($geometry['type'] ?? '');
+        $coordinates = $geometry['coordinates'] ?? null;
+        if (! is_array($coordinates)) {
+            return false;
+        }
+
+        $minDistance = null;
+
+        if ($type === 'Polygon') {
+            $minDistance = $this->polygonMinDistanceToBoundaryMeters($coordinates, $lat, $lng);
+        } elseif ($type === 'MultiPolygon') {
+            foreach ($coordinates as $polygon) {
+                if (! is_array($polygon)) {
+                    continue;
+                }
+
+                $distance = $this->polygonMinDistanceToBoundaryMeters($polygon, $lat, $lng);
+                if ($distance === null) {
+                    continue;
+                }
+
+                $minDistance = $minDistance === null ? $distance : min($minDistance, $distance);
+            }
+        }
+
+        return $minDistance !== null && $minDistance <= $thresholdMeters;
+    }
+
+    private function polygonMinDistanceToBoundaryMeters(array $polygon, float $lat, float $lng): ?float
+    {
+        $minDistance = null;
+
+        foreach ($polygon as $ring) {
+            if (! is_array($ring)) {
+                continue;
+            }
+
+            $distance = $this->ringMinDistanceMeters($ring, $lat, $lng);
+            if ($distance === null) {
+                continue;
+            }
+
+            $minDistance = $minDistance === null ? $distance : min($minDistance, $distance);
+        }
+
+        return $minDistance;
+    }
+
+    private function ringMinDistanceMeters(array $ring, float $lat, float $lng): ?float
+    {
+        $count = count($ring);
+        if ($count < 2) {
+            return null;
+        }
+
+        $minDistance = null;
+        for ($i = 0; $i < $count - 1; $i++) {
+            $a = $ring[$i] ?? null;
+            $b = $ring[$i + 1] ?? null;
+            if (! is_array($a) || ! is_array($b)) {
+                continue;
+            }
+
+            $ax = isset($a[0]) && is_numeric($a[0]) ? (float) $a[0] : null;
+            $ay = isset($a[1]) && is_numeric($a[1]) ? (float) $a[1] : null;
+            $bx = isset($b[0]) && is_numeric($b[0]) ? (float) $b[0] : null;
+            $by = isset($b[1]) && is_numeric($b[1]) ? (float) $b[1] : null;
+            if ($ax === null || $ay === null || $bx === null || $by === null) {
+                continue;
+            }
+
+            $distance = $this->pointToSegmentDistanceMeters($lng, $lat, $ax, $ay, $bx, $by);
+            $minDistance = $minDistance === null ? $distance : min($minDistance, $distance);
+        }
+
+        return $minDistance;
+    }
+
+    private function pointToSegmentDistanceMeters(
+        float $px,
+        float $py,
+        float $x1,
+        float $y1,
+        float $x2,
+        float $y2
+    ): float {
+        // Equirectangular approximation around local latitude for meter precision at parcel scale.
+        $latRad = deg2rad($py);
+        $mx = 111320.0 * cos($latRad);
+        $my = 110540.0;
+
+        $pxm = $px * $mx;
+        $pym = $py * $my;
+        $x1m = $x1 * $mx;
+        $y1m = $y1 * $my;
+        $x2m = $x2 * $mx;
+        $y2m = $y2 * $my;
+
+        $dx = $x2m - $x1m;
+        $dy = $y2m - $y1m;
+        $len2 = ($dx * $dx) + ($dy * $dy);
+        if ($len2 <= 0.0) {
+            return sqrt((($pxm - $x1m) ** 2) + (($pym - $y1m) ** 2));
+        }
+
+        $t = (($pxm - $x1m) * $dx + ($pym - $y1m) * $dy) / $len2;
+        $t = max(0.0, min(1.0, $t));
+        $projX = $x1m + ($t * $dx);
+        $projY = $y1m + ($t * $dy);
+
+        return sqrt((($pxm - $projX) ** 2) + (($pym - $projY) ** 2));
     }
 
     private function fetchZoningPlanObjectsByPoint(?float $lat, ?float $lng): array
@@ -1533,19 +2289,533 @@ SPARQL;
             }
         }
 
+        $details = [
+            'pand_identificaties' => [],
+            'bouwjaar' => null,
+            'gebruiksfunctie' => null,
+            'oppervlakte_m2' => null,
+            'adresseerbaar_object_status' => null,
+            'geometry_rd' => null,
+            'energielabel' => null,
+        ];
+
+        $nummeraanduidingId = $pdok['nummeraanduiding_id'] ?? null;
+        if (is_string($nummeraanduidingId) && $nummeraanduidingId !== '') {
+            $extendedResponse = $this->bagRequest(
+                'adressenuitgebreid/'.urlencode($nummeraanduidingId),
+                [],
+                ['Accept-Crs' => 'epsg:28992']
+            );
+            if ($extendedResponse && $extendedResponse->successful()) {
+                $details = $this->extractBagExtendedDetails((array) $extendedResponse->json());
+            }
+        }
+
         return [
             'address' => $pdok['address'],
             'city' => $pdok['city'],
             'postcode' => $pdok['postcode'] ?? '',
             'nummeraanduiding_identificatie' => $pdok['nummeraanduiding_id'],
             'adresseerbaar_object_identificatie' => $pdok['adresseerbaarobject_id'],
+            'pand_identificaties' => $details['pand_identificaties'],
+            'bouwjaar' => $details['bouwjaar'],
+            'gebruiksfunctie' => $details['gebruiksfunctie'],
+            'oppervlakte_m2' => $details['oppervlakte_m2'],
+            'adresseerbaar_object_status' => $details['adresseerbaar_object_status'],
+            'geometry_rd' => is_array($details['geometry_rd']) ? $details['geometry_rd'] : $rdCoordinates,
+            'geometry_ll' => $pdok['centroide_ll'],
+            'energielabel' => $details['energielabel'],
+        ];
+    }
+
+    private function extractBagExtendedDetails(array $extended): array
+    {
+        $bouwjaarRaw = $this->findFirstScalarByKeys($extended, ['oorspronkelijkBouwjaar', 'bouwjaar']);
+        $bouwjaar = $this->hasFilledValue($bouwjaarRaw) ? trim((string) $bouwjaarRaw) : null;
+
+        $gebruiksdoelen = $this->collectStringValuesByKeys($extended, ['gebruiksdoelen', 'gebruiksdoel', 'gebruiksfunctie']);
+        $gebruiksfunctie = count($gebruiksdoelen) > 0 ? implode(', ', array_values(array_unique($gebruiksdoelen))) : null;
+
+        $oppervlakteRaw = $this->findFirstNumericByKeys($extended, ['oppervlakte', 'oppervlakteM2', 'oppervlakte_m2']);
+        $oppervlakte = $oppervlakteRaw !== null ? (int) $oppervlakteRaw : null;
+
+        $energielabelRaw = $this->findFirstScalarByKeys($extended, ['energielabel', 'energieLabel', 'label_energie', 'energyLabel']);
+        $energielabel = $this->hasFilledValue($energielabelRaw) ? trim((string) $energielabelRaw) : null;
+
+        $pandIdentificaties = $this->collectStringValuesByKeys(
+            $extended,
+            ['pandIdentificaties', 'pandIdentificatie', 'pand_id', 'pandId', 'pand']
+        );
+        $pandIdentificaties = collect($pandIdentificaties)
+            ->filter(fn ($value) => preg_match('/^\d{16}$/', $value) === 1)
+            ->values()
+            ->all();
+
+        $geometryRd = $this->findFirstCoordinatePairByKeys($extended, ['coordinates', 'coordinaten']);
+
+        return [
+            'pand_identificaties' => $pandIdentificaties,
+            'bouwjaar' => $bouwjaar,
+            'gebruiksfunctie' => $gebruiksfunctie,
+            'oppervlakte_m2' => $oppervlakte,
+            'adresseerbaar_object_status' => $this->findFirstScalarByKeys($extended, ['adresseerbaarObjectStatus', 'status']),
+            'geometry_rd' => $geometryRd,
+            'energielabel' => $energielabel,
+        ];
+    }
+
+    private function enrichBagCoreData(array $bag, ?float $lat, ?float $lng): array
+    {
+        $supplemental = $this->fetchBagSupplementalByObjectId(
+            is_string($bag['adresseerbaar_object_identificatie'] ?? null)
+                ? $bag['adresseerbaar_object_identificatie']
+                : null,
+            is_array($bag['pand_identificaties'] ?? null) ? $bag['pand_identificaties'] : []
+        );
+        $linkedDataSupplemental = $this->fetchBagLinkedDataSupplemental(
+            is_string($bag['adresseerbaar_object_identificatie'] ?? null)
+                ? $bag['adresseerbaar_object_identificatie']
+                : null,
+            is_string($bag['nummeraanduiding_identificatie'] ?? null)
+                ? $bag['nummeraanduiding_identificatie']
+                : null
+        );
+
+        if (! $this->hasFilledValue($bag['pand_identificaties'] ?? null) && $this->hasFilledValue($supplemental['pand_identificaties'] ?? null)) {
+            $bag['pand_identificaties'] = $supplemental['pand_identificaties'];
+        }
+        if (! $this->hasFilledValue($bag['pand_identificaties'] ?? null) && $this->hasFilledValue($linkedDataSupplemental['pand_identificaties'] ?? null)) {
+            $bag['pand_identificaties'] = $linkedDataSupplemental['pand_identificaties'];
+        }
+        if (! $this->hasFilledValue($bag['bouwjaar'] ?? null) && $this->hasFilledValue($supplemental['bouwjaar'] ?? null)) {
+            $bag['bouwjaar'] = $supplemental['bouwjaar'];
+        }
+        if (! $this->hasFilledValue($bag['bouwjaar'] ?? null) && $this->hasFilledValue($linkedDataSupplemental['bouwjaar'] ?? null)) {
+            $bag['bouwjaar'] = $linkedDataSupplemental['bouwjaar'];
+        }
+        if (! $this->hasFilledValue($bag['gebruiksfunctie'] ?? null) && $this->hasFilledValue($supplemental['gebruiksfunctie'] ?? null)) {
+            $bag['gebruiksfunctie'] = $supplemental['gebruiksfunctie'];
+        }
+        if (! $this->hasFilledValue($bag['gebruiksfunctie'] ?? null) && $this->hasFilledValue($linkedDataSupplemental['gebruiksfunctie'] ?? null)) {
+            $bag['gebruiksfunctie'] = $linkedDataSupplemental['gebruiksfunctie'];
+        }
+        if (! $this->hasFilledValue($bag['oppervlakte_m2'] ?? null) && $this->hasFilledValue($supplemental['oppervlakte_m2'] ?? null)) {
+            $bag['oppervlakte_m2'] = $supplemental['oppervlakte_m2'];
+        }
+        if (! $this->hasFilledValue($bag['oppervlakte_m2'] ?? null) && $this->hasFilledValue($linkedDataSupplemental['oppervlakte_m2'] ?? null)) {
+            $bag['oppervlakte_m2'] = $linkedDataSupplemental['oppervlakte_m2'];
+        }
+        if (! $this->hasFilledValue($bag['energielabel'] ?? null) && $this->hasFilledValue($supplemental['energielabel'] ?? null)) {
+            $bag['energielabel'] = $supplemental['energielabel'];
+        }
+
+        if (! $this->hasFilledValue($bag['energielabel'] ?? null)) {
+            $bag['energielabel'] = $this->fetchEnergielabelAtPoint($lat, $lng);
+        }
+
+        return $bag;
+    }
+
+    private function fetchBagLinkedDataSupplemental(?string $adresseerbaarObjectId, ?string $nummeraanduidingId): array
+    {
+        $result = [
             'pand_identificaties' => [],
             'bouwjaar' => null,
             'gebruiksfunctie' => null,
             'oppervlakte_m2' => null,
-            'adresseerbaar_object_status' => null,
-            'geometry_rd' => $rdCoordinates,
-            'geometry_ll' => $pdok['centroide_ll'],
         ];
+
+        $verblijfsobjectId = $adresseerbaarObjectId;
+        if (! $verblijfsobjectId && $nummeraanduidingId) {
+            $nummerPayload = $this->fetchBagLinkedDataNode('nummeraanduiding', $nummeraanduidingId);
+            if (is_array($nummerPayload)) {
+                $verblijfsRef = data_get($nummerPayload, 'bag:ligtAan.0.@id')
+                    ?? data_get($nummerPayload, 'bag:ligtAan.@id')
+                    ?? data_get($nummerPayload, 'bag:adresseerbaarObject.0.@id')
+                    ?? data_get($nummerPayload, 'bag:adresseerbaarObject.@id');
+                if (is_string($verblijfsRef) && preg_match('/(\d{16})$/', $verblijfsRef, $m)) {
+                    $verblijfsobjectId = $m[1];
+                }
+            }
+        }
+
+        if (! is_string($verblijfsobjectId) || trim($verblijfsobjectId) === '') {
+            return $result;
+        }
+
+        $verblijfsNode = $this->fetchBagLinkedDataNode('verblijfsobject', $verblijfsobjectId);
+        if (! is_array($verblijfsNode)) {
+            return $result;
+        }
+
+        $oppervlakte = data_get($verblijfsNode, 'bag:oppervlakte.@value') ?? data_get($verblijfsNode, 'bag:oppervlakte');
+        if (is_numeric($oppervlakte)) {
+            $result['oppervlakte_m2'] = (int) $oppervlakte;
+        }
+
+        $gebruiksdoelRefs = [
+            data_get($verblijfsNode, 'bag:gebruiksdoel.@id'),
+            ...((array) data_get($verblijfsNode, 'bag:gebruiksdoel.*.@id', [])),
+        ];
+        $gebruiksdoelen = collect($gebruiksdoelRefs)
+            ->filter(fn ($ref) => is_string($ref) && trim($ref) !== '')
+            ->map(function (string $ref) {
+                $name = preg_replace('~^.*/~', '', $ref);
+                return preg_replace('/(?<!^)([A-Z])/', ' $1', $name ?? '');
+            })
+            ->filter(fn ($name) => is_string($name) && trim($name) !== '')
+            ->values()
+            ->all();
+        if (count($gebruiksdoelen) > 0) {
+            $result['gebruiksfunctie'] = implode(', ', array_values(array_unique($gebruiksdoelen)));
+        }
+
+        $pandRef = data_get($verblijfsNode, 'bag:maaktDeelUitVan.@id')
+            ?? data_get($verblijfsNode, 'bag:maaktDeelUitVan.0.@id');
+        $pandId = null;
+        if (is_string($pandRef) && preg_match('/(\d{16})$/', $pandRef, $m)) {
+            $pandId = $m[1];
+            $result['pand_identificaties'] = [$pandId];
+        }
+
+        if ($pandId) {
+            $pandNode = $this->fetchBagLinkedDataNode('pand', $pandId);
+            if (is_array($pandNode)) {
+                $bouwjaar = data_get($pandNode, 'bag:oorspronkelijkBouwjaar.@value')
+                    ?? data_get($pandNode, 'bag:oorspronkelijkBouwjaar');
+                if (is_scalar($bouwjaar) && trim((string) $bouwjaar) !== '') {
+                    $result['bouwjaar'] = trim((string) $bouwjaar);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function fetchBagLinkedDataNode(string $type, string $id): ?array
+    {
+        $url = sprintf('https://bag.basisregistraties.overheid.nl/bag/id/%s/%s', trim($type), trim($id));
+        $response = Http::timeout(10)
+            ->retry(1, 250)
+            ->withHeaders(['Accept' => 'application/ld+json'])
+            ->get($url);
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            $decoded = json_decode($response->body(), true);
+            $payload = is_array($decoded) ? $decoded : null;
+        }
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        $nodes = $this->flattenLinkedDataGraphNodes(data_get($payload, '@graph'));
+        if (count($nodes) === 0) {
+            return null;
+        }
+
+        foreach ($nodes as $node) {
+            $nodeId = data_get($node, '@id');
+            if (is_string($nodeId) && str_ends_with($nodeId, '/'.trim($id))) {
+                return $node;
+            }
+        }
+
+        return is_array($nodes[0] ?? null) ? $nodes[0] : null;
+    }
+
+    private function flattenLinkedDataGraphNodes(mixed $graph): array
+    {
+        if (! is_array($graph)) {
+            return [];
+        }
+
+        $result = [];
+        $queue = array_values($graph);
+
+        while (count($queue) > 0) {
+            $node = array_shift($queue);
+            if (! is_array($node)) {
+                continue;
+            }
+
+            if (is_array(data_get($node, '@graph'))) {
+                foreach (data_get($node, '@graph', []) as $nested) {
+                    $queue[] = $nested;
+                }
+            }
+
+            if (is_string(data_get($node, '@id'))) {
+                $result[] = $node;
+            }
+        }
+
+        return $result;
+    }
+
+    private function fetchBagSupplementalByObjectId(?string $adresseerbaarObjectId, array $existingPandIds): array
+    {
+        $result = [
+            'pand_identificaties' => $existingPandIds,
+            'bouwjaar' => null,
+            'gebruiksfunctie' => null,
+            'oppervlakte_m2' => null,
+            'energielabel' => null,
+        ];
+
+        if (! is_string($adresseerbaarObjectId) || trim($adresseerbaarObjectId) === '') {
+            return $result;
+        }
+
+        $response = $this->bagRequest('adresseerbareobjecten/'.urlencode($adresseerbaarObjectId));
+        if (! $response || ! $response->successful()) {
+            return $result;
+        }
+
+        $payload = (array) $response->json();
+        $object = $this->extractFirstArrayByKeys($payload, [
+            'verblijfsobject',
+            'standplaats',
+            'ligplaats',
+            'adresseerbaarObject',
+            'adresseerbaarobject',
+        ]) ?? $payload;
+
+        $oppervlakte = data_get($object, 'oppervlakte', data_get($payload, 'oppervlakte'));
+        if (is_numeric($oppervlakte)) {
+            $result['oppervlakte_m2'] = (int) $oppervlakte;
+        }
+
+        $gebruiksdoelen = data_get($object, 'gebruiksdoelen', data_get($payload, 'gebruiksdoelen', []));
+        if (! is_array($gebruiksdoelen)) {
+            $gebruiksdoelen = $this->hasFilledValue($gebruiksdoelen) ? [ (string) $gebruiksdoelen ] : [];
+        }
+        $gebruiksdoelen = collect($gebruiksdoelen)
+            ->filter(fn ($item) => is_string($item) && trim($item) !== '')
+            ->map(fn (string $item) => trim($item))
+            ->values()
+            ->all();
+        if (count($gebruiksdoelen) > 0) {
+            $result['gebruiksfunctie'] = implode(', ', $gebruiksdoelen);
+        }
+
+        $pandIds = collect(data_get($object, 'pandIdentificaties', data_get($payload, 'pandIdentificaties', [])))
+            ->filter(fn ($item) => is_string($item) && trim($item) !== '')
+            ->map(fn (string $item) => trim($item))
+            ->values()
+            ->all();
+        if (count($pandIds) === 0) {
+            $pandIds = $existingPandIds;
+        }
+        $result['pand_identificaties'] = $pandIds;
+
+        $energielabelRaw = data_get($object, 'energielabel', data_get($payload, 'energielabel'));
+        if ($energielabelRaw === null) {
+            $energielabelRaw = data_get($object, 'energieLabel', data_get($payload, 'energieLabel'));
+        }
+        if ($this->hasFilledValue($energielabelRaw)) {
+            $result['energielabel'] = trim((string) $energielabelRaw);
+        }
+
+        foreach (array_slice($pandIds, 0, 3) as $pandId) {
+            $pandResponse = $this->bagRequest('panden/'.urlencode($pandId));
+            if (! $pandResponse || ! $pandResponse->successful()) {
+                continue;
+            }
+
+            $pandPayload = (array) $pandResponse->json();
+            $pand = $this->extractFirstArrayByKeys($pandPayload, ['pand']) ?? $pandPayload;
+            $bouwjaar = data_get($pand, 'oorspronkelijkBouwjaar', data_get($pandPayload, 'oorspronkelijkBouwjaar'));
+            if ($this->hasFilledValue($bouwjaar)) {
+                $result['bouwjaar'] = (string) $bouwjaar;
+                break;
+            }
+        }
+
+        return $result;
+    }
+
+    private function fetchEnergielabelAtPoint(?float $lat, ?float $lng): ?string
+    {
+        if ($lat === null || $lng === null) {
+            return null;
+        }
+
+        $items = $this->fetchWmsFeatureInfoAtPoint(
+            (string) config('services.pdok.energielabel_wms_url'),
+            (string) config('services.pdok.energielabel_wms_layer'),
+            $lat,
+            $lng
+        );
+
+        $normalized = collect($items)
+            ->filter(fn ($item) => is_array($item))
+            ->keyBy(function (array $item) {
+                $title = is_string($item['title'] ?? null) ? $item['title'] : '';
+                return Str::lower(str_replace([' ', '_'], '', $title));
+            });
+
+        $label = data_get($normalized->get('dominantlabel'), 'value')
+            ?? data_get($normalized->get('hoogstelabel'), 'value')
+            ?? data_get($normalized->get('laagstelabel'), 'value');
+
+        return $this->hasFilledValue($label) ? trim((string) $label) : null;
+    }
+
+    private function hasFilledValue(mixed $value): bool
+    {
+        if (is_array($value)) {
+            return count($value) > 0;
+        }
+        if (is_string($value)) {
+            return trim($value) !== '';
+        }
+
+        return $value !== null;
+    }
+
+    private function extractFirstArrayByKeys(array $payload, array $keys): ?array
+    {
+        foreach ($keys as $key) {
+            $candidate = data_get($payload, $key);
+            if (is_array($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function findFirstScalarByKeys(array $payload, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            $values = $this->collectValuesByKeyRecursive($payload, $key);
+            foreach ($values as $value) {
+                if (is_scalar($value) && trim((string) $value) !== '') {
+                    return $value;
+                }
+                if (is_array($value)) {
+                    foreach ($value as $nested) {
+                        if (is_scalar($nested) && trim((string) $nested) !== '') {
+                            return $nested;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function findFirstNumericByKeys(array $payload, array $keys): ?float
+    {
+        foreach ($keys as $key) {
+            $values = $this->collectValuesByKeyRecursive($payload, $key);
+            foreach ($values as $value) {
+                if (is_numeric($value)) {
+                    return (float) $value;
+                }
+                if (is_array($value)) {
+                    foreach ($value as $nested) {
+                        if (is_numeric($nested)) {
+                            return (float) $nested;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function collectStringValuesByKeys(array $payload, array $keys): array
+    {
+        $values = [];
+
+        foreach ($keys as $key) {
+            foreach ($this->collectValuesByKeyRecursive($payload, $key) as $rawValue) {
+                $values = array_merge($values, $this->normalizeToStringList($rawValue));
+            }
+        }
+
+        return collect($values)
+            ->filter(fn ($value) => is_string($value) && trim($value) !== '')
+            ->map(fn (string $value) => trim($value))
+            ->values()
+            ->all();
+    }
+
+    private function normalizeToStringList(mixed $value): array
+    {
+        if (is_scalar($value)) {
+            return [trim((string) $value)];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($value as $item) {
+            if (is_scalar($item)) {
+                $result[] = trim((string) $item);
+                continue;
+            }
+            if (is_array($item)) {
+                foreach (['identificatie', 'id', 'waarde', 'value', 'code', 'naam'] as $candidateKey) {
+                    $candidate = $item[$candidateKey] ?? null;
+                    if (is_scalar($candidate) && trim((string) $candidate) !== '') {
+                        $result[] = trim((string) $candidate);
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function findFirstCoordinatePairByKeys(array $payload, array $keys): ?array
+    {
+        foreach ($keys as $key) {
+            foreach ($this->collectValuesByKeyRecursive($payload, $key) as $candidate) {
+                if (! is_array($candidate)) {
+                    continue;
+                }
+
+                if (count($candidate) >= 2 && is_numeric($candidate[0] ?? null) && is_numeric($candidate[1] ?? null)) {
+                    return [(float) $candidate[0], (float) $candidate[1]];
+                }
+
+                foreach ($candidate as $nested) {
+                    if (is_array($nested) && count($nested) >= 2 && is_numeric($nested[0] ?? null) && is_numeric($nested[1] ?? null)) {
+                        return [(float) $nested[0], (float) $nested[1]];
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function collectValuesByKeyRecursive(mixed $node, string $targetKey): array
+    {
+        if (! is_array($node)) {
+            return [];
+        }
+
+        $results = [];
+        foreach ($node as $key => $value) {
+            if ((string) $key === $targetKey) {
+                $results[] = $value;
+            }
+            if (is_array($value)) {
+                $results = array_merge($results, $this->collectValuesByKeyRecursive($value, $targetKey));
+            }
+        }
+
+        return $results;
     }
 }

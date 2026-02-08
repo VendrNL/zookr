@@ -210,6 +210,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:offer,search_request');
 
     Route::get(
+        'search-requests/{search_request}/properties/map-feature-info',
+        [PropertyController::class, 'mapFeatureInfo']
+    )
+        ->name('search-requests.properties.map-feature-info')
+        ->middleware('can:offer,search_request');
+
+    Route::get(
         'search-requests/{search_request}/properties/{property}/edit',
         [PropertyController::class, 'edit']
     )

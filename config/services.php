@@ -47,8 +47,15 @@ return [
     'pdok' => [
         'kadastraal_wms_url' => env('PDOK_KADASTRAAL_WMS_URL', 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0'),
         'kadastraal_wms_layer' => env('PDOK_KADASTRAAL_WMS_LAYER', 'Perceel,Label,KadastraleGrens'),
+        'wegenkaart_grijs_wmts_url' => env('PDOK_WEGENKAART_GRIJS_WMTS_URL', 'https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0'),
+        'wegenkaart_grijs_wmts_layer' => env('PDOK_WEGENKAART_GRIJS_WMTS_LAYER', 'grijs'),
+        'wegenkaart_grijs_wmts_matrixset' => env('PDOK_WEGENKAART_GRIJS_WMTS_MATRIXSET', 'EPSG:3857'),
         'bodemkaart_wms_url' => env('PDOK_BODEMKAART_WMS_URL'),
         'bodemkaart_wms_layer' => env('PDOK_BODEMKAART_WMS_LAYER', 'bodemkaart'),
+        'bodemverontreiniging_wms_url' => env('PDOK_BODEMVERONTREINIGING_WMS_URL'),
+        'bodemverontreiniging_wms_layer' => env('PDOK_BODEMVERONTREINIGING_WMS_LAYER'),
+        'energielabel_wms_url' => env('PDOK_ENERGIELABEL_WMS_URL', 'https://data.rivm.nl/geo/nl/wms'),
+        'energielabel_wms_layer' => env('PDOK_ENERGIELABEL_WMS_LAYER', 'rvo_energielabels'),
         'ruimtelijke_plannen_wms_url' => env('PDOK_RUIMTELIJKE_PLANNEN_WMS_URL', 'https://service.pdok.nl/kadaster/ruimtelijke-plannen/wms/v1_0'),
     ],
 
