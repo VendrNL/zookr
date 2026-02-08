@@ -57,10 +57,27 @@ return [
         'energielabel_wms_url' => env('PDOK_ENERGIELABEL_WMS_URL', 'https://data.rivm.nl/geo/nl/wms'),
         'energielabel_wms_layer' => env('PDOK_ENERGIELABEL_WMS_LAYER', 'rvo_energielabels'),
         'ruimtelijke_plannen_wms_url' => env('PDOK_RUIMTELIJKE_PLANNEN_WMS_URL', 'https://service.pdok.nl/kadaster/ruimtelijke-plannen/wms/v1_0'),
+        'ruimtelijke_plannen_wms_layer' => env('PDOK_RUIMTELIJKE_PLANNEN_WMS_LAYER', 'enkelbestemming'),
+        'ruimtelijke_plannen_legend_url' => env('PDOK_RUIMTELIJKE_PLANNEN_LEGEND_URL', 'https://service.pdok.nl/kadaster/ruimtelijke-plannen/wms/v1_0/legend/enkelbestemming/enkelbestemming.png'),
     ],
 
     'rce' => [
         'sparql_url' => env('RCE_SPARQL_URL', 'https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/cho/services/cho/sparql'),
+    ],
+
+    'overpass' => [
+        'url' => env('OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter'),
+    ],
+
+    'cbs' => [
+        'odata_base_url' => env('CBS_ODATA_BASE_URL', 'https://datasets.cbs.nl/odata/v1/CBS'),
+        'neighborhood_table' => env('CBS_NEIGHBORHOOD_TABLE', '85830NED'),
+    ],
+
+    'rivm' => [
+        'air_wms_url' => env('RIVM_AIR_WMS_URL', 'https://data.rivm.nl/geo/alo/wms'),
+        'air_pm25_layer' => env('RIVM_AIR_PM25_LAYER', 'rivm_jaargemiddeld_PM25_actueel'),
+        'air_no2_layer' => env('RIVM_AIR_NO2_LAYER', 'rivm_jaargemiddeld_NO2_actueel'),
     ],
 
 ];

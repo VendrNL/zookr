@@ -720,13 +720,15 @@ const createWmtsOverlay = (baseUrl, layerName, matrixSet = "EPSG:3857", format =
 };
 
 const mapLegendContainerClass = computed(() =>
-    mapMode.value === "energielabels"
+    [ "energielabels", "bestemmingsplannen" ].includes(mapMode.value)
         ? "pointer-events-none absolute bottom-2 left-2 z-[5] max-h-[78%] max-w-[85%] overflow-auto rounded-md border border-gray-300 bg-white/95 p-3 shadow-sm"
         : "pointer-events-none absolute bottom-2 left-2 z-[5] max-w-[60%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
 );
 
 const mapLegendImageClass = computed(() =>
-    mapMode.value === "energielabels" ? "max-h-[55vh] w-auto" : "max-h-24 w-auto"
+    [ "energielabels", "bestemmingsplannen" ].includes(mapMode.value)
+        ? "max-h-[55vh] w-auto"
+        : "max-h-24 w-auto"
 );
 
 const neutralOverlayBaseMapStyles = [
@@ -758,6 +760,11 @@ const buildWmsLegendItems = (baseUrl, layerNames) => {
                 url: `${baseUrl}?${params.toString()}`,
             };
         });
+};
+
+const buildDirectLegendItem = (url, layer = "legend") => {
+    if (!url) return [];
+    return [ { layer, url } ];
 };
 
 const mapLegend = computed(() => {
@@ -799,6 +806,16 @@ const mapLegend = computed(() => {
             items: buildWmsLegendItems(
                 mapConfig.energielabel_wms_url,
                 mapConfig.energielabel_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "bestemmingsplannen") {
+        return {
+            title: "Legenda Bestemmingsplannen",
+            items: buildDirectLegendItem(
+                mapConfig.ruimtelijke_plannen_legend_url,
+                mapConfig.ruimtelijke_plannen_wms_layer || "enkelbestemming"
             ),
         };
     }
@@ -913,6 +930,36 @@ const fallbackLegendItems = computed(() => {
         ];
     }
 
+    if (mapMode.value === "bestemmingsplannen") {
+        return [
+            { label: "agrarisch", style: { backgroundColor: "#e8ebcd", border: "1px solid #94a370" } },
+            { label: "agrarisch met waarden", style: { backgroundColor: "#c8d98c", border: "1px solid #8ca35f" } },
+            { label: "bedrijf", style: { backgroundColor: "#a15bc9", border: "1px solid #7e3ba5" } },
+            { label: "bedrijventerrein", style: { backgroundColor: "#a87cc8", border: "1px solid #7e5aa1" } },
+            { label: "bos", style: { backgroundColor: "#4d8e3d", border: "1px solid #3c6f31" } },
+            { label: "centrum", style: { backgroundColor: "#f2c39d", border: "1px solid #d59a70" } },
+            { label: "cultuur en ontspanning", style: { backgroundColor: "#f45b86", border: "1px solid #c94166" } },
+            { label: "detailhandel", style: { backgroundColor: "#ef9c7a", border: "1px solid #cb7c5f" } },
+            { label: "dienstverlening", style: { backgroundColor: "#e090b8", border: "1px solid #ba6e95" } },
+            { label: "gemengd", style: { backgroundColor: "#eeb887", border: "1px solid #cb9a6d" } },
+            { label: "groen", style: { backgroundColor: "#56c861", border: "1px solid #3da34a" } },
+            { label: "horeca", style: { backgroundColor: "#ff7f1a", border: "1px solid #d5670f" } },
+            { label: "infrastructuur", style: { backgroundColor: "#cbcbcb", border: "1px solid #a7a7a7" } },
+            { label: "kantoor", style: { backgroundColor: "#e0b8d3", border: "1px solid #b891ab" } },
+            { label: "maatschappelijk", style: { backgroundColor: "#d8a678", border: "1px solid #b88861" } },
+            { label: "natuur", style: { backgroundColor: "#8a9d79", border: "1px solid #6e7e61" } },
+            { label: "recreatie", style: { backgroundColor: "#c7d43f", border: "1px solid #9faa2f" } },
+            { label: "sport", style: { backgroundColor: "#9ac130", border: "1px solid #799a24" } },
+            { label: "tuin", style: { backgroundColor: "#d5de63", border: "1px solid #b3bd50" } },
+            { label: "verkeer", style: { backgroundColor: "#d9d9d9", border: "1px solid #b8b8b8" } },
+            { label: "ontspanning en vermaak", style: { backgroundColor: "#ef4c93", border: "1px solid #c63b77" } },
+            { label: "water", style: { backgroundColor: "#b8d6e8", border: "1px solid #8db5cd" } },
+            { label: "wonen", style: { backgroundColor: "#f1ee23", border: "1px solid #cecb10" } },
+            { label: "woongebied", style: { backgroundColor: "#e8e8a6", border: "1px solid #c4c47f" } },
+            { label: "overig", style: { backgroundColor: "#e7e1e8", border: "1px solid #c6bfc8" } },
+        ];
+    }
+
     return [];
 });
 
@@ -931,7 +978,7 @@ const clearMapFeatureInfo = () => {
 };
 
 const fetchMapFeatureInfo = async (lat, lng) => {
-    const interactiveModes = ["kadaster", "bodemkaart", "bodemverontreiniging", "energielabels"];
+    const interactiveModes = ["kadaster", "bodemkaart", "bodemverontreiniging", "energielabels", "bestemmingsplannen"];
     if (!interactiveModes.includes(mapMode.value)) {
         clearMapFeatureInfo();
         return;
@@ -1157,6 +1204,32 @@ const updateMapMode = () => {
         } else {
             mapLoadError.value =
                 "Energielabel-laag niet beschikbaar. Stel PDOK_ENERGIELABEL_WMS_URL en PDOK_ENERGIELABEL_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "bestemmingsplannen") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        const wmtsOverlay = createWmtsOverlay(
+            mapConfig.wegenkaart_grijs_wmts_url,
+            mapConfig.wegenkaart_grijs_wmts_layer || "grijs",
+            mapConfig.wegenkaart_grijs_wmts_matrixset || "EPSG:3857"
+        );
+        if (wmtsOverlay) {
+            mapInstance.value.overlayMapTypes.push(wmtsOverlay);
+        }
+
+        mapOverlay.value = createWmsOverlayCrs84(
+            mapConfig.ruimtelijke_plannen_wms_url,
+            mapConfig.ruimtelijke_plannen_wms_layer || "enkelbestemming"
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Bestemmingsplannen-laag niet beschikbaar. Stel PDOK_RUIMTELIJKE_PLANNEN_WMS_URL en PDOK_RUIMTELIJKE_PLANNEN_WMS_LAYER in.";
         }
     }
 };
@@ -1984,6 +2057,7 @@ onBeforeUnmount(() => {
                                         <option value="bodemkaart">Bodemkaart</option>
                                         <option value="bodemverontreiniging">Bodemverontreiniging en sanering</option>
                                         <option value="energielabels">Energielabels</option>
+                                        <option value="bestemmingsplannen">Bestemmingsplannen</option>
                                     </select>
                                 </div>
                                 <div
@@ -2026,7 +2100,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                     <div
-                                        v-if="['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels'].includes(mapMode)"
+                                        v-if="['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels', 'bestemmingsplannen'].includes(mapMode)"
                                         class="absolute right-2 top-2 z-[5] max-w-[55%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
                                     >
                                         <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
@@ -2211,8 +2285,135 @@ onBeforeUnmount(() => {
                                 </div>
                                 <div class="rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bereikbaarheid</div>
-                                    <div class="mt-1 text-sm text-gray-700">
-                                        OV/auto/knooppunten via open bronnen (PDOK/CBS) zijn als bronlinks toegevoegd.
+                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
+                                        <div>
+                                            Buurtcode:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.buurtcode ?? "-" }}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Afstand tot supermarkt:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_supermarkt_km ?? "-" }} km
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Sport- en beweegmogelijkheden:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.sport_en_beweegmogelijkheden ?? "-" }}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Afstand tot station/metro/tram:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km ?? "-" }} km
+                                            </span>
+                                            <a
+                                                v-if="enrichmentData?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram?.osm_url"
+                                                :href="enrichmentData.accessibility.dichtstbijzijnde_ov.station_metro_tram.osm_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open OSM
+                                            </a>
+                                        </div>
+                                        <div>
+                                            Afstand tot bushalte:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_bushalte_km ?? "-" }} km
+                                            </span>
+                                            <a
+                                                v-if="enrichmentData?.accessibility?.dichtstbijzijnde_ov?.bushalte?.osm_url"
+                                                :href="enrichmentData.accessibility.dichtstbijzijnde_ov.bushalte.osm_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open OSM
+                                            </a>
+                                        </div>
+                                        <div>
+                                            Afstand tot oprit hoofdweg:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km ?? "-" }} km
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Afstand tot groen:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_groen_km ?? "-" }} km
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Dichtstbijzijnde cafe:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_cafe_km ?? "-" }} km
+                                            </span>
+                                            <a
+                                                v-if="enrichmentData?.accessibility?.dichtstbijzijnde?.cafe?.osm_url"
+                                                :href="enrichmentData.accessibility.dichtstbijzijnde.cafe.osm_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open OSM
+                                            </a>
+                                        </div>
+                                        <div>
+                                            Dichtstbijzijnde restaurant:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_restaurant_km ?? "-" }} km
+                                            </span>
+                                            <a
+                                                v-if="enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant?.osm_url"
+                                                :href="enrichmentData.accessibility.dichtstbijzijnde.restaurant.osm_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open OSM
+                                            </a>
+                                        </div>
+                                        <div>
+                                            Dichtstbijzijnde hotel:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.accessibility?.afstand_tot_hotel_km ?? "-" }} km
+                                            </span>
+                                            <a
+                                                v-if="enrichmentData?.accessibility?.dichtstbijzijnde?.hotel?.osm_url"
+                                                :href="enrichmentData.accessibility.dichtstbijzijnde.hotel.osm_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="ml-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                            >
+                                                Open OSM
+                                            </a>
+                                        </div>
+                                        <div class="pt-1 text-xs text-gray-500">
+                                            Bron: CBS 85830NED + OpenStreetMap Overpass
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Luchtkwaliteit (2023)</div>
+                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
+                                        <div>
+                                            Fijnstof PM2.5:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.air_quality?.pm25_ug_m3 ?? "-" }} ug/m3
+                                            </span>
+                                        </div>
+                                        <div>
+                                            Stikstofdioxide NO2:
+                                            <span class="font-semibold text-gray-900">
+                                                {{ enrichmentData?.air_quality?.no2_ug_m3 ?? "-" }} ug/m3
+                                            </span>
+                                        </div>
+                                        <div class="pt-1 text-xs text-gray-500">
+                                            Bron: RIVM ALO WMS (data.overheid datasets)
+                                        </div>
                                     </div>
                                 </div>
                             </div>

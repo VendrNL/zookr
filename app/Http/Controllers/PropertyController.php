@@ -137,6 +137,9 @@ class PropertyController extends Controller
             'pdok_cadastre' => ['status' => 'pending', 'detail' => null],
             'pdok_zoning' => ['status' => 'pending', 'detail' => null],
             'rce_heritage' => ['status' => 'pending', 'detail' => null],
+            'osm_poi' => ['status' => 'pending', 'detail' => null],
+            'cbs_85830' => ['status' => 'pending', 'detail' => null],
+            'rivm_air_quality' => ['status' => 'pending', 'detail' => null],
         ];
 
         $bag = $this->fetchAddressExtendedByIdentifier($data['bag_address_id']);
@@ -265,6 +268,65 @@ class PropertyController extends Controller
             ];
         }
 
+        $poiLat = is_numeric($buildingMarker['lat'] ?? null) ? (float) $buildingMarker['lat'] : ($geocode['lat'] ?? null);
+        $poiLng = is_numeric($buildingMarker['lng'] ?? null) ? (float) $buildingMarker['lng'] : ($geocode['lng'] ?? null);
+        $poiDistances = $this->fetchNearestPoiDistances($poiLat, $poiLng);
+        $transitDistances = $this->fetchNearestTransitDistances($poiLat, $poiLng);
+        if (! $geocode) {
+            $diagnostics['osm_poi'] = [
+                'status' => 'skipped',
+                'detail' => 'Overgeslagen: geen geocode beschikbaar.',
+            ];
+        } else {
+            $hasPoiDistance = $this->hasFilledValue($poiDistances['cafe']['afstand_km'] ?? null)
+                || $this->hasFilledValue($poiDistances['restaurant']['afstand_km'] ?? null)
+                || $this->hasFilledValue($poiDistances['hotel']['afstand_km'] ?? null);
+            $diagnostics['osm_poi'] = [
+                'status' => $hasPoiDistance ? 'ok' : 'no_data',
+                'detail' => $hasPoiDistance
+                    ? 'Afstanden naar dichtstbijzijnde cafe/restaurant/hotel opgehaald via OpenStreetMap Overpass.'
+                    : 'Geen cafe/restaurant/hotel gevonden binnen 10 km (of bron niet beschikbaar).',
+            ];
+        }
+
+        $buurtCode = $this->fetchNeighborhoodCode(
+            is_string($bag['adresseerbaar_object_identificatie'] ?? null) ? $bag['adresseerbaar_object_identificatie'] : null,
+            is_string($bag['nummeraanduiding_identificatie'] ?? null) ? $bag['nummeraanduiding_identificatie'] : null,
+            $bag['address'] ?? null,
+            $bag['postcode'] ?? null,
+            $bag['city'] ?? null
+        );
+        $cbs = $this->fetchCbsNeighborhoodStats($buurtCode);
+        if ($buurtCode === null) {
+            $diagnostics['cbs_85830'] = [
+                'status' => 'skipped',
+                'detail' => 'Geen buurtcode beschikbaar voor CBS-verrijking.',
+            ];
+        } else {
+            $hasCbsData = $this->hasFilledValue($cbs['afstand_tot_supermarkt_km'] ?? null)
+                || $this->hasFilledValue($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null)
+                || $this->hasFilledValue($cbs['afstand_tot_groen_km'] ?? null);
+            $diagnostics['cbs_85830'] = [
+                'status' => $hasCbsData ? 'ok' : 'no_data',
+                'detail' => $hasCbsData
+                    ? 'Buurt-/voorzieningscijfers opgehaald via CBS OData (85830NED).'
+                    : 'CBS 85830NED gaf geen waarden voor deze buurtcode.',
+            ];
+        }
+
+        $airQuality = $this->fetchRivmAirQualityAtPoint(
+            $geocode['lat'] ?? null,
+            $geocode['lng'] ?? null
+        );
+        $hasAirData = $this->hasFilledValue($airQuality['pm25_ug_m3'] ?? null)
+            || $this->hasFilledValue($airQuality['no2_ug_m3'] ?? null);
+        $diagnostics['rivm_air_quality'] = [
+            'status' => $hasAirData ? 'ok' : 'no_data',
+            'detail' => $hasAirData
+                ? 'Luchtkwaliteit (PM2.5/NO2) opgehaald via RIVM WMS.'
+                : 'Geen luchtkwaliteitswaarde ontvangen op dit punt.',
+        ];
+
         return response()->json([
             'bag_id' => $bagId,
             'bag' => [
@@ -300,12 +362,28 @@ class PropertyController extends Controller
             'accessibility' => [
                 'ov' => null,
                 'auto' => null,
-                'afstand_tot_knooppunten' => null,
+                'afstand_tot_knooppunten' => $cbs['afstand_tot_overstapstation_km'] ?? null,
+                'buurtcode' => $buurtCode,
+                'mate_van_stedelijkheid' => $cbs['mate_van_stedelijkheid'] ?? null,
+                'afstand_tot_supermarkt_km' => $cbs['afstand_tot_supermarkt_km'] ?? null,
+                'sport_en_beweegmogelijkheden' => $cbs['sport_en_beweegmogelijkheden'] ?? null,
+                'afstand_tot_treinstation_ov_knooppunt_km' => $transitDistances['station_metro_tram']['afstand_km'] ?? ($cbs['afstand_tot_treinstation_ov_knooppunt_km'] ?? null),
+                'afstand_tot_bushalte_km' => $transitDistances['bushalte']['afstand_km'] ?? ($cbs['afstand_tot_bushalte_km'] ?? null),
+                'afstand_tot_oprit_hoofdweg_km' => $cbs['afstand_tot_oprit_hoofdweg_km'] ?? null,
+                'afstand_tot_groen_km' => $cbs['afstand_tot_groen_km'] ?? null,
+                'afstand_tot_cafe_km' => $poiDistances['cafe']['afstand_km'] ?? null,
+                'afstand_tot_restaurant_km' => $poiDistances['restaurant']['afstand_km'] ?? null,
+                'afstand_tot_hotel_km' => $poiDistances['hotel']['afstand_km'] ?? null,
+                'dichtstbijzijnde' => $poiDistances,
+                'dichtstbijzijnde_ov' => $transitDistances,
                 'bronnen' => [
                     'https://www.pdok.nl/',
                     'https://www.cbs.nl/',
+                    'https://www.openstreetmap.org/',
+                    'https://overpass-api.de/',
                 ],
             ],
+            'air_quality' => $airQuality,
             'woz' => [
                 'beschikbaar_via_open_api' => false,
                 'toelichting' => 'WOZ Waardeloket ondersteunt geen algemene open bulk-API voor geautomatiseerde verrijking.',
@@ -331,6 +409,9 @@ class PropertyController extends Controller
                 'bodemverontreiniging_wms_layer' => (string) config('services.pdok.bodemverontreiniging_wms_layer'),
                 'energielabel_wms_url' => (string) config('services.pdok.energielabel_wms_url'),
                 'energielabel_wms_layer' => (string) config('services.pdok.energielabel_wms_layer'),
+                'ruimtelijke_plannen_wms_url' => (string) config('services.pdok.ruimtelijke_plannen_wms_url'),
+                'ruimtelijke_plannen_wms_layer' => (string) config('services.pdok.ruimtelijke_plannen_wms_layer'),
+                'ruimtelijke_plannen_legend_url' => (string) config('services.pdok.ruimtelijke_plannen_legend_url'),
             ],
         ]);
     }
@@ -340,7 +421,7 @@ class PropertyController extends Controller
         $this->authorize('offer', $search_request);
 
         $data = $request->validate([
-            'mode' => ['required', 'string', Rule::in(['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels'])],
+            'mode' => ['required', 'string', Rule::in(['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels', 'bestemmingsplannen'])],
             'lat' => ['required', 'numeric'],
             'lng' => ['required', 'numeric'],
         ]);
@@ -472,6 +553,64 @@ class PropertyController extends Controller
 
             return response()->json([
                 'mode' => 'energielabels',
+                'items' => $items,
+            ]);
+        }
+
+        if ($data['mode'] === 'bestemmingsplannen') {
+            $rawItems = $this->fetchWmsFeatureInfoAtPoint(
+                (string) config('services.pdok.ruimtelijke_plannen_wms_url'),
+                (string) config('services.pdok.ruimtelijke_plannen_wms_layer', 'enkelbestemming'),
+                $lat,
+                $lng
+            );
+
+            $normalized = collect($rawItems)
+                ->filter(fn ($item) => is_array($item))
+                ->keyBy(function (array $item) {
+                    $title = is_string($item['title'] ?? null) ? $item['title'] : '';
+                    return Str::lower(str_replace([' ', '_', '-'], '', $title));
+                });
+
+            $planTekstUrl = data_get($normalized->get('verwijzingnaartekst'), 'value');
+            $items = collect([
+                [
+                    'title' => 'Bestemming',
+                    'value' => data_get($normalized->get('bestemmingshoofdgroep'), 'value')
+                        ?? data_get($normalized->get('naam'), 'value'),
+                ],
+                [
+                    'title' => 'Plannaam',
+                    'value' => data_get($normalized->get('naam'), 'value'),
+                ],
+                [
+                    'title' => 'Type plan',
+                    'value' => data_get($normalized->get('typeplan'), 'value'),
+                ],
+                [
+                    'title' => 'Planstatus',
+                    'value' => data_get($normalized->get('planstatus'), 'value'),
+                ],
+                [
+                    'title' => 'Dossierstatus',
+                    'value' => data_get($normalized->get('dossierstatus'), 'value'),
+                ],
+                [
+                    'title' => 'Overheid',
+                    'value' => data_get($normalized->get('naamoverheid'), 'value'),
+                ],
+                [
+                    'title' => 'Naar plantekst',
+                    'value' => is_string($planTekstUrl) && trim($planTekstUrl) !== '' ? 'Open plantekst' : null,
+                    'url' => is_string($planTekstUrl) && trim($planTekstUrl) !== '' ? trim($planTekstUrl) : null,
+                ],
+            ])
+                ->filter(fn (array $item) => is_string($item['value']) && trim($item['value']) !== '')
+                ->values()
+                ->all();
+
+            return response()->json([
+                'mode' => 'bestemmingsplannen',
                 'items' => $items,
             ]);
         }
@@ -2010,6 +2149,459 @@ class PropertyController extends Controller
             ->all();
 
         return $features;
+    }
+
+    private function fetchNearestPoiDistances(?float $lat, ?float $lng): array
+    {
+        $result = [
+            'cafe' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+            'restaurant' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+            'hotel' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+        ];
+
+        if ($lat === null || $lng === null) {
+            return $result;
+        }
+
+        $overpassUrls = collect([
+            trim((string) config('services.overpass.url')),
+            'https://overpass.kumi.systems/api/interpreter',
+        ])
+            ->filter(fn ($url) => is_string($url) && trim($url) !== '')
+            ->unique()
+            ->values()
+            ->all();
+        if (count($overpassUrls) === 0) {
+            return $result;
+        }
+
+        $latStr = number_format($lat, 7, '.', '');
+        $lngStr = number_format($lng, 7, '.', '');
+        $query = <<<OVERPASS
+[out:json][timeout:20];
+(
+  nwr["amenity"="cafe"](around:10000,{$latStr},{$lngStr});
+  nwr["amenity"="restaurant"](around:10000,{$latStr},{$lngStr});
+  nwr["tourism"="hotel"](around:10000,{$latStr},{$lngStr});
+);
+out center tags;
+OVERPASS;
+
+        $elements = [];
+        foreach ($overpassUrls as $overpassUrl) {
+            $response = Http::timeout(20)
+                ->retry(1, 450)
+                ->asForm()
+                ->post($overpassUrl, ['data' => $query]);
+            if (! $response->successful()) {
+                $response = Http::timeout(20)
+                    ->retry(1, 450)
+                    ->withHeaders([
+                        'Content-Type' => 'text/plain;charset=UTF-8',
+                        'User-Agent' => 'zookr/1.0',
+                    ])
+                    ->post($overpassUrl, $query);
+            }
+            if (! $response->successful()) {
+                continue;
+            }
+
+            $candidate = data_get($response->json(), 'elements', []);
+            if (is_array($candidate) && count($candidate) > 0) {
+                $elements = $candidate;
+                break;
+            }
+        }
+
+        if (! is_array($elements)) {
+            return $result;
+        }
+
+        $nearest = [
+            'cafe' => null,
+            'restaurant' => null,
+            'hotel' => null,
+        ];
+
+        foreach ($elements as $element) {
+            if (! is_array($element)) {
+                continue;
+            }
+
+            $category = $this->detectPoiCategory($element);
+            if (! $category) {
+                continue;
+            }
+
+            $poiLat = data_get($element, 'lat');
+            $poiLng = data_get($element, 'lon');
+            if (! is_numeric($poiLat) || ! is_numeric($poiLng)) {
+                $poiLat = data_get($element, 'center.lat');
+                $poiLng = data_get($element, 'center.lon');
+            }
+            if (! is_numeric($poiLat) || ! is_numeric($poiLng)) {
+                continue;
+            }
+
+            $distanceMeters = $this->haversineDistanceMeters($lat, $lng, (float) $poiLat, (float) $poiLng);
+            if (! is_finite($distanceMeters)) {
+                continue;
+            }
+
+            if (! isset($nearest[$category]) || $nearest[$category] === null || $distanceMeters < ($nearest[$category]['distance_m'] ?? INF)) {
+                $nearest[$category] = [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString(data_get($element, 'tags.name')),
+                    'type' => (string) data_get($element, 'type', ''),
+                    'id' => data_get($element, 'id'),
+                ];
+            }
+        }
+
+        foreach (['cafe', 'restaurant', 'hotel'] as $category) {
+            $item = $nearest[$category];
+            if (! is_array($item) || ! is_numeric($item['distance_m'] ?? null)) {
+                continue;
+            }
+
+            $result[$category] = [
+                'afstand_km' => $this->roundDistanceKm((float) $item['distance_m']),
+                'naam' => $item['name'],
+                'osm_url' => $this->buildOsmObjectUrl(
+                    is_string($item['type'] ?? null) ? $item['type'] : null,
+                    $item['id'] ?? null
+                ),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function fetchNeighborhoodCode(
+        ?string $adresseerbaarObjectId,
+        ?string $nummeraanduidingId,
+        mixed $address,
+        mixed $postcode,
+        mixed $city
+    ): ?string {
+        $findFromPdok = function (array $params): ?string {
+            $response = Http::timeout(10)
+                ->retry(1, 250)
+                ->get('https://api.pdok.nl/bzk/locatieserver/search/v3_1/free', $params);
+            if (! $response->successful()) {
+                return null;
+            }
+
+            return $this->nullableString(data_get($response->json(), 'response.docs.0.buurtcode'));
+        };
+
+        if (is_string($adresseerbaarObjectId) && trim($adresseerbaarObjectId) !== '') {
+            $code = $findFromPdok([
+                'q' => '*:*',
+                'fq' => '(adresseerbaarobject_id:'.trim($adresseerbaarObjectId).')',
+                'rows' => 1,
+            ]);
+            if ($code) {
+                return $code;
+            }
+        }
+
+        if (is_string($nummeraanduidingId) && trim($nummeraanduidingId) !== '') {
+            $code = $findFromPdok([
+                'q' => '*:*',
+                'fq' => '(nummeraanduiding_id:'.trim($nummeraanduidingId).')',
+                'rows' => 1,
+            ]);
+            if ($code) {
+                return $code;
+            }
+        }
+
+        $query = trim((string) $address.' '.(string) $postcode.' '.(string) $city);
+        if ($query !== '') {
+            return $findFromPdok([
+                'q' => $query,
+                'rows' => 1,
+            ]);
+        }
+
+        return null;
+    }
+
+    private function fetchCbsNeighborhoodStats(?string $buurtCode): array
+    {
+        $result = [
+            'afstand_tot_supermarkt_km' => null,
+            'sport_en_beweegmogelijkheden' => null,
+            'afstand_tot_treinstation_ov_knooppunt_km' => null,
+            'afstand_tot_overstapstation_km' => null,
+            'afstand_tot_bushalte_km' => null,
+            'afstand_tot_oprit_hoofdweg_km' => null,
+            'afstand_tot_groen_km' => null,
+            'mate_van_stedelijkheid' => null,
+            'bron' => 'CBS 85830NED',
+        ];
+
+        if (! is_string($buurtCode) || trim($buurtCode) === '') {
+            return $result;
+        }
+
+        $baseUrl = rtrim((string) config('services.cbs.odata_base_url'), '/');
+        $table = trim((string) config('services.cbs.neighborhood_table', '85830NED'));
+        if ($baseUrl === '' || $table === '') {
+            return $result;
+        }
+
+        $url = sprintf('%s/%s/Observations', $baseUrl, $table);
+        $response = Http::timeout(12)
+            ->retry(1, 300)
+            ->get($url, [
+                '$filter' => "WijkenEnBuurten eq '".trim($buurtCode)."'",
+            ]);
+
+        if (! $response->successful()) {
+            return $result;
+        }
+
+        $rows = collect(data_get($response->json(), 'value', []))
+            ->filter(fn ($row) => is_array($row))
+            ->keyBy(fn (array $row) => (string) ($row['Measure'] ?? ''));
+
+        $valueFor = function (string $measureCode) use ($rows): ?float {
+            $row = $rows->get($measureCode);
+            if (! is_array($row)) {
+                return null;
+            }
+            $value = $row['Value'] ?? null;
+            return is_numeric($value) ? (float) $value : null;
+        };
+
+        $distanceSupermarket = $valueFor('D000025');
+        $distanceSport = $valueFor('D000051');
+        $distanceTrain = $valueFor('D000052');
+        $distanceHub = $valueFor('D000014');
+        $distanceHighwayRamp = $valueFor('D000037');
+        $distanceGreen = $valueFor('D000036');
+
+        $result['afstand_tot_supermarkt_km'] = $distanceSupermarket;
+        $result['afstand_tot_treinstation_ov_knooppunt_km'] = $distanceTrain;
+        $result['afstand_tot_overstapstation_km'] = $distanceHub;
+        $result['afstand_tot_oprit_hoofdweg_km'] = $distanceHighwayRamp;
+        $result['afstand_tot_groen_km'] = $distanceGreen;
+
+        if ($distanceSport !== null) {
+            $result['sport_en_beweegmogelijkheden'] = $distanceSport <= 1.0
+                ? 'Goed'
+                : ($distanceSport <= 3.0 ? 'Redelijk' : 'Beperkt');
+        }
+
+        return $result;
+    }
+
+    private function fetchRivmAirQualityAtPoint(?float $lat, ?float $lng): array
+    {
+        $result = [
+            'pm25_ug_m3' => null,
+            'no2_ug_m3' => null,
+            'jaar' => '2023',
+            'bronnen' => [
+                'https://data.overheid.nl/dataset/68115-fijnstof-pm2-5--2023-',
+                'https://data.overheid.nl/dataset/68112-stikstofdioxide---no----2023-',
+            ],
+        ];
+
+        if ($lat === null || $lng === null) {
+            return $result;
+        }
+
+        $wmsUrl = trim((string) config('services.rivm.air_wms_url'));
+        $pmLayer = trim((string) config('services.rivm.air_pm25_layer'));
+        $no2Layer = trim((string) config('services.rivm.air_no2_layer'));
+        if ($wmsUrl === '' || $pmLayer === '' || $no2Layer === '') {
+            return $result;
+        }
+
+        $pmItems = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $pmLayer, $lat, $lng);
+        $no2Items = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $no2Layer, $lat, $lng);
+        $result['pm25_ug_m3'] = $this->extractGrayIndexFromWmsItems($pmItems);
+        $result['no2_ug_m3'] = $this->extractGrayIndexFromWmsItems($no2Items);
+
+        return $result;
+    }
+
+    private function extractGrayIndexFromWmsItems(array $items): ?float
+    {
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $title = Str::lower(str_replace([' ', '_'], '', (string) ($item['title'] ?? '')));
+            if ($title !== 'grayindex') {
+                continue;
+            }
+            $value = $item['value'] ?? null;
+            if (is_numeric($value)) {
+                return round((float) $value, 2);
+            }
+        }
+
+        return null;
+    }
+
+    private function detectPoiCategory(array $element): ?string
+    {
+        $amenity = strtolower(trim((string) data_get($element, 'tags.amenity', '')));
+        if ($amenity === 'cafe') {
+            return 'cafe';
+        }
+        if ($amenity === 'restaurant') {
+            return 'restaurant';
+        }
+
+        $tourism = strtolower(trim((string) data_get($element, 'tags.tourism', '')));
+        if ($tourism === 'hotel') {
+            return 'hotel';
+        }
+
+        return null;
+    }
+
+    private function haversineDistanceMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371000.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * (sin($dLng / 2) ** 2);
+        $c = 2 * atan2(sqrt($a), sqrt(max(0.0, 1 - $a)));
+
+        return $r * $c;
+    }
+
+    private function roundDistanceKm(float $distanceMeters): float
+    {
+        return round($distanceMeters / 1000.0, 2);
+    }
+
+    private function buildOsmObjectUrl(?string $type, mixed $id): ?string
+    {
+        $normalizedType = strtolower(trim((string) $type));
+        if (! in_array($normalizedType, ['node', 'way', 'relation'], true)) {
+            return null;
+        }
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        return sprintf('https://www.openstreetmap.org/%s/%s', $normalizedType, (string) $id);
+    }
+
+    private function fetchNearestTransitDistances(?float $lat, ?float $lng): array
+    {
+        $result = [
+            'bushalte' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+            'station_metro_tram' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+        ];
+
+        if ($lat === null || $lng === null) {
+            return $result;
+        }
+
+        $overpassUrl = trim((string) config('services.overpass.url'));
+        if ($overpassUrl === '') {
+            return $result;
+        }
+
+        $latStr = number_format($lat, 7, '.', '');
+        $lngStr = number_format($lng, 7, '.', '');
+        $query = <<<OVERPASS
+[out:json][timeout:20];
+(
+  nwr["highway"="bus_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="station"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
+);
+out center tags;
+OVERPASS;
+
+        $response = Http::timeout(20)
+            ->retry(1, 450)
+            ->asForm()
+            ->post($overpassUrl, ['data' => $query]);
+
+        if (! $response->successful()) {
+            return $result;
+        }
+
+        $elements = data_get($response->json(), 'elements', []);
+        if (! is_array($elements)) {
+            return $result;
+        }
+
+        $nearestBus = null;
+        $nearestRail = null;
+
+        foreach ($elements as $element) {
+            if (! is_array($element)) {
+                continue;
+            }
+
+            $poiLat = data_get($element, 'lat');
+            $poiLng = data_get($element, 'lon');
+            if (! is_numeric($poiLat) || ! is_numeric($poiLng)) {
+                $poiLat = data_get($element, 'center.lat');
+                $poiLng = data_get($element, 'center.lon');
+            }
+            if (! is_numeric($poiLat) || ! is_numeric($poiLng)) {
+                continue;
+            }
+
+            $distanceMeters = $this->haversineDistanceMeters($lat, $lng, (float) $poiLat, (float) $poiLng);
+            if (! is_finite($distanceMeters)) {
+                continue;
+            }
+
+            $isBus = strtolower((string) data_get($element, 'tags.highway', '')) === 'bus_stop';
+            $isRail = strtolower((string) data_get($element, 'tags.railway', '')) === 'station'
+                || strtolower((string) data_get($element, 'tags.railway', '')) === 'tram_stop'
+                || strtolower((string) data_get($element, 'tags.station', '')) === 'subway';
+
+            if ($isBus && ($nearestBus === null || $distanceMeters < ($nearestBus['distance_m'] ?? INF))) {
+                $nearestBus = [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString(data_get($element, 'tags.name')),
+                    'type' => (string) data_get($element, 'type', ''),
+                    'id' => data_get($element, 'id'),
+                ];
+            }
+
+            if ($isRail && ($nearestRail === null || $distanceMeters < ($nearestRail['distance_m'] ?? INF))) {
+                $nearestRail = [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString(data_get($element, 'tags.name')),
+                    'type' => (string) data_get($element, 'type', ''),
+                    'id' => data_get($element, 'id'),
+                ];
+            }
+        }
+
+        if (is_array($nearestBus) && is_numeric($nearestBus['distance_m'] ?? null)) {
+            $result['bushalte'] = [
+                'afstand_km' => $this->roundDistanceKm((float) $nearestBus['distance_m']),
+                'naam' => $nearestBus['name'],
+                'osm_url' => $this->buildOsmObjectUrl($nearestBus['type'], $nearestBus['id']),
+            ];
+        }
+        if (is_array($nearestRail) && is_numeric($nearestRail['distance_m'] ?? null)) {
+            $result['station_metro_tram'] = [
+                'afstand_km' => $this->roundDistanceKm((float) $nearestRail['distance_m']),
+                'naam' => $nearestRail['name'],
+                'osm_url' => $this->buildOsmObjectUrl($nearestRail['type'], $nearestRail['id']),
+            ];
+        }
+
+        return $result;
     }
 
     private function fetchHeritageByPoint(?float $lat, ?float $lng): array
