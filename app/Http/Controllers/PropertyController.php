@@ -180,6 +180,16 @@ class PropertyController extends Controller
         }
 
         if (! $geocode) {
+            $geocode = $this->pdokGeocode($bag['address'].', '.$bag['postcode'].' '.$bag['city']);
+            if ($geocode) {
+                $diagnostics['geocode_fallback_bag'] = [
+                    'status' => 'ok',
+                    'detail' => 'Geocode opgehaald via PDOK Locatieserver.',
+                ];
+            }
+        }
+
+        if (! $geocode) {
             $geocode = $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null);
             $diagnostics['geocode_fallback_bag'] = [
                 'status' => $geocode ? 'ok' : 'failed',
@@ -188,6 +198,10 @@ class PropertyController extends Controller
                     : 'Geen BAG geometrie beschikbaar voor fallback.',
             ];
         }
+
+        $buildingMarker = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null)
+            ?? $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null)
+            ?? $geocode;
 
         $parcel = $this->fetchParcelByPoint(
             $geocode['lat'] ?? null,
@@ -291,8 +305,13 @@ class PropertyController extends Controller
             'map' => [
                 'google_maps_api_key_available' => (string) config('services.google_maps.api_key') !== '',
                 'google_maps_api_key' => (string) config('services.google_maps.api_key'),
+                'marker' => $buildingMarker ? [
+                    'lat' => $buildingMarker['lat'],
+                    'lng' => $buildingMarker['lng'],
+                    'source' => $buildingMarker['source'] ?? null,
+                ] : null,
                 'kadastraal_wms_url' => (string) config('services.pdok.kadastraal_wms_url'),
-                'kadastraal_wms_layer' => 'KadastraleGrens',
+                'kadastraal_wms_layer' => (string) config('services.pdok.kadastraal_wms_layer'),
                 'bodemkaart_wms_url' => (string) config('services.pdok.bodemkaart_wms_url'),
                 'bodemkaart_wms_layer' => (string) config('services.pdok.bodemkaart_wms_layer'),
             ],
@@ -1039,6 +1058,31 @@ class PropertyController extends Controller
             'place_id' => null,
             'source' => 'pdok_centroide_ll',
         ];
+    }
+
+    private function pdokGeocode(string $address): ?array
+    {
+        $response = Http::timeout(8)
+            ->retry(1, 250)
+            ->get('https://api.pdok.nl/bzk/locatieserver/search/v3_1/free', [
+                'q' => $address,
+                'rows' => 1,
+                'fq' => 'type:adres',
+            ]);
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $pointWkt = data_get($response->json(), 'response.docs.0.centroide_ll');
+        $parsed = $this->geocodeFromPointWkt(is_string($pointWkt) ? $pointWkt : null);
+        if (! $parsed) {
+            return null;
+        }
+
+        $parsed['source'] = 'pdok_locatieserver';
+
+        return $parsed;
     }
 
     private function geocodeFromBagGeometry(mixed $coordinates): ?array

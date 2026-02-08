@@ -46,6 +46,7 @@ return [
 
     'pdok' => [
         'kadastraal_wms_url' => env('PDOK_KADASTRAAL_WMS_URL', 'https://service.pdok.nl/kadaster/kadastralekaart/wms/v5_0'),
+        'kadastraal_wms_layer' => env('PDOK_KADASTRAAL_WMS_LAYER', 'Perceel,Label,KadastraleGrens'),
         'bodemkaart_wms_url' => env('PDOK_BODEMKAART_WMS_URL'),
         'bodemkaart_wms_layer' => env('PDOK_BODEMKAART_WMS_LAYER', 'bodemkaart'),
         'ruimtelijke_plannen_wms_url' => env('PDOK_RUIMTELIJKE_PLANNEN_WMS_URL', 'https://service.pdok.nl/kadaster/ruimtelijke-plannen/wms/v1_0'),

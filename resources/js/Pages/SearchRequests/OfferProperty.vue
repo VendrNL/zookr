@@ -12,7 +12,7 @@ import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import TokenDropdown from "@/Components/TokenDropdown.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 import useImageDrop from "@/Composables/useImageDrop";
 
@@ -82,7 +82,10 @@ const mapInstance = ref(null);
 const mapMarker = ref(null);
 const mapOverlay = ref(null);
 const mapMode = ref("kaart");
+const mapStreetView = ref(null);
 const mapApiLoading = ref(false);
+const mapLoadError = ref("");
+const mapRenderRetryTimer = ref(null);
 
 const diagnosticBadgeClass = (status) => {
     if (status === "ok") return "bg-green-100 text-green-800";
@@ -494,6 +497,7 @@ const parsePointWkt = (wkt) => {
 
 const ensureGoogleMapsApi = async () => {
     if (globalThis.google?.maps) {
+        mapLoadError.value = "";
         return true;
     }
     if (mapApiLoading.value) {
@@ -504,6 +508,7 @@ const ensureGoogleMapsApi = async () => {
     try {
         const apiKey = enrichmentData.value?.map?.google_maps_api_key;
         if (!apiKey) {
+            mapLoadError.value = "Google Maps API-key ontbreekt.";
             return false;
         }
 
@@ -524,8 +529,11 @@ const ensureGoogleMapsApi = async () => {
             document.head.appendChild(script);
         });
 
+        mapLoadError.value = "";
         return Boolean(globalThis.google?.maps);
     } catch {
+        mapLoadError.value =
+            "Google Maps script kon niet geladen worden. Controleer Maps JavaScript API en key-restricties.";
         return false;
     } finally {
         mapApiLoading.value = false;
@@ -572,11 +580,99 @@ const createWmsOverlay = (baseUrl, layerName) => {
     });
 };
 
+const getEnrichmentCoordinates = () => {
+    const markerData = enrichmentData.value?.map?.marker;
+    const fallbackGeocode = enrichmentData.value?.geocode;
+    const lat = Number.parseFloat(String(markerData?.lat ?? fallbackGeocode?.lat ?? ""));
+    const lng = Number.parseFloat(String(markerData?.lng ?? fallbackGeocode?.lng ?? ""));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+    }
+    return { lat, lng };
+};
+
+const calculateHeading = (from, to) => {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const toDeg = (rad) => (rad * 180) / Math.PI;
+    const lat1 = toRad(from.lat);
+    const lon1 = toRad(from.lng);
+    const lat2 = toRad(to.lat);
+    const lon2 = toRad(to.lng);
+    const dLon = lon2 - lon1;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x =
+        Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+};
+
+const showStreetViewForLocation = (target) => {
+    if (!mapContainer.value || !mapInstance.value || !globalThis.google?.maps) {
+        return;
+    }
+
+    if (!mapStreetView.value) {
+        mapStreetView.value = mapInstance.value.getStreetView();
+        mapStreetView.value.setOptions({
+            position: target,
+            pov: { heading: 0, pitch: 0 },
+            zoom: 1,
+            addressControl: false,
+        });
+    }
+
+    const service = new globalThis.google.maps.StreetViewService();
+    service.getPanorama({ location: target, radius: 250 }, (data, status) => {
+        const okStatus = globalThis.google?.maps?.StreetViewStatus?.OK;
+        if (status === okStatus && data?.location?.latLng && mapStreetView.value) {
+            const panoLatLng = data.location.latLng;
+            const panoPos = {
+                lat: panoLatLng.lat(),
+                lng: panoLatLng.lng(),
+            };
+            mapStreetView.value.setPano(data.location.pano);
+            mapStreetView.value.setPov({
+                heading: calculateHeading(panoPos, target),
+                pitch: 0,
+            });
+            mapStreetView.value.setZoom(1);
+            mapLoadError.value = "";
+        } else if (mapStreetView.value) {
+            mapStreetView.value.setPosition(target);
+            mapStreetView.value.setPov({ heading: 0, pitch: 0 });
+            mapStreetView.value.setZoom(1);
+            mapLoadError.value =
+                status === globalThis.google?.maps?.StreetViewStatus?.ZERO_RESULTS
+                    ? "Geen Street View-panorama gevonden dicht bij deze locatie."
+                    : `Street View kon niet geladen worden (status: ${String(status)}).`;
+        }
+
+        if (mapStreetView.value) {
+            mapStreetView.value.setVisible(true);
+        }
+    });
+};
+
 const updateMapMode = () => {
     if (!mapInstance.value) return;
 
     const mapConfig = enrichmentData.value?.map ?? {};
+    const coords = getEnrichmentCoordinates();
     mapInstance.value.overlayMapTypes.clear();
+    mapInstance.value.setOptions({ styles: null });
+    if (mapStreetView.value) {
+        mapStreetView.value.setVisible(false);
+    }
+
+    if (mapMode.value === "streetview") {
+        if (!coords) {
+            mapLoadError.value = "Geen coördinaten beschikbaar om Street View te tonen.";
+            return;
+        }
+        mapInstance.value.setMapTypeId("roadmap");
+        showStreetViewForLocation(coords);
+        return;
+    }
 
     if (mapMode.value === "earth") {
         mapInstance.value.setMapTypeId("satellite");
@@ -586,9 +682,17 @@ const updateMapMode = () => {
     mapInstance.value.setMapTypeId("roadmap");
 
     if (mapMode.value === "kadaster") {
+        mapInstance.value.setOptions({
+            styles: [
+                { elementType: "labels", stylers: [{ visibility: "off" }] },
+                { featureType: "poi", stylers: [{ visibility: "off" }] },
+                { featureType: "transit", stylers: [{ visibility: "off" }] },
+            ],
+        });
+
         mapOverlay.value = createWmsOverlay(
             mapConfig.kadastraal_wms_url,
-            mapConfig.kadastraal_wms_layer || "KadastraleGrens"
+            mapConfig.kadastraal_wms_layer || "Perceel,Label,KadastraleGrens"
         );
         if (mapOverlay.value) {
             mapInstance.value.overlayMapTypes.push(mapOverlay.value);
@@ -607,13 +711,25 @@ const updateMapMode = () => {
 };
 
 const renderMap = async () => {
-    const geocode = enrichmentData.value?.geocode;
-    if (!geocode?.lat || !geocode?.lng || !mapContainer.value) {
+    const mapConfig = enrichmentData.value?.map ?? {};
+    if (!mapConfig.google_maps_api_key_available) {
+        mapLoadError.value = "Google Maps API-key ontbreekt in de backend-config.";
         return;
     }
 
-    const mapConfig = enrichmentData.value?.map ?? {};
-    if (!mapConfig.google_maps_api_key_available) {
+    if (!mapContainer.value) {
+        if (mapRenderRetryTimer.value) {
+            clearTimeout(mapRenderRetryTimer.value);
+        }
+        mapRenderRetryTimer.value = setTimeout(() => {
+            renderMap();
+        }, 120);
+        return;
+    }
+
+    const coords = getEnrichmentCoordinates();
+    if (!coords) {
+        mapLoadError.value = "Geen coördinaten beschikbaar om de kaart te tonen.";
         return;
     }
 
@@ -621,12 +737,13 @@ const renderMap = async () => {
     if (!ok || !globalThis.google?.maps) {
         return;
     }
+    mapLoadError.value = "";
 
-    const center = { lat: geocode.lat, lng: geocode.lng };
+    const center = coords;
     if (!mapInstance.value) {
         mapInstance.value = new globalThis.google.maps.Map(mapContainer.value, {
             center,
-            zoom: 17,
+            zoom: 19,
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: true,
@@ -634,9 +751,11 @@ const renderMap = async () => {
         mapMarker.value = new globalThis.google.maps.Marker({
             map: mapInstance.value,
             position: center,
+            title: form.address || "Objectlocatie",
         });
     } else {
         mapInstance.value.setCenter(center);
+        mapInstance.value.setZoom(19);
         mapMarker.value?.setPosition(center);
     }
 
@@ -1107,6 +1226,15 @@ onMounted(() => {
     document.addEventListener("paste", handleGlobalPaste);
 });
 
+watch(
+    () => [enrichmentData.value?.map?.google_maps_api_key_available, mapContainer.value],
+    () => {
+        if (enrichmentData.value?.map?.google_maps_api_key_available) {
+            renderMap();
+        }
+    }
+);
+
 onBeforeUnmount(() => {
     document.removeEventListener("paste", handleGlobalPaste);
     if (addressLookupTimer.value) {
@@ -1114,6 +1242,9 @@ onBeforeUnmount(() => {
     }
     if (addressLookupAbortController.value) {
         addressLookupAbortController.value.abort();
+    }
+    if (mapRenderRetryTimer.value) {
+        clearTimeout(mapRenderRetryTimer.value);
     }
 });
 </script>
@@ -1342,6 +1473,7 @@ onBeforeUnmount(() => {
                                     >
                                         <option value="kaart">Kaart</option>
                                         <option value="earth">Earth</option>
+                                        <option value="streetview">StreetView</option>
                                         <option value="kadaster">Kadaster</option>
                                         <option value="bodemkaart">Bodemkaart</option>
                                     </select>
@@ -1349,9 +1481,15 @@ onBeforeUnmount(() => {
                                 <div
                                     v-if="enrichmentData?.map?.google_maps_api_key_available"
                                     ref="mapContainer"
-                                    class="mt-3 h-72 w-full overflow-hidden rounded-lg border border-gray-200"
+                                    class="mt-3 aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200"
                                 ></div>
-                                <div v-else class="mt-3 text-sm text-gray-600">
+                                <div v-if="mapLoadError" class="mt-2 text-sm text-red-700">
+                                    {{ mapLoadError }}
+                                </div>
+                                <div
+                                    v-if="!enrichmentData?.map?.google_maps_api_key_available"
+                                    class="mt-3 text-sm text-gray-600"
+                                >
                                     Google Maps API-key ontbreekt; kaart kan niet geladen worden.
                                 </div>
                             </div>
