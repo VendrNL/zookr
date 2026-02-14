@@ -259,7 +259,9 @@ class PropertyController extends Controller
                 'detail' => 'Overgeslagen: geen geocode beschikbaar.',
             ];
         } else {
-            $hasHeritage = count($heritage['rijksmonumenten'] ?? []) > 0 || count($heritage['gezichten'] ?? []) > 0;
+            $hasHeritage = count($heritage['rijksmonumenten'] ?? []) > 0
+                || count($heritage['gemeentelijke_monumenten'] ?? []) > 0
+                || count($heritage['gezichten'] ?? []) > 0;
             $diagnostics['rce_heritage'] = [
                 'status' => $hasHeritage ? 'ok' : 'no_data',
                 'detail' => $hasHeritage
@@ -365,12 +367,13 @@ class PropertyController extends Controller
                 'afstand_tot_knooppunten' => $cbs['afstand_tot_overstapstation_km'] ?? null,
                 'buurtcode' => $buurtCode,
                 'mate_van_stedelijkheid' => $cbs['mate_van_stedelijkheid'] ?? null,
-                'afstand_tot_supermarkt_km' => $cbs['afstand_tot_supermarkt_km'] ?? null,
+                'afstand_tot_supermarkt_km' => $poiDistances['supermarkt']['afstand_km'] ?? ($cbs['afstand_tot_supermarkt_km'] ?? null),
                 'sport_en_beweegmogelijkheden' => $cbs['sport_en_beweegmogelijkheden'] ?? null,
+                'afstand_tot_sport_km' => $poiDistances['sport']['afstand_km'] ?? null,
                 'afstand_tot_treinstation_ov_knooppunt_km' => $transitDistances['station_metro_tram']['afstand_km'] ?? ($cbs['afstand_tot_treinstation_ov_knooppunt_km'] ?? null),
                 'afstand_tot_bushalte_km' => $transitDistances['bushalte']['afstand_km'] ?? ($cbs['afstand_tot_bushalte_km'] ?? null),
-                'afstand_tot_oprit_hoofdweg_km' => $cbs['afstand_tot_oprit_hoofdweg_km'] ?? null,
-                'afstand_tot_groen_km' => $cbs['afstand_tot_groen_km'] ?? null,
+                'afstand_tot_oprit_hoofdweg_km' => $transitDistances['oprit_hoofdweg']['afstand_km'] ?? ($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null),
+                'afstand_tot_groen_km' => $poiDistances['groen']['afstand_km'] ?? ($cbs['afstand_tot_groen_km'] ?? null),
                 'afstand_tot_cafe_km' => $poiDistances['cafe']['afstand_km'] ?? null,
                 'afstand_tot_restaurant_km' => $poiDistances['restaurant']['afstand_km'] ?? null,
                 'afstand_tot_hotel_km' => $poiDistances['hotel']['afstand_km'] ?? null,
@@ -403,12 +406,12 @@ class PropertyController extends Controller
                 'wegenkaart_grijs_wmts_url' => (string) config('services.pdok.wegenkaart_grijs_wmts_url'),
                 'wegenkaart_grijs_wmts_layer' => (string) config('services.pdok.wegenkaart_grijs_wmts_layer'),
                 'wegenkaart_grijs_wmts_matrixset' => (string) config('services.pdok.wegenkaart_grijs_wmts_matrixset'),
-                'bodemkaart_wms_url' => (string) config('services.pdok.bodemkaart_wms_url'),
-                'bodemkaart_wms_layer' => (string) config('services.pdok.bodemkaart_wms_layer'),
                 'bodemverontreiniging_wms_url' => (string) config('services.pdok.bodemverontreiniging_wms_url'),
                 'bodemverontreiniging_wms_layer' => (string) config('services.pdok.bodemverontreiniging_wms_layer'),
                 'energielabel_wms_url' => (string) config('services.pdok.energielabel_wms_url'),
                 'energielabel_wms_layer' => (string) config('services.pdok.energielabel_wms_layer'),
+                'gebruiksfuncties_wms_url' => (string) config('services.pdok.gebruiksfuncties_wms_url', 'https://data.rivm.nl/geo/alo/wms'),
+                'gebruiksfuncties_wms_layer' => (string) config('services.pdok.gebruiksfuncties_wms_layer', 'rivm_bag_pandfuncties_actueel,rivm_bag_adresfuncties_actueel'),
                 'ruimtelijke_plannen_wms_url' => (string) config('services.pdok.ruimtelijke_plannen_wms_url'),
                 'ruimtelijke_plannen_wms_layer' => (string) config('services.pdok.ruimtelijke_plannen_wms_layer'),
                 'ruimtelijke_plannen_legend_url' => (string) config('services.pdok.ruimtelijke_plannen_legend_url'),
@@ -421,7 +424,7 @@ class PropertyController extends Controller
         $this->authorize('offer', $search_request);
 
         $data = $request->validate([
-            'mode' => ['required', 'string', Rule::in(['kadaster', 'bodemkaart', 'bodemverontreiniging', 'energielabels', 'bestemmingsplannen'])],
+            'mode' => ['required', 'string', Rule::in(['kadaster', 'bodemverontreiniging', 'energielabels', 'gebruiksfuncties', 'bestemmingsplannen'])],
             'lat' => ['required', 'numeric'],
             'lng' => ['required', 'numeric'],
         ]);
@@ -453,45 +456,6 @@ class PropertyController extends Controller
                     ],
                 ] : [],
                 'notice' => $notice,
-            ]);
-        }
-
-        if ($data['mode'] === 'bodemkaart') {
-            $rawItems = $this->fetchWmsFeatureInfoAtPoint(
-                (string) config('services.pdok.bodemkaart_wms_url'),
-                (string) config('services.pdok.bodemkaart_wms_layer'),
-                $lat,
-                $lng
-            );
-
-            $normalized = collect($rawItems)
-                ->filter(fn ($item) => is_array($item))
-                ->keyBy(function (array $item) {
-                    $title = is_string($item['title'] ?? null) ? $item['title'] : '';
-                    return Str::lower(str_replace([' ', '_'], '', $title));
-                });
-
-            $items = collect([
-                [
-                    'title' => 'Beschrijving',
-                    'value' => data_get($normalized->get('firstsoilname'), 'value'),
-                ],
-                [
-                    'title' => 'Methode',
-                    'value' => data_get($normalized->get('mapareacollection'), 'value'),
-                ],
-                [
-                    'title' => 'Helling',
-                    'value' => data_get($normalized->get('soilslope'), 'value'),
-                ],
-            ])
-                ->filter(fn (array $item) => is_string($item['value']) && trim($item['value']) !== '')
-                ->values()
-                ->all();
-
-            return response()->json([
-                'mode' => 'bodemkaart',
-                'items' => $items,
             ]);
         }
 
@@ -611,6 +575,45 @@ class PropertyController extends Controller
 
             return response()->json([
                 'mode' => 'bestemmingsplannen',
+                'items' => $items,
+            ]);
+        }
+
+        if ($data['mode'] === 'gebruiksfuncties') {
+            $rawItems = $this->fetchWmsFeatureInfoAtPoint(
+                (string) config('services.pdok.gebruiksfuncties_wms_url', 'https://data.rivm.nl/geo/alo/wms'),
+                (string) config('services.pdok.gebruiksfuncties_wms_layer', 'rivm_bag_pandfuncties_actueel,rivm_bag_adresfuncties_actueel'),
+                $lat,
+                $lng
+            );
+
+            $items = collect($rawItems)
+                ->filter(fn ($item) => is_array($item))
+                ->map(function (array $item) {
+                    $title = $this->nullableString($item['title'] ?? null);
+                    $value = $this->nullableString($item['value'] ?? null);
+                    if ($title === null || $value === null) {
+                        return null;
+                    }
+
+                    return [
+                        'title' => $title,
+                        'value' => $value,
+                    ];
+                })
+                ->filter()
+                ->take(12)
+                ->values()
+                ->all();
+
+            $items[] = [
+                'title' => 'Bron',
+                'value' => 'Atlas Leefomgeving BAG gebruiksfuncties',
+                'url' => 'https://www.atlasleefomgeving.nl/kaarten?config=3ef897de-127f-471a-959b-93b7597de188',
+            ];
+
+            return response()->json([
+                'mode' => 'gebruiksfuncties',
                 'items' => $items,
             ]);
         }
@@ -2154,9 +2157,12 @@ class PropertyController extends Controller
     private function fetchNearestPoiDistances(?float $lat, ?float $lng): array
     {
         $result = [
-            'cafe' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
-            'restaurant' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
-            'hotel' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+            'supermarkt' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'sport' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'groen' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'cafe' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'restaurant' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'hotel' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
         ];
 
         if ($lat === null || $lng === null) {
@@ -2165,7 +2171,7 @@ class PropertyController extends Controller
 
         $overpassUrls = collect([
             trim((string) config('services.overpass.url')),
-            'https://overpass.kumi.systems/api/interpreter',
+            'https://overpass-api.de/api/interpreter',
         ])
             ->filter(fn ($url) => is_string($url) && trim($url) !== '')
             ->unique()
@@ -2180,6 +2186,11 @@ class PropertyController extends Controller
         $query = <<<OVERPASS
 [out:json][timeout:20];
 (
+  nwr["amenity"="supermarket"](around:10000,{$latStr},{$lngStr});
+  nwr["leisure"~"sports_centre|sports_hall|fitness_centre|pitch|stadium"](around:10000,{$latStr},{$lngStr});
+  nwr["leisure"="park"](around:10000,{$latStr},{$lngStr});
+  nwr["natural"~"wood|grassland|heath"](around:10000,{$latStr},{$lngStr});
+  nwr["landuse"~"forest|grass"](around:10000,{$latStr},{$lngStr});
   nwr["amenity"="cafe"](around:10000,{$latStr},{$lngStr});
   nwr["amenity"="restaurant"](around:10000,{$latStr},{$lngStr});
   nwr["tourism"="hotel"](around:10000,{$latStr},{$lngStr});
@@ -2189,20 +2200,25 @@ OVERPASS;
 
         $elements = [];
         foreach ($overpassUrls as $overpassUrl) {
-            $response = Http::timeout(20)
-                ->retry(1, 450)
-                ->asForm()
-                ->post($overpassUrl, ['data' => $query]);
-            if (! $response->successful()) {
-                $response = Http::timeout(20)
+            try {
+                $response = Http::timeout(12)
                     ->retry(1, 450)
-                    ->withHeaders([
-                        'Content-Type' => 'text/plain;charset=UTF-8',
-                        'User-Agent' => 'zookr/1.0',
-                    ])
-                    ->post($overpassUrl, $query);
+                    ->asForm()
+                    ->post($overpassUrl, ['data' => $query]);
+
+                if (! $response->successful()) {
+                    $response = Http::timeout(12)
+                        ->retry(1, 450)
+                        ->withHeaders([
+                            'Content-Type' => 'text/plain;charset=UTF-8',
+                            'User-Agent' => 'zookr/1.0',
+                        ])
+                        ->post($overpassUrl, $query);
+                }
+            } catch (\Throwable) {
+                continue;
             }
-            if (! $response->successful()) {
+            if (! isset($response) || ! $response->successful()) {
                 continue;
             }
 
@@ -2218,6 +2234,9 @@ OVERPASS;
         }
 
         $nearest = [
+            'supermarkt' => null,
+            'sport' => null,
+            'groen' => null,
             'cafe' => null,
             'restaurant' => null,
             'hotel' => null,
@@ -2254,11 +2273,13 @@ OVERPASS;
                     'name' => $this->nullableString(data_get($element, 'tags.name')),
                     'type' => (string) data_get($element, 'type', ''),
                     'id' => data_get($element, 'id'),
+                    'lat' => (float) $poiLat,
+                    'lng' => (float) $poiLng,
                 ];
             }
         }
 
-        foreach (['cafe', 'restaurant', 'hotel'] as $category) {
+        foreach (['supermarkt', 'sport', 'groen', 'cafe', 'restaurant', 'hotel'] as $category) {
             $item = $nearest[$category];
             if (! is_array($item) || ! is_numeric($item['distance_m'] ?? null)) {
                 continue;
@@ -2271,6 +2292,8 @@ OVERPASS;
                     is_string($item['type'] ?? null) ? $item['type'] : null,
                     $item['id'] ?? null
                 ),
+                'lat' => is_numeric($item['lat'] ?? null) ? (float) $item['lat'] : null,
+                'lng' => is_numeric($item['lng'] ?? null) ? (float) $item['lng'] : null,
             ];
         }
 
@@ -2451,11 +2474,35 @@ OVERPASS;
     private function detectPoiCategory(array $element): ?string
     {
         $amenity = strtolower(trim((string) data_get($element, 'tags.amenity', '')));
+        if ($amenity === 'supermarket') {
+            return 'supermarkt';
+        }
+        if (in_array($amenity, ['sports_centre', 'sports_hall', 'fitness_centre'], true)) {
+            return 'sport';
+        }
         if ($amenity === 'cafe') {
             return 'cafe';
         }
         if ($amenity === 'restaurant') {
             return 'restaurant';
+        }
+
+        $leisure = strtolower(trim((string) data_get($element, 'tags.leisure', '')));
+        if (in_array($leisure, ['sports_centre', 'sports_hall', 'fitness_centre', 'pitch', 'stadium'], true)) {
+            return 'sport';
+        }
+        if ($leisure === 'park') {
+            return 'groen';
+        }
+
+        $natural = strtolower(trim((string) data_get($element, 'tags.natural', '')));
+        if (in_array($natural, ['wood', 'grassland', 'heath'], true)) {
+            return 'groen';
+        }
+
+        $landuse = strtolower(trim((string) data_get($element, 'tags.landuse', '')));
+        if (in_array($landuse, ['forest', 'grass'], true)) {
+            return 'groen';
         }
 
         $tourism = strtolower(trim((string) data_get($element, 'tags.tourism', '')));
@@ -2499,16 +2546,24 @@ OVERPASS;
     private function fetchNearestTransitDistances(?float $lat, ?float $lng): array
     {
         $result = [
-            'bushalte' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
-            'station_metro_tram' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null],
+            'bushalte' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'station_metro_tram' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'oprit_hoofdweg' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
         ];
 
         if ($lat === null || $lng === null) {
             return $result;
         }
 
-        $overpassUrl = trim((string) config('services.overpass.url'));
-        if ($overpassUrl === '') {
+        $overpassUrls = collect([
+            trim((string) config('services.overpass.url')),
+            'https://overpass-api.de/api/interpreter',
+        ])
+            ->filter(fn ($url) => is_string($url) && trim($url) !== '')
+            ->unique()
+            ->values()
+            ->all();
+        if (count($overpassUrls) === 0) {
             return $result;
         }
 
@@ -2521,26 +2576,39 @@ OVERPASS;
   nwr["railway"="station"](around:10000,{$latStr},{$lngStr});
   nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
   nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_junction"](around:10000,{$latStr},{$lngStr});
 );
 out center tags;
 OVERPASS;
 
-        $response = Http::timeout(20)
-            ->retry(1, 450)
-            ->asForm()
-            ->post($overpassUrl, ['data' => $query]);
+        $elements = [];
+        foreach ($overpassUrls as $overpassUrl) {
+            try {
+                $response = Http::timeout(12)
+                    ->retry(1, 450)
+                    ->asForm()
+                    ->post($overpassUrl, ['data' => $query]);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! $response->successful()) {
+                continue;
+            }
 
-        if (! $response->successful()) {
-            return $result;
+            $candidate = data_get($response->json(), 'elements', []);
+            if (is_array($candidate) && count($candidate) > 0) {
+                $elements = $candidate;
+                break;
+            }
         }
 
-        $elements = data_get($response->json(), 'elements', []);
         if (! is_array($elements)) {
             return $result;
         }
 
         $nearestBus = null;
         $nearestRail = null;
+        $nearestRamp = null;
 
         foreach ($elements as $element) {
             if (! is_array($element)) {
@@ -2566,6 +2634,7 @@ OVERPASS;
             $isRail = strtolower((string) data_get($element, 'tags.railway', '')) === 'station'
                 || strtolower((string) data_get($element, 'tags.railway', '')) === 'tram_stop'
                 || strtolower((string) data_get($element, 'tags.station', '')) === 'subway';
+            $isRamp = strtolower((string) data_get($element, 'tags.highway', '')) === 'motorway_junction';
 
             if ($isBus && ($nearestBus === null || $distanceMeters < ($nearestBus['distance_m'] ?? INF))) {
                 $nearestBus = [
@@ -2573,6 +2642,8 @@ OVERPASS;
                     'name' => $this->nullableString(data_get($element, 'tags.name')),
                     'type' => (string) data_get($element, 'type', ''),
                     'id' => data_get($element, 'id'),
+                    'lat' => (float) $poiLat,
+                    'lng' => (float) $poiLng,
                 ];
             }
 
@@ -2582,6 +2653,19 @@ OVERPASS;
                     'name' => $this->nullableString(data_get($element, 'tags.name')),
                     'type' => (string) data_get($element, 'type', ''),
                     'id' => data_get($element, 'id'),
+                    'lat' => (float) $poiLat,
+                    'lng' => (float) $poiLng,
+                ];
+            }
+
+            if ($isRamp && ($nearestRamp === null || $distanceMeters < ($nearestRamp['distance_m'] ?? INF))) {
+                $nearestRamp = [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString(data_get($element, 'tags.name')),
+                    'type' => (string) data_get($element, 'type', ''),
+                    'id' => data_get($element, 'id'),
+                    'lat' => (float) $poiLat,
+                    'lng' => (float) $poiLng,
                 ];
             }
         }
@@ -2591,6 +2675,8 @@ OVERPASS;
                 'afstand_km' => $this->roundDistanceKm((float) $nearestBus['distance_m']),
                 'naam' => $nearestBus['name'],
                 'osm_url' => $this->buildOsmObjectUrl($nearestBus['type'], $nearestBus['id']),
+                'lat' => is_numeric($nearestBus['lat'] ?? null) ? (float) $nearestBus['lat'] : null,
+                'lng' => is_numeric($nearestBus['lng'] ?? null) ? (float) $nearestBus['lng'] : null,
             ];
         }
         if (is_array($nearestRail) && is_numeric($nearestRail['distance_m'] ?? null)) {
@@ -2598,6 +2684,17 @@ OVERPASS;
                 'afstand_km' => $this->roundDistanceKm((float) $nearestRail['distance_m']),
                 'naam' => $nearestRail['name'],
                 'osm_url' => $this->buildOsmObjectUrl($nearestRail['type'], $nearestRail['id']),
+                'lat' => is_numeric($nearestRail['lat'] ?? null) ? (float) $nearestRail['lat'] : null,
+                'lng' => is_numeric($nearestRail['lng'] ?? null) ? (float) $nearestRail['lng'] : null,
+            ];
+        }
+        if (is_array($nearestRamp) && is_numeric($nearestRamp['distance_m'] ?? null)) {
+            $result['oprit_hoofdweg'] = [
+                'afstand_km' => $this->roundDistanceKm((float) $nearestRamp['distance_m']),
+                'naam' => $nearestRamp['name'],
+                'osm_url' => $this->buildOsmObjectUrl($nearestRamp['type'], $nearestRamp['id']),
+                'lat' => is_numeric($nearestRamp['lat'] ?? null) ? (float) $nearestRamp['lat'] : null,
+                'lng' => is_numeric($nearestRamp['lng'] ?? null) ? (float) $nearestRamp['lng'] : null,
             ];
         }
 
@@ -2610,8 +2707,10 @@ OVERPASS;
             'monumentenregister_url' => 'https://monumentenregister.cultureelerfgoed.nl/',
             'linkeddata_query_url' => 'https://linkeddata.cultureelerfgoed.nl/rce/cho/sparql',
             'is_monument' => null,
+            'is_gemeentelijk_monument' => null,
             'beschermd_stads_dorpsgezicht' => null,
             'rijksmonumenten' => [],
+            'gemeentelijke_monumenten' => [],
             'gezichten' => [],
         ];
 
@@ -2642,11 +2741,48 @@ WHERE {
 LIMIT 20
 SPARQL;
 
+        $rijksmonumentNearestQuery = <<<SPARQL
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+PREFIX uom: <http://www.opengis.net/def/uom/OGC/1.0/>
+SELECT DISTINCT ?resource ?nummer ?naam ?detailUrl ?afstandM
+WHERE {
+  ?resource a ceo:Rijksmonument ;
+            ceo:heeftGeometrie ?geom .
+  ?geom geo:asWKT ?wkt .
+  BIND(geof:distance(?wkt, "{$pointWkt}"^^geo:wktLiteral, uom:metre) AS ?afstandM)
+  FILTER(?afstandM <= 50)
+  OPTIONAL { ?resource ceo:rijksmonumentnummer ?nummer . }
+  OPTIONAL { ?resource ceo:heeftNaam ?naamNode . ?naamNode ceo:naam ?naam . }
+  OPTIONAL { ?resource ceo:wordtGetoondOp ?detailUrl . }
+}
+ORDER BY ASC(?afstandM)
+LIMIT 10
+SPARQL;
+
+        $gemeentelijkMonumentQuery = <<<SPARQL
+PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+SELECT DISTINCT ?resource ?nummer ?naam ?detailUrl
+WHERE {
+  ?resource a ceo:GemeentelijkMonument ;
+            ceo:heeftGeometrie ?geom .
+  ?geom geo:asWKT ?wkt .
+  FILTER(geof:sfIntersects(?wkt, "{$pointWkt}"^^geo:wktLiteral))
+  OPTIONAL { ?resource ceo:monumentnummer ?nummer . }
+  OPTIONAL { ?resource ceo:heeftNaam ?naamNode . ?naamNode ceo:naam ?naam . }
+  OPTIONAL { ?resource ceo:wordtGetoondOp ?detailUrl . }
+}
+LIMIT 20
+SPARQL;
+
         $gezichtQuery = <<<SPARQL
 PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
-SELECT DISTINCT ?resource ?nummer ?naam ?registratiedatum ?detailUrl
+SELECT DISTINCT ?resource ?nummer ?naam ?registratiedatum ?detailUrl ?typeNaam
 WHERE {
   ?resource a ceo:Gezicht ;
             ceo:heeftGeometrie ?geom .
@@ -2654,40 +2790,102 @@ WHERE {
   FILTER(geof:sfIntersects(?wkt, "{$pointWkt}"^^geo:wktLiteral))
   OPTIONAL { ?resource ceo:gezichtsnummer ?nummer . }
   OPTIONAL { ?resource ceo:heeftNaam ?naamNode . ?naamNode ceo:naam ?naam . }
+  OPTIONAL { ?resource ceo:heeftNaam ?typeNode . ?typeNode ceo:naam ?typeNaam . FILTER(CONTAINS(LCASE(STR(?typeNaam)), "gezicht")) }
   OPTIONAL { ?resource ceo:registratiedatum ?registratiedatum . }
   OPTIONAL { ?resource ceo:wordtGetoondOp ?detailUrl . }
 }
 LIMIT 20
 SPARQL;
 
-        $rijksmonumenten = collect($this->runRceSparql($rijksmonumentQuery))
-            ->map(fn (array $row) => [
-                'resource' => $this->nullableString($row['resource'] ?? null),
-                'nummer' => $this->nullableString($row['nummer'] ?? null),
+        $mapRijksmonument = function (array $row): array {
+            $resource = $this->nullableString($row['resource'] ?? null);
+            $nummer = $this->nullableString($row['nummer'] ?? null);
+            if ($nummer === null && $resource !== null) {
+                $resourceId = basename(parse_url($resource, PHP_URL_PATH) ?: '');
+                if (is_string($resourceId) && preg_match('/^\d+$/', $resourceId) === 1) {
+                    $nummer = $resourceId;
+                }
+            }
+
+            $detailUrl = $this->nullableString($row['detailUrl'] ?? null);
+            if ($detailUrl === null && $nummer !== null) {
+                $detailUrl = 'https://monumentenregister.cultureelerfgoed.nl/monumenten/'.urlencode($nummer);
+            }
+
+            return [
+                'resource' => $resource,
+                'nummer' => $nummer,
                 'naam' => $this->nullableString($row['naam'] ?? null),
-                'detail_url' => $this->nullableString($row['detailUrl'] ?? null),
-            ])
+                'detail_url' => $detailUrl,
+            ];
+        };
+
+        $rijksmonumenten = collect($this->runRceSparql($rijksmonumentQuery))
+            ->map($mapRijksmonument)
             ->filter(fn (array $row) => $row['resource'] !== null || $row['nummer'] !== null)
             ->unique(fn (array $row) => ($row['resource'] ?? '').'|'.($row['nummer'] ?? ''))
             ->values()
             ->all();
 
+        if (count($rijksmonumenten) === 0) {
+            $rijksmonumenten = collect($this->runRceSparql($rijksmonumentNearestQuery))
+                ->map($mapRijksmonument)
+                ->filter(fn (array $row) => $row['resource'] !== null || $row['nummer'] !== null)
+                ->unique(fn (array $row) => ($row['resource'] ?? '').'|'.($row['nummer'] ?? ''))
+                ->values()
+                ->all();
+        }
+
+        $gemeentelijkeMonumenten = collect($this->runRceSparql($gemeentelijkMonumentQuery))
+            ->map(function (array $row): array {
+                $resource = $this->nullableString($row['resource'] ?? null);
+                $nummer = $this->nullableString($row['nummer'] ?? null);
+                $detailUrl = $this->nullableString($row['detailUrl'] ?? null) ?? $resource;
+
+                return [
+                    'resource' => $resource,
+                    'nummer' => $nummer,
+                    'naam' => $this->nullableString($row['naam'] ?? null),
+                    'detail_url' => $detailUrl,
+                ];
+            })
+            ->filter(fn (array $row) => $row['resource'] !== null || $row['nummer'] !== null || $row['naam'] !== null)
+            ->unique(fn (array $row) => ($row['resource'] ?? '').'|'.($row['nummer'] ?? '').'|'.($row['naam'] ?? ''))
+            ->values()
+            ->all();
+
         $gezichten = collect($this->runRceSparql($gezichtQuery))
-            ->map(fn (array $row) => [
-                'resource' => $this->nullableString($row['resource'] ?? null),
-                'nummer' => $this->nullableString($row['nummer'] ?? null),
-                'naam' => $this->nullableString($row['naam'] ?? null),
-                'registratiedatum' => $this->nullableString($row['registratiedatum'] ?? null),
-                'detail_url' => $this->nullableString($row['detailUrl'] ?? null),
-            ])
+            ->map(function (array $row): array {
+                $resource = $this->nullableString($row['resource'] ?? null);
+                $nummer = $this->nullableString($row['nummer'] ?? null);
+                $detailUrl = $this->nullableString($row['detailUrl'] ?? null);
+                if ($detailUrl === null && $nummer !== null) {
+                    $cleanNummer = Str::startsWith(strtoupper($nummer), 'BG') ? substr($nummer, 2) : $nummer;
+                    $detailUrl = 'https://archisarchief.cultureelerfgoed.nl/Beschermde_Gezichten/BG'.urlencode($cleanNummer).'/';
+                }
+                if ($detailUrl === null) {
+                    $detailUrl = $resource;
+                }
+
+                return [
+                    'resource' => $resource,
+                    'nummer' => $nummer,
+                    'naam' => $this->nullableString($row['naam'] ?? null),
+                    'type' => $this->nullableString($row['typeNaam'] ?? null) ?? 'Beschermd gezicht',
+                    'registratiedatum' => $this->nullableString($row['registratiedatum'] ?? null),
+                    'detail_url' => $detailUrl,
+                ];
+            })
             ->filter(fn (array $row) => $row['resource'] !== null || $row['nummer'] !== null)
             ->unique(fn (array $row) => ($row['resource'] ?? '').'|'.($row['nummer'] ?? ''))
             ->values()
             ->all();
 
         $base['rijksmonumenten'] = $rijksmonumenten;
+        $base['gemeentelijke_monumenten'] = $gemeentelijkeMonumenten;
         $base['gezichten'] = $gezichten;
         $base['is_monument'] = count($rijksmonumenten) > 0;
+        $base['is_gemeentelijk_monument'] = count($gemeentelijkeMonumenten) > 0;
         $base['beschermd_stads_dorpsgezicht'] = count($gezichten) > 0;
 
         return $base;
