@@ -6,12 +6,14 @@ use App\Models\Property;
 use App\Models\SearchRequest;
 use App\Models\User;
 use App\Services\Funda\ScrapeFundaBusinessService;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class PropertyController extends Controller
@@ -121,10 +123,14 @@ class PropertyController extends Controller
         $this->authorize('offer', $search_request);
 
         $data = $request->validate([
-            'bag_address_id' => ['required', 'string', 'max:128'],
+            'bag_address_id' => ['nullable', 'string', 'max:128', 'required_without:context_key'],
+            'context_key' => ['nullable', 'string', 'max:64'],
+            'stage' => ['nullable', Rule::in(['all', 'core', 'zoning', 'heritage', 'accessibility', 'milieu'])],
         ]);
 
-        $isPdokAddress = Str::startsWith($data['bag_address_id'], 'pdok:');
+        $stage = (string) ($data['stage'] ?? 'all');
+        $contextKey = $this->nullableString($data['context_key'] ?? null);
+        $isPdokAddress = Str::startsWith((string) ($data['bag_address_id'] ?? ''), 'pdok:');
         $diagnostics = [
             'bag' => [
                 'status' => 'ok',
@@ -142,206 +148,256 @@ class PropertyController extends Controller
             'rivm_air_quality' => ['status' => 'pending', 'detail' => null],
         ];
 
-        $bag = $this->fetchAddressExtendedByIdentifier($data['bag_address_id']);
-        if (! $bag) {
-            return response()->json([
-                'message' => 'Kon BAG-gegevens niet ophalen voor dit adres.',
-                'diagnostics' => [
-                    'bag' => ['status' => 'failed', 'detail' => 'BAG-response bevatte geen bruikbaar adres.'],
-                ],
-            ], 422);
+        $cachedContext = null;
+        if ($contextKey !== null) {
+            $cachedContext = Cache::get('address-enrichment:'.$contextKey);
         }
 
-        $geocode = $this->googleGeocode($bag['address'].', '.$bag['postcode'].' '.$bag['city']);
-        if ($geocode) {
-            $diagnostics['google_geocode'] = [
-                'status' => 'ok',
-                'detail' => 'Geocode opgehaald via Google.',
-            ];
-            $diagnostics['geocode_fallback_bag'] = [
-                'status' => 'skipped',
-                'detail' => 'Niet nodig omdat Google-geocode beschikbaar is.',
-            ];
+        if (is_array($cachedContext)) {
+            $bag = is_array($cachedContext['bag'] ?? null) ? $cachedContext['bag'] : null;
+            $geocode = is_array($cachedContext['geocode'] ?? null) ? $cachedContext['geocode'] : null;
+            $buildingMarker = is_array($cachedContext['building_marker'] ?? null) ? $cachedContext['building_marker'] : null;
+            $bagId = $cachedContext['bag_id'] ?? null;
+            $bagViewerUrl = $cachedContext['bag_viewer_url'] ?? null;
+            $parcel = is_array($cachedContext['parcel'] ?? null) ? $cachedContext['parcel'] : null;
+            $diagnostics = is_array($cachedContext['diagnostics'] ?? null)
+                ? array_replace($diagnostics, $cachedContext['diagnostics'])
+                : $diagnostics;
         } else {
-            $googleKey = trim((string) config('services.google_maps.api_key'));
-            $diagnostics['google_geocode'] = [
-                'status' => $googleKey === '' ? 'missing_key' : 'failed',
-                'detail' => $googleKey === ''
-                    ? 'GOOGLE_MAPS_API_KEY ontbreekt.'
-                    : 'Google geocode mislukt of geweigerd (bijv. API niet geactiveerd).',
-            ];
-        }
+            $bagAddressId = $this->nullableString($data['bag_address_id'] ?? null);
+            if ($bagAddressId === null) {
+                return response()->json([
+                    'message' => 'Adrescontext ontbreekt. Kies opnieuw een BAG-adres.',
+                ], 422);
+            }
 
-        if (! $geocode) {
-            $geocode = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null);
+            $bag = $this->fetchAddressExtendedByIdentifier($bagAddressId);
+            if (! $bag) {
+                return response()->json([
+                    'message' => 'Kon BAG-gegevens niet ophalen voor dit adres.',
+                    'diagnostics' => [
+                        'bag' => ['status' => 'failed', 'detail' => 'BAG-response bevatte geen bruikbaar adres.'],
+                    ],
+                ], 422);
+            }
+
+            $geocode = $this->googleGeocode($bag['address'].', '.$bag['postcode'].' '.$bag['city']);
             if ($geocode) {
-                $diagnostics['geocode_fallback_bag'] = [
+                $diagnostics['google_geocode'] = [
                     'status' => 'ok',
-                    'detail' => 'Geocode afgeleid uit PDOK centroid (WGS84).',
+                    'detail' => 'Geocode opgehaald via Google.',
+                ];
+                $diagnostics['geocode_fallback_bag'] = [
+                    'status' => 'skipped',
+                    'detail' => 'Niet nodig omdat Google-geocode beschikbaar is.',
+                ];
+            } else {
+                $googleKey = trim((string) config('services.google_maps.api_key'));
+                $diagnostics['google_geocode'] = [
+                    'status' => $googleKey === '' ? 'missing_key' : 'failed',
+                    'detail' => $googleKey === ''
+                        ? 'GOOGLE_MAPS_API_KEY ontbreekt.'
+                        : 'Google geocode mislukt of geweigerd (bijv. API niet geactiveerd).',
+                ];
+            }
+
+            if (! $geocode) {
+                $geocode = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null);
+                if ($geocode) {
+                    $diagnostics['geocode_fallback_bag'] = [
+                        'status' => 'ok',
+                        'detail' => 'Geocode afgeleid uit PDOK centroid (WGS84).',
+                    ];
+                }
+            }
+
+            if (! $geocode) {
+                $geocode = $this->pdokGeocode($bag['address'].', '.$bag['postcode'].' '.$bag['city']);
+                if ($geocode) {
+                    $diagnostics['geocode_fallback_bag'] = [
+                        'status' => 'ok',
+                        'detail' => 'Geocode opgehaald via PDOK Locatieserver.',
+                    ];
+                }
+            }
+
+            if (! $geocode) {
+                $geocode = $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null);
+                $diagnostics['geocode_fallback_bag'] = [
+                    'status' => $geocode ? 'ok' : 'failed',
+                    'detail' => $geocode
+                        ? 'Geocode afgeleid uit BAG geometrie (RD -> WGS84).'
+                        : 'Geen BAG geometrie beschikbaar voor fallback.',
+                ];
+            }
+
+            $buildingMarker = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null)
+                ?? $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null)
+                ?? $geocode;
+            $bag = $this->enrichBagCoreData($bag, $geocode['lat'] ?? null, $geocode['lng'] ?? null);
+            $bagId = $bag['adresseerbaar_object_identificatie']
+                ?? $bag['nummeraanduiding_identificatie']
+                ?? (($bag['pand_identificaties'][0] ?? null) ?: null);
+            $bagViewerUrl = $bagId
+                ? 'https://bagviewer.kadaster.nl/?objectId='.urlencode((string) $bagId)
+                : null;
+
+            $parcel = $this->fetchParcelByPoint(
+                $geocode['lat'] ?? null,
+                $geocode['lng'] ?? null
+            );
+            if (! $geocode) {
+                $diagnostics['pdok_cadastre'] = [
+                    'status' => 'skipped',
+                    'detail' => 'Overgeslagen: geen geocode beschikbaar.',
+                ];
+            } else {
+                $diagnostics['pdok_cadastre'] = [
+                    'status' => $parcel ? 'ok' : 'no_data',
+                    'detail' => $parcel
+                        ? 'Kadastrale gegevens gevonden via PDOK.'
+                        : 'Geen kadastraal perceel gevonden op het punt (of PDOK gaf geen bruikbare response).',
                 ];
             }
         }
 
-        if (! $geocode) {
-            $geocode = $this->pdokGeocode($bag['address'].', '.$bag['postcode'].' '.$bag['city']);
-            if ($geocode) {
-                $diagnostics['geocode_fallback_bag'] = [
-                    'status' => 'ok',
-                    'detail' => 'Geocode opgehaald via PDOK Locatieserver.',
-                ];
-            }
-        }
-
-        if (! $geocode) {
-            $geocode = $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null);
-            $diagnostics['geocode_fallback_bag'] = [
-                'status' => $geocode ? 'ok' : 'failed',
-                'detail' => $geocode
-                    ? 'Geocode afgeleid uit BAG geometrie (RD -> WGS84).'
-                    : 'Geen BAG geometrie beschikbaar voor fallback.',
-            ];
-        }
-
-        $buildingMarker = $this->geocodeFromPointWkt($bag['geometry_ll'] ?? null)
-            ?? $this->geocodeFromBagGeometry($bag['geometry_rd'] ?? null)
-            ?? $geocode;
-        $bag = $this->enrichBagCoreData($bag, $geocode['lat'] ?? null, $geocode['lng'] ?? null);
-        $bagId = $bag['adresseerbaar_object_identificatie']
-            ?? $bag['nummeraanduiding_identificatie']
-            ?? (($bag['pand_identificaties'][0] ?? null) ?: null);
-        $bagViewerUrl = $bagId
-            ? 'https://bagviewer.kadaster.nl/?objectId='.urlencode((string) $bagId)
-            : null;
-
-        $parcel = $this->fetchParcelByPoint(
-            $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null
-        );
-        if (! $geocode) {
-            $diagnostics['pdok_cadastre'] = [
-                'status' => 'skipped',
-                'detail' => 'Overgeslagen: geen geocode beschikbaar.',
-            ];
-        } else {
-            $diagnostics['pdok_cadastre'] = [
-                'status' => $parcel ? 'ok' : 'no_data',
-                'detail' => $parcel
-                    ? 'Kadastrale gegevens gevonden via PDOK.'
-                    : 'Geen kadastraal perceel gevonden op het punt (of PDOK gaf geen bruikbare response).',
-            ];
-        }
-
-        $zoningPlanObjects = $this->fetchZoningPlanObjectsByPoint(
-            $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null
-        );
-        if (! $geocode) {
-            $diagnostics['pdok_zoning'] = [
-                'status' => 'skipped',
-                'detail' => 'Overgeslagen: geen geocode beschikbaar.',
-            ];
-        } else {
-            $diagnostics['pdok_zoning'] = [
-                'status' => count($zoningPlanObjects) > 0 ? 'ok' : 'no_data',
-                'detail' => count($zoningPlanObjects) > 0
-                    ? 'Planobjecten gevonden via PDOK Ruimtelijke Plannen.'
-                    : 'Geen planobject op exact punt (of PDOK gaf geen bruikbare response).',
-            ];
-        }
-
-        $heritage = $this->fetchHeritageByPoint(
-            $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null,
-            $bag['address'] ?? null,
-            $parcel['kadastrale_aanduiding'] ?? null
-        );
-        if (! $geocode) {
-            $diagnostics['rce_heritage'] = [
-                'status' => 'skipped',
-                'detail' => 'Overgeslagen: geen geocode beschikbaar.',
-            ];
-        } else {
-            $hasHeritage = count($heritage['rijksmonumenten'] ?? []) > 0
-                || count($heritage['gemeentelijke_monumenten'] ?? []) > 0
-                || count($heritage['gezichten'] ?? []) > 0;
-            $diagnostics['rce_heritage'] = [
-                'status' => $hasHeritage ? 'ok' : 'no_data',
-                'detail' => $hasHeritage
-                    ? 'Monument/gezicht gevonden via RCE Linked Data.'
-                    : 'Geen monument/gezicht op exact punt (of query gaf geen resultaat).',
-            ];
-        }
-
-        $poiLat = is_numeric($buildingMarker['lat'] ?? null) ? (float) $buildingMarker['lat'] : ($geocode['lat'] ?? null);
-        $poiLng = is_numeric($buildingMarker['lng'] ?? null) ? (float) $buildingMarker['lng'] : ($geocode['lng'] ?? null);
-        $poiDistances = $this->fetchNearestPoiDistances($poiLat, $poiLng);
-        $transitDistances = $this->fetchNearestTransitDistances($poiLat, $poiLng);
-        if (! $geocode) {
-            $diagnostics['osm_poi'] = [
-                'status' => 'skipped',
-                'detail' => 'Overgeslagen: geen geocode beschikbaar.',
-            ];
-        } else {
-            $hasPoiDistance = $this->hasFilledValue($poiDistances['cafe']['afstand_km'] ?? null)
-                || $this->hasFilledValue($poiDistances['restaurant']['afstand_km'] ?? null)
-                || $this->hasFilledValue($poiDistances['hotel']['afstand_km'] ?? null);
-            $diagnostics['osm_poi'] = [
-                'status' => $hasPoiDistance ? 'ok' : 'no_data',
-                'detail' => $hasPoiDistance
-                    ? 'Afstanden naar dichtstbijzijnde cafe/restaurant/hotel opgehaald via OpenStreetMap Overpass.'
-                    : 'Geen cafe/restaurant/hotel gevonden binnen 10 km (of bron niet beschikbaar).',
-            ];
-        }
-
-        $buurtCode = $this->fetchNeighborhoodCode(
-            is_string($bag['adresseerbaar_object_identificatie'] ?? null) ? $bag['adresseerbaar_object_identificatie'] : null,
-            is_string($bag['nummeraanduiding_identificatie'] ?? null) ? $bag['nummeraanduiding_identificatie'] : null,
-            $bag['address'] ?? null,
-            $bag['postcode'] ?? null,
-            $bag['city'] ?? null
-        );
-        $cbs = $this->fetchCbsNeighborhoodStats($buurtCode);
-        if ($buurtCode === null) {
-            $diagnostics['cbs_85830'] = [
-                'status' => 'skipped',
-                'detail' => 'Geen buurtcode beschikbaar voor CBS-verrijking.',
-            ];
-        } else {
-            $hasCbsData = $this->hasFilledValue($cbs['afstand_tot_supermarkt_km'] ?? null)
-                || $this->hasFilledValue($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null)
-                || $this->hasFilledValue($cbs['afstand_tot_groen_km'] ?? null);
-            $diagnostics['cbs_85830'] = [
-                'status' => $hasCbsData ? 'ok' : 'no_data',
-                'detail' => $hasCbsData
-                    ? 'Buurt-/voorzieningscijfers opgehaald via CBS OData (85830NED).'
-                    : 'CBS 85830NED gaf geen waarden voor deze buurtcode.',
-            ];
-        }
-
-        $airQuality = $this->fetchRivmAirQualityAtPoint(
-            $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null
-        );
-        $soil = $this->fetchSoilStatusByPoint(
-            $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null,
-            $bag['geometry_rd'] ?? null
-        );
-        $hasAirData = $this->hasFilledValue($airQuality['pm25_ug_m3'] ?? null)
-            || $this->hasFilledValue($airQuality['no2_ug_m3'] ?? null)
-            || $this->hasFilledValue($airQuality['geluid_omgeving']['waarde'] ?? null)
-            || $this->hasFilledValue($airQuality['zomerhitte_stad']['waarde'] ?? null)
-            || $this->hasFilledValue($airQuality['kans_op_overstroming']['waarde'] ?? null)
-            || $this->hasFilledValue($airQuality['gevaarlijke_stoffen_binnen_1km']['waarde'] ?? null);
-        $diagnostics['rivm_air_quality'] = [
-            'status' => $hasAirData ? 'ok' : 'no_data',
-            'detail' => $hasAirData
-                ? 'Luchtkwaliteit (PM2.5/NO2) opgehaald via RIVM WMS.'
-                : 'Geen luchtkwaliteitswaarde ontvangen op dit punt.',
+        $contextPayload = [
+            'bag' => $bag,
+            'geocode' => $geocode,
+            'building_marker' => $buildingMarker,
+            'bag_id' => $bagId,
+            'bag_viewer_url' => $bagViewerUrl,
+            'parcel' => $parcel,
+            'diagnostics' => $diagnostics,
         ];
 
-        return response()->json([
+        if ($contextKey === null) {
+            $contextKey = Str::random(32);
+        }
+        Cache::put('address-enrichment:'.$contextKey, $contextPayload, now()->addMinutes(15));
+
+        $loadZoning = in_array($stage, ['all', 'zoning'], true);
+        $loadHeritage = in_array($stage, ['all', 'heritage'], true);
+        $loadAccessibility = in_array($stage, ['all', 'accessibility'], true);
+        $loadMilieu = in_array($stage, ['all', 'milieu'], true);
+
+        $zoningPlanObjects = [];
+        if ($loadZoning) {
+            $zoningPlanObjects = $this->fetchZoningPlanObjectsByPoint(
+                $geocode['lat'] ?? null,
+                $geocode['lng'] ?? null
+            );
+            if (! $geocode) {
+                $diagnostics['pdok_zoning'] = ['status' => 'skipped', 'detail' => 'Overgeslagen: geen geocode beschikbaar.'];
+            } else {
+                $diagnostics['pdok_zoning'] = [
+                    'status' => count($zoningPlanObjects) > 0 ? 'ok' : 'no_data',
+                    'detail' => count($zoningPlanObjects) > 0
+                        ? 'Planobjecten gevonden via PDOK Ruimtelijke Plannen.'
+                        : 'Geen planobject op exact punt (of PDOK gaf geen bruikbare response).',
+                ];
+            }
+        }
+
+        $heritage = null;
+        if ($loadHeritage) {
+            $heritage = $this->fetchHeritageByPoint(
+                $geocode['lat'] ?? null,
+                $geocode['lng'] ?? null,
+                $bag['address'] ?? null,
+                $parcel['kadastrale_aanduiding'] ?? null
+            );
+            if (! $geocode) {
+                $diagnostics['rce_heritage'] = ['status' => 'skipped', 'detail' => 'Overgeslagen: geen geocode beschikbaar.'];
+            } else {
+                $hasHeritage = count($heritage['rijksmonumenten'] ?? []) > 0
+                    || count($heritage['gemeentelijke_monumenten'] ?? []) > 0
+                    || count($heritage['gezichten'] ?? []) > 0;
+                $diagnostics['rce_heritage'] = [
+                    'status' => $hasHeritage ? 'ok' : 'no_data',
+                    'detail' => $hasHeritage
+                        ? 'Monument/gezicht gevonden via RCE Linked Data.'
+                        : 'Geen monument/gezicht op exact punt (of query gaf geen resultaat).',
+                ];
+            }
+        }
+
+        $poiDistances = null;
+        $transitDistances = null;
+        $buurtCode = null;
+        $cbs = null;
+        if ($loadAccessibility) {
+            $poiLat = is_numeric($buildingMarker['lat'] ?? null) ? (float) $buildingMarker['lat'] : ($geocode['lat'] ?? null);
+            $poiLng = is_numeric($buildingMarker['lng'] ?? null) ? (float) $buildingMarker['lng'] : ($geocode['lng'] ?? null);
+            $overpassElements = $this->fetchAccessibilityOverpassElements($poiLat, $poiLng);
+            $poiDistances = $this->fetchNearestPoiDistances($poiLat, $poiLng, $overpassElements);
+            $transitDistances = $this->fetchNearestTransitDistances($poiLat, $poiLng, $overpassElements);
+            if (! $geocode) {
+                $diagnostics['osm_poi'] = ['status' => 'skipped', 'detail' => 'Overgeslagen: geen geocode beschikbaar.'];
+            } else {
+                $hasPoiDistance = $this->hasFilledValue($poiDistances['cafe']['afstand_km'] ?? null)
+                    || $this->hasFilledValue($poiDistances['restaurant']['afstand_km'] ?? null)
+                    || $this->hasFilledValue($poiDistances['hotel']['afstand_km'] ?? null);
+                $diagnostics['osm_poi'] = [
+                    'status' => $hasPoiDistance ? 'ok' : 'no_data',
+                    'detail' => $hasPoiDistance
+                        ? 'Afstanden naar dichtstbijzijnde cafe/restaurant/hotel opgehaald via OpenStreetMap Overpass.'
+                        : 'Geen cafe/restaurant/hotel gevonden binnen 10 km (of bron niet beschikbaar).',
+                ];
+            }
+
+            $buurtCode = $this->fetchNeighborhoodCode(
+                is_string($bag['adresseerbaar_object_identificatie'] ?? null) ? $bag['adresseerbaar_object_identificatie'] : null,
+                is_string($bag['nummeraanduiding_identificatie'] ?? null) ? $bag['nummeraanduiding_identificatie'] : null,
+                $bag['address'] ?? null,
+                $bag['postcode'] ?? null,
+                $bag['city'] ?? null
+            );
+            $cbs = $this->fetchCbsNeighborhoodStats($buurtCode);
+            if ($buurtCode === null) {
+                $diagnostics['cbs_85830'] = ['status' => 'skipped', 'detail' => 'Geen buurtcode beschikbaar voor CBS-verrijking.'];
+            } else {
+                $hasCbsData = $this->hasFilledValue($cbs['afstand_tot_supermarkt_km'] ?? null)
+                    || $this->hasFilledValue($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null)
+                    || $this->hasFilledValue($cbs['afstand_tot_groen_km'] ?? null);
+                $diagnostics['cbs_85830'] = [
+                    'status' => $hasCbsData ? 'ok' : 'no_data',
+                    'detail' => $hasCbsData
+                        ? 'Buurt-/voorzieningscijfers opgehaald via CBS OData (85830NED).'
+                        : 'CBS 85830NED gaf geen waarden voor deze buurtcode.',
+                ];
+            }
+        }
+
+        $airQuality = null;
+        $soil = null;
+        if ($loadMilieu) {
+            $airQuality = $this->fetchRivmAirQualityAtPoint(
+                $geocode['lat'] ?? null,
+                $geocode['lng'] ?? null
+            );
+            $soil = $this->fetchSoilStatusByPoint(
+                $geocode['lat'] ?? null,
+                $geocode['lng'] ?? null,
+                $bag['geometry_rd'] ?? null
+            );
+            $hasAirData = $this->hasFilledValue($airQuality['pm25_ug_m3'] ?? null)
+                || $this->hasFilledValue($airQuality['no2_ug_m3'] ?? null)
+                || $this->hasFilledValue($airQuality['geluid_omgeving']['waarde'] ?? null)
+                || $this->hasFilledValue($airQuality['zomerhitte_stad']['waarde'] ?? null)
+                || $this->hasFilledValue($airQuality['kans_op_overstroming']['waarde'] ?? null)
+                || $this->hasFilledValue($airQuality['gevaarlijke_stoffen_binnen_1km']['waarde'] ?? null);
+            $diagnostics['rivm_air_quality'] = [
+                'status' => $hasAirData ? 'ok' : 'no_data',
+                'detail' => $hasAirData
+                    ? 'Luchtkwaliteit (PM2.5/NO2) opgehaald via RIVM WMS.'
+                    : 'Geen luchtkwaliteitswaarde ontvangen op dit punt.',
+            ];
+        }
+
+        $response = [
             'bag_id' => $bagId,
+            'context_key' => $contextKey,
             'bag' => [
                 'address' => $bag['address'],
                 'postcode' => $bag['postcode'],
@@ -359,42 +415,6 @@ class PropertyController extends Controller
             ],
             'geocode' => $geocode,
             'cadastre' => $parcel,
-            'zoning' => [
-                'wkbp_beschikbaar' => count($zoningPlanObjects) > 0,
-                'omgevingsplan_url' => 'https://omgevingswet.overheid.nl/regels-op-de-kaart',
-                'planobjecten' => $zoningPlanObjects,
-                'toelichting' => count($zoningPlanObjects) > 0
-                    ? 'Planobjecten op deze locatie zijn opgehaald via PDOK Ruimtelijke Plannen (WMS GetFeatureInfo).'
-                    : 'Geen planobject gevonden op exact punt. Controleer de kaartlink voor omliggende plannen.',
-            ],
-            'heritage' => $heritage,
-            'soil' => $soil,
-            'accessibility' => [
-                'ov' => null,
-                'auto' => null,
-                'afstand_tot_knooppunten' => $cbs['afstand_tot_overstapstation_km'] ?? null,
-                'buurtcode' => $buurtCode,
-                'mate_van_stedelijkheid' => $cbs['mate_van_stedelijkheid'] ?? null,
-                'afstand_tot_supermarkt_km' => $poiDistances['supermarkt']['afstand_km'] ?? ($cbs['afstand_tot_supermarkt_km'] ?? null),
-                'sport_en_beweegmogelijkheden' => $cbs['sport_en_beweegmogelijkheden'] ?? null,
-                'afstand_tot_sport_km' => $poiDistances['sport']['afstand_km'] ?? null,
-                'afstand_tot_treinstation_ov_knooppunt_km' => $transitDistances['station_metro_tram']['afstand_km'] ?? ($cbs['afstand_tot_treinstation_ov_knooppunt_km'] ?? null),
-                'afstand_tot_bushalte_km' => $transitDistances['bushalte']['afstand_km'] ?? ($cbs['afstand_tot_bushalte_km'] ?? null),
-                'afstand_tot_oprit_hoofdweg_km' => $transitDistances['oprit_hoofdweg']['afstand_km'] ?? ($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null),
-                'afstand_tot_groen_km' => $poiDistances['groen']['afstand_km'] ?? ($cbs['afstand_tot_groen_km'] ?? null),
-                'afstand_tot_cafe_km' => $poiDistances['cafe']['afstand_km'] ?? null,
-                'afstand_tot_restaurant_km' => $poiDistances['restaurant']['afstand_km'] ?? null,
-                'afstand_tot_hotel_km' => $poiDistances['hotel']['afstand_km'] ?? null,
-                'dichtstbijzijnde' => $poiDistances,
-                'dichtstbijzijnde_ov' => $transitDistances,
-                'bronnen' => [
-                    'https://www.pdok.nl/',
-                    'https://www.cbs.nl/',
-                    'https://www.openstreetmap.org/',
-                    'https://overpass-api.de/',
-                ],
-            ],
-            'air_quality' => $airQuality,
             'woz' => [
                 'beschikbaar_via_open_api' => false,
                 'toelichting' => 'WOZ Waardeloket ondersteunt geen algemene open bulk-API voor geautomatiseerde verrijking.',
@@ -424,7 +444,57 @@ class PropertyController extends Controller
                 'ruimtelijke_plannen_wms_layer' => (string) config('services.pdok.ruimtelijke_plannen_wms_layer'),
                 'ruimtelijke_plannen_legend_url' => (string) config('services.pdok.ruimtelijke_plannen_legend_url'),
             ],
-        ]);
+        ];
+
+        if ($loadZoning) {
+            $response['zoning'] = [
+                'wkbp_beschikbaar' => count($zoningPlanObjects) > 0,
+                'omgevingsplan_url' => 'https://omgevingswet.overheid.nl/regels-op-de-kaart',
+                'planobjecten' => $zoningPlanObjects,
+                'toelichting' => count($zoningPlanObjects) > 0
+                    ? 'Planobjecten op deze locatie zijn opgehaald via PDOK Ruimtelijke Plannen (WMS GetFeatureInfo).'
+                    : 'Geen planobject gevonden op exact punt. Controleer de kaartlink voor omliggende plannen.',
+            ];
+        }
+
+        if ($loadHeritage && $heritage !== null) {
+            $response['heritage'] = $heritage;
+        }
+
+        if ($loadAccessibility && is_array($poiDistances) && is_array($transitDistances)) {
+            $response['accessibility'] = [
+                'ov' => null,
+                'auto' => null,
+                'afstand_tot_knooppunten' => $cbs['afstand_tot_overstapstation_km'] ?? null,
+                'buurtcode' => $buurtCode,
+                'mate_van_stedelijkheid' => $cbs['mate_van_stedelijkheid'] ?? null,
+                'afstand_tot_supermarkt_km' => $poiDistances['supermarkt']['afstand_km'] ?? ($cbs['afstand_tot_supermarkt_km'] ?? null),
+                'sport_en_beweegmogelijkheden' => $cbs['sport_en_beweegmogelijkheden'] ?? null,
+                'afstand_tot_sport_km' => $poiDistances['sport']['afstand_km'] ?? null,
+                'afstand_tot_treinstation_ov_knooppunt_km' => $transitDistances['station_metro_tram']['afstand_km'] ?? ($cbs['afstand_tot_treinstation_ov_knooppunt_km'] ?? null),
+                'afstand_tot_bushalte_km' => $transitDistances['bushalte']['afstand_km'] ?? ($cbs['afstand_tot_bushalte_km'] ?? null),
+                'afstand_tot_oprit_hoofdweg_km' => $transitDistances['oprit_hoofdweg']['afstand_km'] ?? ($cbs['afstand_tot_oprit_hoofdweg_km'] ?? null),
+                'afstand_tot_groen_km' => $poiDistances['groen']['afstand_km'] ?? ($cbs['afstand_tot_groen_km'] ?? null),
+                'afstand_tot_cafe_km' => $poiDistances['cafe']['afstand_km'] ?? null,
+                'afstand_tot_restaurant_km' => $poiDistances['restaurant']['afstand_km'] ?? null,
+                'afstand_tot_hotel_km' => $poiDistances['hotel']['afstand_km'] ?? null,
+                'dichtstbijzijnde' => $poiDistances,
+                'dichtstbijzijnde_ov' => $transitDistances,
+                'bronnen' => [
+                    'https://www.pdok.nl/',
+                    'https://www.cbs.nl/',
+                    'https://www.openstreetmap.org/',
+                    'https://overpass-api.de/',
+                ],
+            ];
+        }
+
+        if ($loadMilieu) {
+            $response['air_quality'] = $airQuality;
+            $response['soil'] = $soil;
+        }
+
+        return response()->json($response);
     }
 
     public function mapFeatureInfo(Request $request, SearchRequest $search_request)
@@ -1467,6 +1537,93 @@ class PropertyController extends Controller
         ];
     }
 
+    private function buildWmsFeatureInfoPointParams(string $layerNames, float $lat, float $lng, string $infoFormat = 'application/json'): ?array
+    {
+        $layerNames = trim($layerNames);
+        if ($layerNames === '') {
+            return null;
+        }
+
+        $mercator = $this->wgs84ToWebMercator($lat, $lng);
+        if (! $mercator) {
+            return null;
+        }
+
+        $delta = 60.0;
+        $bbox = implode(',', [
+            number_format($mercator['x'] - $delta, 3, '.', ''),
+            number_format($mercator['y'] - $delta, 3, '.', ''),
+            number_format($mercator['x'] + $delta, 3, '.', ''),
+            number_format($mercator['y'] + $delta, 3, '.', ''),
+        ]);
+
+        return [
+            'service' => 'WMS',
+            'request' => 'GetFeatureInfo',
+            'version' => '1.3.0',
+            'crs' => 'EPSG:3857',
+            'bbox' => $bbox,
+            'width' => 101,
+            'height' => 101,
+            'i' => 50,
+            'j' => 50,
+            'layers' => $layerNames,
+            'query_layers' => $layerNames,
+            'feature_count' => 5,
+            'info_format' => $infoFormat,
+        ];
+    }
+
+    private function fetchWmsFeatureInfoBatchAtPoint(string $wmsUrl, array $layers, float $lat, float $lng): array
+    {
+        $wmsUrl = trim($wmsUrl);
+        if ($wmsUrl === '' || count($layers) === 0) {
+            return [];
+        }
+
+        $queries = collect($layers)
+            ->mapWithKeys(function ($layer, $key) use ($lat, $lng) {
+                if (! is_string($layer)) {
+                    return [];
+                }
+                $params = $this->buildWmsFeatureInfoPointParams($layer, $lat, $lng, 'application/json');
+                if (! is_array($params)) {
+                    return [];
+                }
+
+                return [(string) $key => $params];
+            })
+            ->all();
+
+        if (count($queries) === 0) {
+            return [];
+        }
+
+        $responses = Http::pool(function (Pool $pool) use ($wmsUrl, $queries) {
+            $requests = [];
+            foreach ($queries as $key => $params) {
+                $requests[$key] = $pool
+                    ->timeout(8)
+                    ->retry(1, 250)
+                    ->get($wmsUrl, $params);
+            }
+
+            return $requests;
+        });
+
+        $result = [];
+        foreach ($queries as $key => $_params) {
+            $response = $responses[$key] ?? null;
+            if (! $response instanceof Response || ! $response->successful()) {
+                $result[$key] = [];
+                continue;
+            }
+            $result[$key] = $this->parseWmsFeatureInfoItems($response);
+        }
+
+        return $result;
+    }
+
     private function fetchWmsFeatureInfoAtPoint(string $wmsUrl, string $layerNames, float $lat, float $lng): array
     {
         $wmsUrl = trim($wmsUrl);
@@ -1475,19 +1632,6 @@ class PropertyController extends Controller
         if ($wmsUrl === '' || $layerNames === '') {
             return [];
         }
-
-        $mercator = $this->wgs84ToWebMercator($lat, $lng);
-        if (! $mercator) {
-            return [];
-        }
-
-        $delta = 60.0; // meters around click point
-        $bbox = implode(',', [
-            number_format($mercator['x'] - $delta, 3, '.', ''),
-            number_format($mercator['y'] - $delta, 3, '.', ''),
-            number_format($mercator['x'] + $delta, 3, '.', ''),
-            number_format($mercator['y'] + $delta, 3, '.', ''),
-        ]);
 
         $formatCandidates = [
             'application/json',
@@ -1500,23 +1644,13 @@ class PropertyController extends Controller
         ];
 
         foreach ($formatCandidates as $infoFormat) {
+            $params = $this->buildWmsFeatureInfoPointParams($layerNames, $lat, $lng, $infoFormat);
+            if (! is_array($params)) {
+                return [];
+            }
             $response = Http::timeout(10)
                 ->retry(1, 250)
-                ->get($wmsUrl, [
-                    'service' => 'WMS',
-                    'request' => 'GetFeatureInfo',
-                    'version' => '1.3.0',
-                    'crs' => 'EPSG:3857',
-                    'bbox' => $bbox,
-                    'width' => 101,
-                    'height' => 101,
-                    'i' => 50,
-                    'j' => 50,
-                    'layers' => $layerNames,
-                    'query_layers' => $layerNames,
-                    'feature_count' => 5,
-                    'info_format' => $infoFormat,
-                ]);
+                ->get($wmsUrl, $params);
 
             if (! $response->successful()) {
                 continue;
@@ -2311,22 +2445,9 @@ class PropertyController extends Controller
         return $features;
     }
 
-    private function fetchNearestPoiDistances(?float $lat, ?float $lng): array
+    private function fetchAccessibilityOverpassUrls(): array
     {
-        $result = [
-            'supermarkt' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'sport' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'groen' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'cafe' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'restaurant' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'hotel' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-        ];
-
-        if ($lat === null || $lng === null) {
-            return $result;
-        }
-
-        $overpassUrls = collect([
+        return collect([
             trim((string) config('services.overpass.url')),
             'https://overpass-api.de/api/interpreter',
         ])
@@ -2334,8 +2455,17 @@ class PropertyController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function fetchAccessibilityOverpassElements(?float $lat, ?float $lng): array
+    {
+        if ($lat === null || $lng === null) {
+            return [];
+        }
+
+        $overpassUrls = $this->fetchAccessibilityOverpassUrls();
         if (count($overpassUrls) === 0) {
-            return $result;
+            return [];
         }
 
         $latStr = number_format($lat, 7, '.', '');
@@ -2351,11 +2481,26 @@ class PropertyController extends Controller
   nwr["amenity"="cafe"](around:10000,{$latStr},{$lngStr});
   nwr["amenity"="restaurant"](around:10000,{$latStr},{$lngStr});
   nwr["tourism"="hotel"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="bus_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="station"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_junction"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_link"](around:10000,{$latStr},{$lngStr});
 );
 out center tags;
 OVERPASS;
 
-        $elements = [];
+        return $this->fetchOverpassElementsWithQuery($query, true);
+    }
+
+    private function fetchOverpassElementsWithQuery(string $query, bool $allowPlainFallback = false): array
+    {
+        $overpassUrls = $this->fetchAccessibilityOverpassUrls();
+        if (count($overpassUrls) === 0) {
+            return [];
+        }
+
         foreach ($overpassUrls as $overpassUrl) {
             try {
                 $response = Http::timeout(12)
@@ -2363,7 +2508,7 @@ OVERPASS;
                     ->asForm()
                     ->post($overpassUrl, ['data' => $query]);
 
-                if (! $response->successful()) {
+                if ($allowPlainFallback && ! $response->successful()) {
                     $response = Http::timeout(12)
                         ->retry(1, 450)
                         ->withHeaders([
@@ -2375,17 +2520,78 @@ OVERPASS;
             } catch (\Throwable) {
                 continue;
             }
+
             if (! isset($response) || ! $response->successful()) {
                 continue;
             }
 
-            $candidate = data_get($response->json(), 'elements', []);
-            if (is_array($candidate) && count($candidate) > 0) {
-                $elements = $candidate;
-                break;
+            $elements = data_get($response->json(), 'elements', []);
+            if (is_array($elements) && count($elements) > 0) {
+                return $elements;
             }
         }
 
+        return [];
+    }
+
+    private function buildPoiOverpassQuery(float $lat, float $lng): string
+    {
+        $latStr = number_format($lat, 7, '.', '');
+        $lngStr = number_format($lng, 7, '.', '');
+
+        return <<<OVERPASS
+[out:json][timeout:20];
+(
+  nwr["amenity"="supermarket"](around:10000,{$latStr},{$lngStr});
+  nwr["leisure"~"sports_centre|sports_hall|fitness_centre|pitch|stadium"](around:10000,{$latStr},{$lngStr});
+  nwr["leisure"="park"](around:10000,{$latStr},{$lngStr});
+  nwr["natural"~"wood|grassland|heath"](around:10000,{$latStr},{$lngStr});
+  nwr["landuse"~"forest|grass"](around:10000,{$latStr},{$lngStr});
+  nwr["amenity"="cafe"](around:10000,{$latStr},{$lngStr});
+  nwr["amenity"="restaurant"](around:10000,{$latStr},{$lngStr});
+  nwr["tourism"="hotel"](around:10000,{$latStr},{$lngStr});
+);
+out center tags;
+OVERPASS;
+    }
+
+    private function buildTransitOverpassQuery(float $lat, float $lng): string
+    {
+        $latStr = number_format($lat, 7, '.', '');
+        $lngStr = number_format($lng, 7, '.', '');
+
+        return <<<OVERPASS
+[out:json][timeout:20];
+(
+  nwr["highway"="bus_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="station"](around:10000,{$latStr},{$lngStr});
+  nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
+  nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_junction"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_link"](around:10000,{$latStr},{$lngStr});
+);
+out center tags;
+OVERPASS;
+    }
+
+    private function fetchNearestPoiDistances(?float $lat, ?float $lng, ?array $preloadedElements = null): array
+    {
+        $result = [
+            'supermarkt' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'sport' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'groen' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'cafe' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'restaurant' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'hotel' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+        ];
+
+        if ($lat === null || $lng === null) {
+            return $result;
+        }
+
+        $elements = is_array($preloadedElements) && count($preloadedElements) > 0
+            ? $preloadedElements
+            : $this->fetchOverpassElementsWithQuery($this->buildPoiOverpassQuery($lat, $lng), true);
         if (! is_array($elements)) {
             return $result;
         }
@@ -2722,17 +2928,29 @@ OVERPASS;
             $value = $row['Value'] ?? null;
             return is_numeric($value) ? (float) $value : null;
         };
+        $valueForAny = function (array $measureCodes) use ($valueFor): ?float {
+            foreach ($measureCodes as $code) {
+                $value = $valueFor((string) $code);
+                if ($value !== null) {
+                    return $value;
+                }
+            }
+
+            return null;
+        };
 
         $distanceSupermarket = $valueFor('D000025');
         $distanceSport = $valueFor('D000051');
         $distanceTrain = $valueFor('D000052');
         $distanceHub = $valueFor('D000014');
+        $distanceBus = $valueForAny(['D000053', 'D000015', 'D000054']);
         $distanceHighwayRamp = $valueFor('D000037');
         $distanceGreen = $valueFor('D000036');
 
         $result['afstand_tot_supermarkt_km'] = $distanceSupermarket;
         $result['afstand_tot_treinstation_ov_knooppunt_km'] = $distanceTrain;
         $result['afstand_tot_overstapstation_km'] = $distanceHub;
+        $result['afstand_tot_bushalte_km'] = $distanceBus;
         $result['afstand_tot_oprit_hoofdweg_km'] = $distanceHighwayRamp;
         $result['afstand_tot_groen_km'] = $distanceGreen;
 
@@ -2785,33 +3003,55 @@ OVERPASS;
             return $result;
         }
 
-        $pmItems = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $pmLayer, $lat, $lng);
-        $no2Items = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $no2Layer, $lat, $lng);
-        $result['pm25_ug_m3'] = $this->extractGrayIndexFromWmsItems($pmItems);
-        $result['no2_ug_m3'] = $this->extractGrayIndexFromWmsItems($no2Items);
-
         $geluidLayer = trim((string) config('services.rivm.alo_geluid_layer'));
         $zomerhitteLayer = trim((string) config('services.rivm.alo_zomerhitte_layer'));
         $overstromingLayer = trim((string) config('services.rivm.alo_overstroming_layer'));
         $gevaarLayer = trim((string) config('services.rivm.alo_gevaarlijke_stoffen_layer'));
 
+        $layerMap = [
+            'pm25' => $pmLayer,
+            'no2' => $no2Layer,
+            'geluid' => $geluidLayer,
+            'zomerhitte' => $zomerhitteLayer,
+            'overstroming' => $overstromingLayer,
+            'gevaar' => $gevaarLayer,
+        ];
+        $batchItems = $this->fetchWmsFeatureInfoBatchAtPoint($wmsUrl, $layerMap, $lat, $lng);
+
+        $itemsFor = function (string $key, string $layer) use ($batchItems, $wmsUrl, $lat, $lng): array {
+            $items = $batchItems[$key] ?? [];
+            if (is_array($items) && count($items) > 0) {
+                return $items;
+            }
+            if ($layer === '') {
+                return [];
+            }
+
+            return $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $layer, $lat, $lng);
+        };
+
+        $pmItems = $itemsFor('pm25', $pmLayer);
+        $no2Items = $itemsFor('no2', $no2Layer);
+        $result['pm25_ug_m3'] = $this->extractGrayIndexFromWmsItems($pmItems);
+        $result['no2_ug_m3'] = $this->extractGrayIndexFromWmsItems($no2Items);
+
         if ($geluidLayer !== '') {
-            $metric = $this->extractGeluidMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $geluidLayer, $lat, $lng));
+            $metric = $this->extractGeluidMetric($itemsFor('geluid', $geluidLayer));
             $result['geluid_omgeving']['waarde'] = $metric['waarde'];
             $result['geluid_omgeving']['score'] = $metric['score'];
         }
         if ($zomerhitteLayer !== '') {
-            $metric = $this->extractZomerhitteMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $zomerhitteLayer, $lat, $lng));
+            $metric = $this->extractZomerhitteMetric($itemsFor('zomerhitte', $zomerhitteLayer));
             $result['zomerhitte_stad']['waarde'] = $metric['waarde'];
             $result['zomerhitte_stad']['score'] = $metric['score'];
         }
         if ($overstromingLayer !== '') {
-            $metric = $this->extractOverstromingMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $overstromingLayer, $lat, $lng));
+            $metric = $this->extractOverstromingMetric($itemsFor('overstroming', $overstromingLayer));
             $result['kans_op_overstroming']['waarde'] = $metric['waarde'];
             $result['kans_op_overstroming']['score'] = $metric['score'];
         }
         if ($gevaarLayer !== '') {
-            $items = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $gevaarLayer, $lat, $lng);
+            $items = $itemsFor('gevaar', $gevaarLayer);
             $metric = $this->extractGevaarlijkeStoffenMetric($items);
             $result['gevaarlijke_stoffen_binnen_1km']['waarde'] = $metric['waarde'] ?? 'Geen';
             $result['gevaarlijke_stoffen_binnen_1km']['score'] = $metric['score'] ?? 1.0;
@@ -3062,7 +3302,7 @@ OVERPASS;
         return sprintf('https://www.openstreetmap.org/%s/%s', $normalizedType, (string) $id);
     }
 
-    private function fetchNearestTransitDistances(?float $lat, ?float $lng): array
+    private function fetchNearestTransitDistances(?float $lat, ?float $lng, ?array $preloadedElements = null): array
     {
         $result = [
             'bushalte' => ['afstand_km' => null, 'duur_min' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
@@ -3074,55 +3314,10 @@ OVERPASS;
             return $result;
         }
 
-        $overpassUrls = collect([
-            trim((string) config('services.overpass.url')),
-            'https://overpass-api.de/api/interpreter',
-        ])
-            ->filter(fn ($url) => is_string($url) && trim($url) !== '')
-            ->unique()
-            ->values()
-            ->all();
-        if (count($overpassUrls) === 0) {
-            return $result;
-        }
-
-        $latStr = number_format($lat, 7, '.', '');
-        $lngStr = number_format($lng, 7, '.', '');
-        $query = <<<OVERPASS
-[out:json][timeout:20];
-(
-  nwr["highway"="bus_stop"](around:10000,{$latStr},{$lngStr});
-  nwr["railway"="station"](around:10000,{$latStr},{$lngStr});
-  nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
-  nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
-  nwr["highway"="motorway_junction"](around:10000,{$latStr},{$lngStr});
-  nwr["highway"="motorway_link"](around:10000,{$latStr},{$lngStr});
-);
-out center tags;
-OVERPASS;
-
-        $elements = [];
-        foreach ($overpassUrls as $overpassUrl) {
-            try {
-                $response = Http::timeout(12)
-                    ->retry(1, 450)
-                    ->asForm()
-                    ->post($overpassUrl, ['data' => $query]);
-            } catch (\Throwable) {
-                continue;
-            }
-            if (! $response->successful()) {
-                continue;
-            }
-
-            $candidate = data_get($response->json(), 'elements', []);
-            if (is_array($candidate) && count($candidate) > 0) {
-                $elements = $candidate;
-                break;
-            }
-        }
-
-        if (! is_array($elements)) {
+        $elements = is_array($preloadedElements) && count($preloadedElements) > 0
+            ? $preloadedElements
+            : $this->fetchOverpassElementsWithQuery($this->buildTransitOverpassQuery($lat, $lng), false);
+        if (! is_array($elements) || count($elements) === 0) {
             return $result;
         }
 

@@ -90,6 +90,8 @@ const mapFeatureInfoItems = ref([]);
 const mapFeatureInfoLoading = ref(false);
 const mapFeatureInfoMessage = ref("");
 const mapFeatureInfoNotice = ref("");
+const mapVisibilityObserver = ref(null);
+const mapShouldRender = ref(false);
 
 const enrichmentSequenceRunId = ref(0);
 const enrichmentProgress = ref([]);
@@ -103,8 +105,6 @@ const enrichmentSourceDefinitions = [
     { key: "cbs_85830", label: "Buurtinformatie" },
     { key: "rivm_air_quality", label: "Milieu" },
 ];
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const geocodeOverallStatus = (diagnostics) => {
     const google = diagnostics?.google_geocode?.status;
@@ -130,32 +130,68 @@ const enrichmentStatusMap = (diagnostics = {}) => ({
 const normalizeProgressStatus = (status) =>
     [ "ok", "skipped", "no_data" ].includes(String(status ?? "").toLowerCase())
         ? "done"
-        : "failed";
+        : (String(status ?? "").toLowerCase() === "pending" ? "pending" : "failed");
 
-const playEnrichmentProgress = async (diagnostics = {}) => {
-    const runId = ++enrichmentSequenceRunId.value;
+const initializeEnrichmentProgress = () => {
+    enrichmentProgress.value = enrichmentSourceDefinitions.map((item) => ({
+        key: item.key,
+        label: item.label,
+        status: "pending",
+        detail: "",
+    }));
+};
+
+const updateEnrichmentProgressFromDiagnostics = (diagnostics = {}) => {
     const statusMap = enrichmentStatusMap(diagnostics);
-    enrichmentProgress.value = [];
+    enrichmentProgress.value = enrichmentProgress.value.map((row) => {
+        if (!(row.key in statusMap)) {
+            return row;
+        }
+        const nextStatus = normalizeProgressStatus(statusMap[row.key]);
+        if (nextStatus === "pending" && row.status !== "pending") {
+            return row;
+        }
+        return {
+            ...row,
+            status: nextStatus,
+            detail: nextStatus === "done" ? "" : row.detail,
+        };
+    });
+};
 
-    for (const item of enrichmentSourceDefinitions) {
-        if (runId !== enrichmentSequenceRunId.value) return;
+const stageToProgressKeys = (stage) => {
+    if (stage === "zoning") return [ "pdok_zoning" ];
+    if (stage === "heritage") return [ "rce_heritage" ];
+    if (stage === "accessibility") return [ "osm_poi", "cbs_85830" ];
+    if (stage === "milieu") return [ "rivm_air_quality" ];
+    if (stage === "core") return [ "bag", "geocode", "pdok_cadastre" ];
+    return [];
+};
 
-        enrichmentProgress.value.push({
-            key: item.key,
-            label: item.label,
-            status: "pending",
-        });
-
-        await wait(320);
-        if (runId !== enrichmentSequenceRunId.value) return;
-
-        const status = normalizeProgressStatus(statusMap[item.key]);
-        enrichmentProgress.value = enrichmentProgress.value.map((row) =>
-            row.key === item.key ? { ...row, status } : row
-        );
-
-        await wait(180);
+const markProgressFailedByStage = (stage) => {
+    const keys = stageToProgressKeys(stage);
+    if (!keys.length) {
+        return;
     }
+    enrichmentProgress.value = enrichmentProgress.value.map((row) =>
+        keys.includes(row.key) && row.status === "pending"
+            ? { ...row, status: "failed" }
+            : row
+    );
+};
+
+const setProgressDetailByStage = (stage, detail) => {
+    const keys = stageToProgressKeys(stage);
+    const message = String(detail ?? "").trim();
+    if (!keys.length || message === "") {
+        return;
+    }
+
+    enrichmentProgress.value = enrichmentProgress.value.map((row) =>
+        keys.includes(row.key)
+            ? { ...row, detail: message }
+            : row
+    );
 };
 
 const isDiagnosticErrorStatus = (status) => {
@@ -1212,22 +1248,37 @@ const formatDrivingDurationMinutes = (valueKm, explicitMinutes = null) => {
     return `${minutes} min`;
 };
 
-const googleRouteUrl = (destination, travelMode = "walking") => {
+const googleRouteUrl = (destination, travelMode = "walking", fallbackQuery = null) => {
     const origin = getEnrichmentCoordinates();
     const destinationLat = Number.parseFloat(String(destination?.lat ?? ""));
     const destinationLng = Number.parseFloat(String(destination?.lng ?? ""));
-    if (!origin || !Number.isFinite(destinationLat) || !Number.isFinite(destinationLng)) {
+    if (!origin) {
         return null;
     }
 
     const mode = [ "walking", "driving" ].includes(travelMode) ? travelMode : "walking";
     const originParam = `${origin.lat},${origin.lng}`;
-    const destinationParam = `${destinationLat},${destinationLng}`;
+    let destinationParam = null;
+    if (Number.isFinite(destinationLat) && Number.isFinite(destinationLng)) {
+        destinationParam = `${destinationLat},${destinationLng}`;
+    } else {
+        const query = String(
+            fallbackQuery
+            ?? destination?.query
+            ?? destination?.naam
+            ?? ""
+        ).trim();
+        if (query === "") {
+            return null;
+        }
+        destinationParam = query;
+    }
+
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&travelmode=${mode}`;
 };
 
-const googleWalkingRouteUrl = (destination) => googleRouteUrl(destination, "walking");
-const googleDrivingRouteUrl = (destination) => googleRouteUrl(destination, "driving");
+const googleWalkingRouteUrl = (destination, fallbackQuery = null) => googleRouteUrl(destination, "walking", fallbackQuery);
+const googleDrivingRouteUrl = (destination, fallbackQuery = null) => googleRouteUrl(destination, "driving", fallbackQuery);
 
 const milieuInfoLinks = {
     fijnstof: "https://www.atlasleefomgeving.nl/thema/schone-lucht/fijnstof",
@@ -1688,47 +1739,185 @@ const renderMap = async () => {
     updateMapMode();
 };
 
+const disconnectMapObserver = () => {
+    if (mapVisibilityObserver.value) {
+        mapVisibilityObserver.value.disconnect();
+        mapVisibilityObserver.value = null;
+    }
+};
+
+const scheduleLazyMapRender = async () => {
+    if (!mapShouldRender.value) {
+        return;
+    }
+    await nextTick();
+    await renderMap();
+};
+
+const setupLazyMapObserver = async () => {
+    disconnectMapObserver();
+
+    const hasApiKey = Boolean(enrichmentData.value?.map?.google_maps_api_key_available);
+    if (!hasApiKey) {
+        mapShouldRender.value = false;
+        return;
+    }
+
+    await nextTick();
+    if (!mapContainer.value) {
+        return;
+    }
+
+    mapVisibilityObserver.value = new IntersectionObserver(
+        (entries) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) {
+                    continue;
+                }
+                mapShouldRender.value = true;
+                scheduleLazyMapRender();
+                disconnectMapObserver();
+                break;
+            }
+        },
+        {
+            root: null,
+            threshold: 0.12,
+        }
+    );
+
+    mapVisibilityObserver.value.observe(mapContainer.value);
+};
+
+const mergeEnrichmentPayload = (payload = {}) => {
+    const current = enrichmentData.value ?? {};
+    const currentDiagnostics = current?.diagnostics ?? {};
+    const incomingDiagnostics = payload?.diagnostics ?? {};
+    const mergedDiagnostics = { ...currentDiagnostics };
+
+    for (const [key, diag] of Object.entries(incomingDiagnostics)) {
+        if (!diag || typeof diag !== "object") {
+            continue;
+        }
+
+        const incomingStatus = String(diag.status ?? "").toLowerCase();
+        const existing = mergedDiagnostics[key];
+        const existingStatus = String(existing?.status ?? "").toLowerCase();
+
+        if (incomingStatus === "pending" && existingStatus && existingStatus !== "pending") {
+            continue;
+        }
+
+        mergedDiagnostics[key] = {
+            ...(existing ?? {}),
+            ...diag,
+        };
+    }
+
+    enrichmentData.value = {
+        ...current,
+        ...payload,
+        diagnostics: mergedDiagnostics,
+        bag: {
+            ...(current?.bag ?? {}),
+            ...(payload?.bag ?? {}),
+        },
+        map: {
+            ...(current?.map ?? {}),
+            ...(payload?.map ?? {}),
+        },
+    };
+};
+
+const buildEnrichmentUrl = (params) =>
+    `${route("search-requests.properties.address-enrichment", props.item.id)}?${new URLSearchParams(params).toString()}`;
+
+const fetchEnrichmentStage = async ({ stage, bagAddressId, contextKey }) => {
+    const params = { stage };
+    if (bagAddressId) {
+        params.bag_address_id = bagAddressId;
+    }
+    if (contextKey) {
+        params.context_key = contextKey;
+    }
+
+    const response = await fetch(buildEnrichmentUrl(params), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(payload?.message || `Stage ${stage} ophalen is mislukt.`);
+        error.payload = payload;
+        throw error;
+    }
+    return payload;
+};
+
 const fetchAddressEnrichment = async () => {
     if (!form.bag_address_id) {
         enrichmentData.value = null;
         enrichmentError.value = "";
         enrichmentProgress.value = [];
+        mapShouldRender.value = false;
+        disconnectMapObserver();
         return;
     }
 
-    enrichmentSequenceRunId.value += 1;
-    enrichmentProgress.value = [
-        {
-            key: enrichmentSourceDefinitions[0].key,
-            label: enrichmentSourceDefinitions[0].label,
-            status: "pending",
-        },
-    ];
+    const runId = ++enrichmentSequenceRunId.value;
+    initializeEnrichmentProgress();
     isEnrichmentLoading.value = true;
     enrichmentError.value = "";
+    mapShouldRender.value = false;
+    disconnectMapObserver();
 
     try {
-        const response = await fetch(
-            route("search-requests.properties.address-enrichment", props.item.id) +
-                `?bag_address_id=${encodeURIComponent(form.bag_address_id)}`,
-            {
-                method: "GET",
-                headers: { Accept: "application/json" },
-            }
-        );
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            enrichmentData.value = null;
-            enrichmentError.value =
-                payload?.message || "Adresverrijking ophalen is mislukt.";
+        const corePayload = await fetchEnrichmentStage({
+            stage: "core",
+            bagAddressId: form.bag_address_id,
+        });
+        if (runId !== enrichmentSequenceRunId.value) {
             return;
         }
 
-        enrichmentData.value = payload;
-        await playEnrichmentProgress(payload?.diagnostics ?? {});
+        enrichmentData.value = corePayload;
+        updateEnrichmentProgressFromDiagnostics(corePayload?.diagnostics ?? {});
+        await setupLazyMapObserver();
 
-        await nextTick();
-        await renderMap();
+        const contextKey = corePayload?.context_key;
+        const stageRequests = [ "zoning", "heritage", "accessibility", "milieu" ].map((stage) =>
+            fetchEnrichmentStage({
+                stage,
+                contextKey,
+                bagAddressId: form.bag_address_id,
+            })
+                .then((payload) => {
+                    if (runId !== enrichmentSequenceRunId.value) {
+                        return;
+                    }
+                    mergeEnrichmentPayload(payload ?? {});
+                    updateEnrichmentProgressFromDiagnostics(enrichmentData.value?.diagnostics ?? {});
+                })
+                .catch((error) => {
+                    if (runId !== enrichmentSequenceRunId.value) {
+                        return;
+                    }
+                    const message = error?.message || `Stage ${stage} ophalen is mislukt.`;
+                    enrichmentError.value = message;
+                    markProgressFailedByStage(stage);
+                    const diagnosticDetail =
+                        error?.payload?.diagnostics &&
+                        typeof error.payload.diagnostics === "object"
+                            ? Object.values(error.payload.diagnostics)
+                                .map((diag) => String(diag?.detail ?? "").trim())
+                                .find((value) => value !== "")
+                            : "";
+                    setProgressDetailByStage(stage, diagnosticDetail || message);
+                })
+        );
+
+        await Promise.allSettled(stageRequests);
+
     } catch {
         enrichmentData.value = null;
         enrichmentError.value = "Adresverrijking ophalen is mislukt.";
@@ -2156,11 +2345,14 @@ onMounted(() => {
 
 watch(
     () => [enrichmentData.value?.map?.google_maps_api_key_available, mapContainer.value],
-    () => {
+    async () => {
         legendImageErrors.value = {};
         clearMapFeatureInfo();
         if (enrichmentData.value?.map?.google_maps_api_key_available) {
-            renderMap();
+            await setupLazyMapObserver();
+            if (mapShouldRender.value) {
+                await renderMap();
+            }
         }
     }
 );
@@ -2170,12 +2362,16 @@ watch(
     () => {
         legendImageErrors.value = {};
         clearMapFeatureInfo();
+        if (mapShouldRender.value && mapInstance.value) {
+            updateMapMode();
+        }
     }
 );
 
 onBeforeUnmount(() => {
     document.removeEventListener("paste", handleGlobalPaste);
     enrichmentSequenceRunId.value += 1;
+    disconnectMapObserver();
     if (addressLookupTimer.value) {
         clearTimeout(addressLookupTimer.value);
     }
@@ -2303,7 +2499,7 @@ onBeforeUnmount(() => {
                             <div
                                 v-for="item in enrichmentProgress"
                                 :key="`progress-${item.key}`"
-                                class="flex items-center gap-2"
+                                class="flex items-start gap-2"
                             >
                                 <span
                                     v-if="item.status === 'pending'"
@@ -2311,10 +2507,17 @@ onBeforeUnmount(() => {
                                 ></span>
                                 <span v-else-if="item.status === 'done'" class="font-semibold text-green-600">✓</span>
                                 <span v-else class="font-semibold text-red-600">✕</span>
-                                <span class="text-gray-800">{{ item.label }} ophalen</span>
-                                <span v-if="item.status === 'done'" class="text-xs font-semibold text-green-600">Gereed</span>
-                                <span v-else-if="item.status === 'failed'" class="text-xs font-semibold text-red-600">Mislukt</span>
-                                <span v-else class="text-xs text-gray-500">Bezig</span>
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-gray-800">{{ item.label }} ophalen</span>
+                                        <span v-if="item.status === 'done'" class="text-xs font-semibold text-green-600">Gereed</span>
+                                        <span v-else-if="item.status === 'failed'" class="text-xs font-semibold text-red-600">Mislukt</span>
+                                        <span v-else class="text-xs text-gray-500">Bezig</span>
+                                    </div>
+                                    <div v-if="item.status === 'failed' && item.detail" class="text-xs text-red-600">
+                                        {{ item.detail }}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div v-if="enrichmentError && !isEnrichmentLoading" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -2637,8 +2840,8 @@ onBeforeUnmount(() => {
                                             <span class="detail-label">Sport- en beweegmogelijkheden</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport, 'sportvoorziening')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport, 'sportvoorziening')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
@@ -2659,8 +2862,8 @@ onBeforeUnmount(() => {
                                             <span class="detail-label">Groenvoorzieningen</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen, 'groenvoorziening')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen, 'groenvoorziening')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
@@ -2681,8 +2884,8 @@ onBeforeUnmount(() => {
                                             <span class="detail-label">Cafe</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_cafe_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_cafe_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe, 'cafe')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe, 'cafe')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
@@ -2703,8 +2906,8 @@ onBeforeUnmount(() => {
                                             <span class="detail-label">Restaurant</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_restaurant_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_restaurant_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant, 'restaurant')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant, 'restaurant')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
@@ -2725,8 +2928,8 @@ onBeforeUnmount(() => {
                                             <span class="detail-label">Hotel</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_hotel_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_hotel_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel, 'hotel')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel, 'hotel')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
