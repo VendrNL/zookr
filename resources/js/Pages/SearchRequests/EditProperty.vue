@@ -12,7 +12,7 @@ import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import TokenDropdown from "@/Components/TokenDropdown.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 import useImageDrop from "@/Composables/useImageDrop";
 
@@ -29,6 +29,10 @@ const props = defineProps({
     },
     users: Array,
     currentUserId: Number,
+    enrichmentData: {
+        type: Object,
+        default: null,
+    },
     options: {
         type: Object,
         default: () => ({
@@ -36,6 +40,717 @@ const props = defineProps({
         }),
     },
 });
+
+const readonlyEnrichment = computed(() =>
+    props.enrichmentData && typeof props.enrichmentData === "object"
+        ? props.enrichmentData
+        : null
+);
+
+const hasReadonlyEnrichment = computed(() => readonlyEnrichment.value !== null);
+
+const parseDistanceKm = (value) => {
+    const parsed = Number.parseFloat(String(value ?? ""));
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatDistanceMeters = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    if (km === null) return "-";
+    return `${new Intl.NumberFormat("nl-NL").format(Math.round(km * 1000))} m`;
+};
+
+const formatWalkingDurationMinutes = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    if (km === null) return null;
+    return `${Math.max(1, Math.round((km / 5) * 60))} min`;
+};
+
+const formatDrivingDurationMinutes = (valueKm, explicitMinutes = null) => {
+    const explicit = Number.parseFloat(String(explicitMinutes ?? ""));
+    if (Number.isFinite(explicit) && explicit > 0) {
+        return `${Math.max(1, Math.round(explicit))} min`;
+    }
+    const km = parseDistanceKm(valueKm);
+    if (km === null) return null;
+    return `${Math.max(1, Math.round((km / 50) * 60))} min`;
+};
+
+const hasDistanceWithinFiveKm = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    return km !== null && km <= 5;
+};
+
+const formatVoorzieningDistance = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    if (km === null || km > 5) return "Niet binnen 5.000 m";
+    return formatDistanceMeters(km);
+};
+
+const parseCoordinate = (value) => {
+    const normalized = String(value ?? "").trim().replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getEnrichmentCoordinates = () => {
+    const markerData = readonlyEnrichment.value?.map?.marker;
+    const fallbackGeocode = readonlyEnrichment.value?.geocode;
+    const lat = parseCoordinate(markerData?.lat ?? fallbackGeocode?.lat);
+    const lng = parseCoordinate(markerData?.lng ?? fallbackGeocode?.lng);
+    if (lat === null || lng === null) {
+        return null;
+    }
+    return { lat, lng };
+};
+
+const googleRouteUrl = (destination, travelMode = "walking", fallbackQuery = null) => {
+    const origin = getEnrichmentCoordinates();
+    if (!origin) {
+        return null;
+    }
+
+    const mode = [ "walking", "driving" ].includes(travelMode) ? travelMode : "walking";
+    const originParam = `${origin.lat},${origin.lng}`;
+
+    let destinationParam = null;
+    const destinationLat = Number.parseFloat(String(destination?.lat ?? ""));
+    const destinationLng = Number.parseFloat(String(destination?.lng ?? ""));
+    if (Number.isFinite(destinationLat) && Number.isFinite(destinationLng)) {
+        destinationParam = `${destinationLat},${destinationLng}`;
+    } else {
+        const query = String(fallbackQuery ?? "").trim();
+        if (query === "") {
+            return null;
+        }
+        destinationParam = `${query}, ${originParam}`;
+    }
+
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&travelmode=${mode}`;
+};
+
+const geocodeMapsLink = computed(() => {
+    const lat = Number.parseFloat(String(readonlyEnrichment.value?.geocode?.lat ?? ""));
+    const lng = Number.parseFloat(String(readonlyEnrichment.value?.geocode?.lng ?? ""));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
+});
+
+const buurtcodeInfoLink = computed(() => {
+    const code = String(readonlyEnrichment.value?.accessibility?.buurtcode ?? "").trim().toUpperCase();
+    if (!code) return null;
+    return `https://allecijfers.nl/zoeken/?q=${encodeURIComponent(code)}`;
+});
+
+const bestemmingSourceLink = computed(() => {
+    const aanduiding = String(readonlyEnrichment.value?.cadastre?.kadastrale_aanduiding ?? "").trim();
+    if (aanduiding) {
+        return `https://omgevingswet.overheid.nl/regels-op-de-kaart/zoeken/locatie?locatie=${encodeURIComponent(`Perceel ${aanduiding}`)}`;
+    }
+    return readonlyEnrichment.value?.zoning?.omgevingsplan_url ?? null;
+});
+
+const pandIds = computed(() => {
+    const values = readonlyEnrichment.value?.bag?.pand_identificaties;
+    if (Array.isArray(values)) {
+        return values.map((value) => String(value ?? "").trim()).filter((value) => value !== "");
+    }
+    const single = String(values ?? "").trim();
+    return single ? [single] : [];
+});
+const pandIdViewerUrl = (pandId) =>
+    `https://bagviewer.kadaster.nl/?objectId=${encodeURIComponent(String(pandId ?? "").trim())}`;
+
+const monumentStatusRijksmonumentLink = computed(() =>
+    readonlyEnrichment.value?.heritage?.rijksmonumenten?.[0]?.detail_url
+    ?? readonlyEnrichment.value?.heritage?.monumentenregister_url
+    ?? null
+);
+
+const monumentStatusRijksmonumentNummer = computed(() =>
+    readonlyEnrichment.value?.heritage?.rijksmonumenten?.[0]?.nummer ?? null
+);
+
+const monumentStatusGemeentelijkLink = computed(() =>
+    readonlyEnrichment.value?.heritage?.gemeentelijke_monumenten?.[0]?.detail_url
+    ?? readonlyEnrichment.value?.heritage?.monumentenregister_url
+    ?? null
+);
+
+const monumentStatusGemeentelijkLabel = computed(() => {
+    const item = readonlyEnrichment.value?.heritage?.gemeentelijke_monumenten?.[0] ?? null;
+    if (!item) return null;
+    return item?.nummer ?? item?.naam ?? null;
+});
+
+const monumentStatusGezichtLink = computed(() =>
+    readonlyEnrichment.value?.heritage?.gezichten?.[0]?.detail_url
+    ?? readonlyEnrichment.value?.heritage?.monumentenregister_url
+    ?? null
+);
+
+const monumentStatusGezichtNaam = computed(() =>
+    readonlyEnrichment.value?.heritage?.gezichten?.[0]?.naam ?? null
+);
+
+const monumentStatusGezichtType = computed(() =>
+    readonlyEnrichment.value?.heritage?.gezichten?.[0]?.type ?? "Beschermd gezicht"
+);
+
+const googleWalkingRouteUrl = (destination, fallbackQuery = null) => googleRouteUrl(destination, "walking", fallbackQuery);
+const googleDrivingRouteUrl = (destination, fallbackQuery = null) => googleRouteUrl(destination, "driving", fallbackQuery);
+
+const mapEmbedLink = computed(() => {
+    const coords = getEnrichmentCoordinates();
+    if (!coords) return null;
+    return `https://www.google.com/maps?q=${encodeURIComponent(`${coords.lat},${coords.lng}`)}&z=18&output=embed`;
+});
+
+const mapOpenLink = computed(() => {
+    const coords = getEnrichmentCoordinates();
+    if (!coords) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coords.lat},${coords.lng}`)}`;
+});
+
+const mapLayers = computed(() => {
+    const map = readonlyEnrichment.value?.map ?? {};
+    const rows = [
+        { key: "kadaster", label: "Kadaster", url: map?.kadastraal_wms_url, layer: map?.kadastraal_wms_layer },
+        { key: "bodem", label: "Bodemverontreiniging", url: map?.bodemverontreiniging_wms_url, layer: map?.bodemverontreiniging_wms_layer },
+        { key: "energielabel", label: "Energielabel", url: map?.energielabel_wms_url, layer: map?.energielabel_wms_layer },
+        { key: "gebruiksfuncties", label: "Gebruiksfuncties", url: map?.gebruiksfuncties_wms_url, layer: map?.gebruiksfuncties_wms_layer },
+        { key: "bestemmingsplannen", label: "Bestemmingsplannen", url: map?.ruimtelijke_plannen_wms_url, layer: map?.ruimtelijke_plannen_wms_layer },
+    ];
+
+    return rows
+        .map((row) => {
+            const base = String(row.url ?? "").trim();
+            const layer = String(row.layer ?? "").trim();
+            if (!base) return null;
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetCapabilities",
+            });
+            if (layer) {
+                params.set("layers", layer);
+            }
+            const separator = base.includes("?") ? "&" : "?";
+            return {
+                ...row,
+                href: `${base}${separator}${params.toString()}`,
+            };
+        })
+        .filter(Boolean);
+});
+
+const milieuInfoLinks = {
+    fijnstof: "https://www.atlasleefomgeving.nl/thema/schone-lucht/fijnstof",
+    stikstofdioxide: "https://www.atlasleefomgeving.nl/thema/schone-lucht/stikstofdioxide",
+    geluid: "https://www.atlasleefomgeving.nl/thema/geluid",
+    zomerhitte: "https://www.atlasnatuurlijkkapitaal.nl/stedelijk-hitte-eiland-effect-uhi-in-nederland",
+    overstroming: "https://www.atlasleefomgeving.nl/thema/klimaatverandering/overstroming",
+    gevaarlijke_stoffen: "https://www.atlasleefomgeving.nl/thema/veilige-omgeving/externe-veiligheid",
+};
+
+const toMilieuNumber = (value) => {
+    const num = Number.parseFloat(String(value ?? "").replace(",", "."));
+    return Number.isFinite(num) ? num : null;
+};
+
+const formatMilieuValue = (value, unit = "") => {
+    if (value === null || value === undefined || String(value).trim() === "") return "-";
+    const num = toMilieuNumber(value);
+    if (num === null) return String(value);
+    const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100);
+    return unit ? `${rounded} ${unit}` : rounded;
+};
+
+const formatMilieuDisplayValue = (kind, value) => {
+    if (value === null || value === undefined || String(value).trim() === "") return "-";
+    const num = toMilieuNumber(value);
+
+    if (kind === "fijnstof") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} μg PM2,5 / m3`;
+    }
+
+    if (kind === "stikstofdioxide") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} μg NO2 / m3`;
+    }
+
+    if (kind === "geluid") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} dB`;
+    }
+
+    if (kind === "zomerhitte") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        const signed = num > 0 ? `+ ${rounded}` : rounded;
+        return `${signed} °C t.o.v. landelijk gebied`;
+    }
+
+    return String(value);
+};
+
+const milieuSmileyByLevel = {
+    donkergroen: {
+        icon: "/smileys/smiley-donkergroen.svg",
+    },
+    lichtgroen: {
+        icon: "/smileys/smiley-lichtgroen.svg",
+    },
+    geel: {
+        icon: "/smileys/smiley-geel.svg",
+    },
+    oranje: {
+        icon: "/smileys/smiley-oranje.svg",
+    },
+    rood: {
+        icon: "/smileys/smiley-rood.svg",
+    },
+};
+
+const milieuHelperItemsByKind = {
+    fijnstof: [
+        { level: "lichtgroen", text: "De fijnstofconcentratie is onder de WHO advieswaarde (5 ug/ m3)." },
+        { level: "geel", text: "De fijnstofconcentratie is tussen de WHO advieswaarde (5 ug/ m3) en WHO Interim target 4 (10 ug/ m3)." },
+        { level: "oranje", text: "De fijnstofconcentratie is tussen WHO Interim target 4 (10 ug/ m3) en WHO Interim target 2 (25 ug/ m3)." },
+        { level: "rood", text: "De fijnstofconcentratie is boven WHO Interim target 2 (25 ug/ m3)." },
+    ],
+    stikstofdioxide: [
+        { level: "lichtgroen", text: "Onder WHO advieswaarde (10 ug/ m3)." },
+        { level: "geel", text: "Tussen WHO advieswaarde (10 ug/ m3) en WHO Interim target 3 (20 ug/ m3)." },
+        { level: "oranje", text: "Tussen WHO Interim target 3 (20 ug/ m3) en WHO Interim target 2 (30 ug/ m3)." },
+        { level: "rood", text: "Boven WHO Interim target 2 (30 ug/ m3)." },
+    ],
+    geluid: [
+        { level: "donkergroen", text: "De geluidsbelasting is minder dan 46 decibel (dB)." },
+        { level: "lichtgroen", text: "De geluidsbelasting is tussen 46 dB en 50 dB." },
+        { level: "geel", text: "De geluidsbelasting is tussen 51 dB en 55 dB." },
+        { level: "oranje", text: "De geluidsbelasting is tussen 56dB en 60 dB." },
+        { level: "rood", text: "De geluidsbelasting is meer dan 60 dB." },
+    ],
+    zomerhitte: [
+        { level: "donkergroen", text: "Zeer goed, de temperatuur is minder dan 0,5 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "lichtgroen", text: "Goed, de temperatuur is tussen de 0,5 en 1 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "geel", text: "Redelijk, de temperatuur is tussen de 1 en 1,5 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "oranje", text: "Matig, de temperatuur is tussen de 1,5 en 2 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "rood", text: "Slecht, de temperatuur is 2 °C of meer hoger dan in omliggende landelijke gebieden." },
+    ],
+    overstroming: [
+        { level: "donkergroen", text: "Overstroomt niet of is oppervlaktewater." },
+        { level: "lichtgroen", text: "Zeer kleine kans." },
+        { level: "geel", text: "Kleine kans." },
+        { level: "oranje", text: "Middelgrote kans." },
+        { level: "rood", text: "Grote kans." },
+    ],
+    gevaarlijke_stoffen: [
+        { level: "donkergroen", text: "Geen activiteiten bekend binnen 1 km." },
+        { level: "geel", text: "Mogelijke of beperkte activiteiten in de omgeving." },
+        { level: "rood", text: "Meerdere of relevante risicobronnen binnen 1 km." },
+    ],
+};
+
+const MilieuSmileyIcon = (props, { attrs }) => {
+    const icon = props.icon ?? milieuSmileyByLevel.geel.icon;
+    const iconClass = attrs?.class ?? "h-4 w-4";
+
+    return h("img", {
+        class: iconClass,
+        src: icon,
+        alt: "",
+        draggable: "false",
+    });
+};
+MilieuSmileyIcon.props = {
+    icon: String,
+};
+
+const milieuAssessment = (kind, rawValue) => {
+    const num = toMilieuNumber(rawValue);
+    const text = String(rawValue ?? "").toLowerCase();
+    let level = "geel";
+
+    if (kind === "fijnstof") {
+        if (num !== null) {
+            level = num <= 5 ? "lichtgroen" : num <= 10 ? "geel" : num <= 25 ? "oranje" : "rood";
+        }
+    } else if (kind === "stikstofdioxide") {
+        if (num !== null) {
+            level = num <= 10 ? "lichtgroen" : num <= 20 ? "geel" : num <= 30 ? "oranje" : "rood";
+        }
+    } else if (kind === "geluid") {
+        if (num !== null) {
+            level = num < 46 ? "donkergroen" : num <= 50 ? "lichtgroen" : num <= 55 ? "geel" : num <= 60 ? "oranje" : "rood";
+        }
+    } else if (kind === "zomerhitte") {
+        if (num !== null) {
+            level = num < 0.5 ? "donkergroen" : num <= 1 ? "lichtgroen" : num <= 1.5 ? "geel" : num <= 2 ? "oranje" : "rood";
+        }
+    } else if (kind === "overstroming") {
+        if (text.includes("overstroomt niet") || text.includes("oppervlaktewater")) {
+            level = "donkergroen";
+        } else if (text.includes("zeer kleine kans")) {
+            level = "lichtgroen";
+        } else if (text.includes("middelgrote kans")) {
+            level = "oranje";
+        } else if (text.includes("grote kans")) {
+            level = "rood";
+        } else if (text.includes("kleine kans")) {
+            level = "geel";
+        } else if (num !== null) {
+            level = num <= 2 ? "donkergroen" : num <= 3 ? "lichtgroen" : num <= 4 ? "geel" : num <= 5 ? "oranje" : "rood";
+        }
+    } else if (kind === "gevaarlijke_stoffen") {
+        if (text.includes("geen activiteiten bekend") || text === "geen" || text.includes("geen")) {
+            level = "donkergroen";
+        } else if (text === "-" || text === "") {
+            level = "geel";
+        } else if (text.includes("beperkt") || text.includes("laag") || text.includes("mogelijk") || text.includes("enkele")) {
+            level = "geel";
+        } else if (text.includes("meerdere") || text.includes("relevant")) {
+            level = "rood";
+        } else if (num !== null) {
+            level = num <= 1 ? "donkergroen" : num <= 3 ? "geel" : "rood";
+        } else {
+            level = "rood";
+        }
+    }
+
+    const smiley = milieuSmileyByLevel[level] ?? milieuSmileyByLevel.geel;
+    const helperItems = milieuHelperItemsByKind[kind] ?? [];
+
+    return {
+        smileyLevel: level,
+        smileyIcon: smiley.icon,
+        helperItems,
+        link: milieuInfoLinks[kind] ?? "https://www.atlasleefomgeving.nl/",
+    };
+};
+
+const calculateHeading = (from, to) => {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const toDeg = (rad) => (rad * 180) / Math.PI;
+    const lat1 = toRad(from.lat);
+    const lon1 = toRad(from.lng);
+    const lat2 = toRad(to.lat);
+    const lon2 = toRad(to.lng);
+    const dLon = lon2 - lon1;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x =
+        Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+};
+
+const showStreetViewForLocation = (target) => {
+    if (!mapContainer.value || !mapInstance.value || !globalThis.google?.maps) {
+        return;
+    }
+
+    if (!mapStreetView.value) {
+        mapStreetView.value = mapInstance.value.getStreetView();
+        mapStreetView.value.setOptions({
+            position: target,
+            pov: { heading: 0, pitch: 0 },
+            zoom: 1,
+            addressControl: false,
+        });
+    }
+
+    const service = new globalThis.google.maps.StreetViewService();
+    service.getPanorama({ location: target, radius: 250 }, (data, status) => {
+        const okStatus = globalThis.google?.maps?.StreetViewStatus?.OK;
+        if (status === okStatus && data?.location?.latLng && mapStreetView.value) {
+            const panoLatLng = data.location.latLng;
+            const panoPos = {
+                lat: panoLatLng.lat(),
+                lng: panoLatLng.lng(),
+            };
+            mapStreetView.value.setPano(data.location.pano);
+            mapStreetView.value.setPov({
+                heading: calculateHeading(panoPos, target),
+                pitch: 0,
+            });
+            mapStreetView.value.setZoom(1);
+            mapLoadError.value = "";
+        } else if (mapStreetView.value) {
+            mapStreetView.value.setPosition(target);
+            mapStreetView.value.setPov({ heading: 0, pitch: 0 });
+            mapStreetView.value.setZoom(1);
+            mapLoadError.value =
+                status === globalThis.google?.maps?.StreetViewStatus?.ZERO_RESULTS
+                    ? "Geen Street View-panorama gevonden dicht bij deze locatie."
+                    : `Street View kon niet geladen worden (status: ${String(status)}).`;
+        }
+
+        if (mapStreetView.value) {
+            mapStreetView.value.setVisible(true);
+        }
+    });
+};
+
+const updateMapMode = () => {
+    if (!mapInstance.value) return;
+
+    const mapConfig = readonlyEnrichment.value?.map ?? {};
+    const coords = getEnrichmentCoordinates();
+    mapLoadError.value = "";
+    mapInstance.value.overlayMapTypes.clear();
+    mapInstance.value.setOptions({ styles: null });
+    if (mapStreetView.value) {
+        mapStreetView.value.setVisible(false);
+    }
+    clearMapFeatureInfo();
+
+    if (mapMode.value === "streetview") {
+        if (!coords) {
+            mapLoadError.value = "Geen coördinaten beschikbaar om Street View te tonen.";
+            return;
+        }
+        mapInstance.value.setMapTypeId("roadmap");
+        showStreetViewForLocation(coords);
+        return;
+    }
+
+    if (mapMode.value === "earth") {
+        mapInstance.value.setMapTypeId("satellite");
+        return;
+    }
+
+    mapInstance.value.setMapTypeId("roadmap");
+
+    if (mapMode.value === "kadaster") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.kadastraal_wms_url,
+            mapConfig.kadastraal_wms_layer || "Perceel,Label,KadastraleGrens"
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        }
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.bodemverontreiniging_wms_url,
+            mapConfig.bodemverontreiniging_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Bodemverontreiniging-laag niet beschikbaar. Stel PDOK_BODEMVERONTREINIGING_WMS_URL en PDOK_BODEMVERONTREINIGING_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "energielabels") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        const wmtsOverlay = createWmtsOverlay(
+            mapConfig.wegenkaart_grijs_wmts_url,
+            mapConfig.wegenkaart_grijs_wmts_layer || "grijs",
+            mapConfig.wegenkaart_grijs_wmts_matrixset || "EPSG:3857"
+        );
+        if (wmtsOverlay) {
+            mapInstance.value.overlayMapTypes.push(wmtsOverlay);
+        }
+
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.energielabel_wms_url,
+            mapConfig.energielabel_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Energielabel-laag niet beschikbaar. Stel PDOK_ENERGIELABEL_WMS_URL en PDOK_ENERGIELABEL_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "gebruiksfuncties") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        const wmtsOverlay = createWmtsOverlay(
+            mapConfig.wegenkaart_grijs_wmts_url,
+            mapConfig.wegenkaart_grijs_wmts_layer || "grijs",
+            mapConfig.wegenkaart_grijs_wmts_matrixset || "EPSG:3857"
+        );
+        if (wmtsOverlay) {
+            mapInstance.value.overlayMapTypes.push(wmtsOverlay);
+        }
+
+        mapOverlay.value = createWmsOverlay(
+            mapConfig.gebruiksfuncties_wms_url,
+            mapConfig.gebruiksfuncties_wms_layer
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Gebruiksfuncties-laag niet beschikbaar. Stel PDOK_GEBRUIKSFUNCTIES_WMS_URL en PDOK_GEBRUIKSFUNCTIES_WMS_LAYER in.";
+        }
+    }
+
+    if (mapMode.value === "bestemmingsplannen") {
+        mapInstance.value.setOptions({
+            styles: neutralOverlayBaseMapStyles,
+        });
+
+        const wmtsOverlay = createWmtsOverlay(
+            mapConfig.wegenkaart_grijs_wmts_url,
+            mapConfig.wegenkaart_grijs_wmts_layer || "grijs",
+            mapConfig.wegenkaart_grijs_wmts_matrixset || "EPSG:3857"
+        );
+        if (wmtsOverlay) {
+            mapInstance.value.overlayMapTypes.push(wmtsOverlay);
+        }
+
+        mapOverlay.value = createWmsOverlayCrs84(
+            mapConfig.ruimtelijke_plannen_wms_url,
+            mapConfig.ruimtelijke_plannen_wms_layer || "enkelbestemming"
+        );
+        if (mapOverlay.value) {
+            mapInstance.value.overlayMapTypes.push(mapOverlay.value);
+        } else {
+            mapLoadError.value =
+                "Bestemmingsplannen-laag niet beschikbaar. Stel PDOK_RUIMTELIJKE_PLANNEN_WMS_URL en PDOK_RUIMTELIJKE_PLANNEN_WMS_LAYER in.";
+        }
+    }
+};
+
+const renderMap = async () => {
+    const mapConfig = readonlyEnrichment.value?.map ?? {};
+    if (!mapConfig.google_maps_api_key_available) {
+        mapLoadError.value = "Google Maps API-key ontbreekt in de backend-config.";
+        return;
+    }
+
+    if (!mapContainer.value) {
+        if (mapRenderRetryTimer.value) {
+            clearTimeout(mapRenderRetryTimer.value);
+        }
+        mapRenderRetryTimer.value = setTimeout(() => {
+            renderMap();
+        }, 120);
+        return;
+    }
+
+    const coords = getEnrichmentCoordinates();
+    if (!coords) {
+        mapLoadError.value = "Geen coördinaten beschikbaar om de kaart te tonen.";
+        return;
+    }
+
+    const ok = await ensureGoogleMapsApi();
+    if (!ok || !globalThis.google?.maps) {
+        return;
+    }
+    mapLoadError.value = "";
+
+    const center = coords;
+    const currentMapDiv =
+        mapInstance.value && typeof mapInstance.value.getDiv === "function"
+            ? mapInstance.value.getDiv()
+            : null;
+    const needsNewMapInstance = !mapInstance.value || currentMapDiv !== mapContainer.value;
+
+    if (needsNewMapInstance) {
+        mapInstance.value = new globalThis.google.maps.Map(mapContainer.value, {
+            center,
+            zoom: 19,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true,
+        });
+        mapStreetView.value = null;
+        mapOverlay.value = null;
+        mapInstance.value.addListener("click", (event) => {
+            const lat = event?.latLng?.lat?.();
+            const lng = event?.latLng?.lng?.();
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                return;
+            }
+            fetchMapFeatureInfo(lat, lng);
+        });
+        mapMarker.value = new globalThis.google.maps.Marker({
+            map: mapInstance.value,
+            position: center,
+            title: form.address || "Objectlocatie",
+        });
+    } else {
+        mapInstance.value.setCenter(center);
+        mapInstance.value.setZoom(19);
+        mapMarker.value?.setPosition(center);
+    }
+
+    updateMapMode();
+};
+
+const disconnectMapObserver = () => {
+    if (mapVisibilityObserver.value) {
+        mapVisibilityObserver.value.disconnect();
+        mapVisibilityObserver.value = null;
+    }
+};
+
+const scheduleLazyMapRender = async () => {
+    if (!mapShouldRender.value) {
+        return;
+    }
+    await nextTick();
+    await renderMap();
+};
+
+const setupLazyMapObserver = async () => {
+    disconnectMapObserver();
+
+    const hasApiKey = Boolean(readonlyEnrichment.value?.map?.google_maps_api_key_available);
+    if (!hasApiKey) {
+        mapShouldRender.value = false;
+        return;
+    }
+
+    await nextTick();
+    if (!mapContainer.value) {
+        return;
+    }
+
+    mapVisibilityObserver.value = new IntersectionObserver(
+        (entries) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) {
+                    continue;
+                }
+                mapShouldRender.value = true;
+                scheduleLazyMapRender();
+                disconnectMapObserver();
+                break;
+            }
+        },
+        {
+            root: null,
+            threshold: 0.12,
+        }
+    );
+
+    mapVisibilityObserver.value.observe(mapContainer.value);
+};
 
 const form = useForm({
     address: props.property.address ?? "",
@@ -75,6 +790,495 @@ const showUploadLimitModal = ref(false);
 const notesInput = ref(null);
 const remoteImageInput = ref("");
 const submitError = ref("");
+const mapContainer = ref(null);
+const mapInstance = ref(null);
+const mapMarker = ref(null);
+const mapOverlay = ref(null);
+const mapMode = ref("kaart");
+const mapStreetView = ref(null);
+const mapApiLoading = ref(false);
+const mapLoadError = ref("");
+const mapRenderRetryTimer = ref(null);
+const mapFeatureInfoItems = ref([]);
+const mapFeatureInfoLoading = ref(false);
+const mapFeatureInfoMessage = ref("");
+const mapFeatureInfoNotice = ref("");
+const legendImageErrors = ref({});
+const mapVisibilityObserver = ref(null);
+const mapShouldRender = ref(false);
+
+const ensureGoogleMapsApi = async () => {
+    if (globalThis.google?.maps) {
+        mapLoadError.value = "";
+        return true;
+    }
+    if (mapApiLoading.value) {
+        return false;
+    }
+
+    mapApiLoading.value = true;
+    try {
+        const apiKey = readonlyEnrichment.value?.map?.google_maps_api_key;
+        if (!apiKey) {
+            mapLoadError.value = "Google Maps API-key ontbreekt.";
+            return false;
+        }
+
+        if (document.getElementById("google-maps-script")) {
+            return true;
+        }
+
+        await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.id = "google-maps-script";
+            script.src =
+                "https://maps.googleapis.com/maps/api/js?key=" +
+                encodeURIComponent(apiKey);
+            script.async = true;
+            script.defer = true;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+
+        mapLoadError.value = "";
+        return Boolean(globalThis.google?.maps);
+    } catch {
+        mapLoadError.value =
+            "Google Maps script kon niet geladen worden. Controleer Maps JavaScript API en key-restricties.";
+        return false;
+    } finally {
+        mapApiLoading.value = false;
+    }
+};
+
+const tileToMercatorBbox = (x, y, z) => {
+    const originShift = 20037508.342789244;
+    const tiles = 2 ** z;
+    const resolution = (2 * originShift) / (256 * tiles);
+    const minx = x * 256 * resolution - originShift;
+    const maxx = (x + 1) * 256 * resolution - originShift;
+    const maxy = originShift - y * 256 * resolution;
+    const miny = originShift - (y + 1) * 256 * resolution;
+    return [ minx, miny, maxx, maxy ];
+};
+
+const createWmsOverlay = (baseUrl, layerName) => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 0.85,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            const [ minx, miny, maxx, maxy ] = tileToMercatorBbox(coord.x, coord.y, zoom);
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetMap",
+                version: "1.3.0",
+                layers: layerName,
+                styles: "",
+                crs: "EPSG:3857",
+                bbox: `${minx},${miny},${maxx},${maxy}`,
+                width: "256",
+                height: "256",
+                format: "image/png",
+                transparent: "true",
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const tileToLonLatBbox = (x, y, z) => {
+    const tiles = 2 ** z;
+    const lonLeft = (x / tiles) * 360 - 180;
+    const lonRight = ((x + 1) / tiles) * 360 - 180;
+    const latTop = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / tiles))) * 180) / Math.PI;
+    const latBottom =
+        (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 1)) / tiles))) * 180) / Math.PI;
+    return [ lonLeft, latBottom, lonRight, latTop ];
+};
+
+const createWmsOverlayCrs84 = (baseUrl, layerName) => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 0.9,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            const [ minLon, minLat, maxLon, maxLat ] = tileToLonLatBbox(
+                coord.x,
+                coord.y,
+                zoom
+            );
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetMap",
+                version: "1.3.0",
+                layers: layerName,
+                styles: "",
+                crs: "CRS:84",
+                bbox: `${minLon},${minLat},${maxLon},${maxLat}`,
+                width: "256",
+                height: "256",
+                format: "image/png",
+                transparent: "true",
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const createWmtsOverlay = (baseUrl, layerName, matrixSet = "EPSG:3857", format = "image/png") => {
+    if (!baseUrl || !layerName || !globalThis.google?.maps) {
+        return null;
+    }
+
+    return new globalThis.google.maps.ImageMapType({
+        tileSize: new globalThis.google.maps.Size(256, 256),
+        opacity: 1,
+        getTileUrl: (coord, zoom) => {
+            if (!coord) return "";
+            if (zoom < 0 || zoom > 19) return "";
+            const maxTile = 2 ** zoom;
+            if (coord.y < 0 || coord.y >= maxTile) return "";
+            const normalizedX = ((coord.x % maxTile) + maxTile) % maxTile;
+            const tileMatrix = String(zoom).padStart(2, "0");
+
+            const params = new URLSearchParams({
+                SERVICE: "WMTS",
+                REQUEST: "GetTile",
+                VERSION: "1.0.0",
+                LAYER: layerName,
+                STYLE: "default",
+                FORMAT: format,
+                TILEMATRIXSET: matrixSet,
+                TILEMATRIX: tileMatrix,
+                TILEROW: String(coord.y),
+                TILECOL: String(normalizedX),
+            });
+            return `${baseUrl}?${params.toString()}`;
+        },
+    });
+};
+
+const mapLegendContainerClass = computed(() =>
+    [ "energielabels", "gebruiksfuncties", "bestemmingsplannen" ].includes(mapMode.value)
+        ? "pointer-events-none absolute bottom-2 left-2 z-[5] max-h-[78%] max-w-[85%] overflow-auto rounded-md border border-gray-300 bg-white/95 p-3 shadow-sm"
+        : "pointer-events-none absolute bottom-2 left-2 z-[5] max-w-[60%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
+);
+
+const mapLegendImageClass = computed(() =>
+    [ "energielabels", "gebruiksfuncties", "bestemmingsplannen" ].includes(mapMode.value)
+        ? "max-h-[55vh] w-auto"
+        : "max-h-24 w-auto"
+);
+
+const neutralOverlayBaseMapStyles = [
+    { elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "poi", stylers: [{ visibility: "off" }] },
+    { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
+
+const buildWmsLegendItems = (baseUrl, layerNames) => {
+    if (!baseUrl || !layerNames) {
+        return [];
+    }
+
+    return String(layerNames)
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value !== "")
+        .map((layer) => {
+            const params = new URLSearchParams({
+                service: "WMS",
+                request: "GetLegendGraphic",
+                format: "image/png",
+                layer,
+            });
+
+            return {
+                layer,
+                url: `${baseUrl}?${params.toString()}`,
+            };
+        });
+};
+
+const buildDirectLegendItem = (url, layer = "legend") => {
+    if (!url) return [];
+    return [ { layer, url } ];
+};
+
+const mapLegend = computed(() => {
+    const mapConfig = readonlyEnrichment.value?.map ?? {};
+
+    if (mapMode.value === "kadaster") {
+        return {
+            title: "Legenda Kadaster",
+            items: buildWmsLegendItems(
+                mapConfig.kadastraal_wms_url,
+                mapConfig.kadastraal_wms_layer || "Perceel,Label,KadastraleGrens"
+            ),
+        };
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        return {
+            title: "Legenda Bodemverontreiniging",
+            items: buildWmsLegendItems(
+                mapConfig.bodemverontreiniging_wms_url,
+                mapConfig.bodemverontreiniging_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "energielabels") {
+        return {
+            title: "Legenda Energielabels",
+            items: buildWmsLegendItems(
+                mapConfig.energielabel_wms_url,
+                mapConfig.energielabel_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "gebruiksfuncties") {
+        return {
+            title: "Legenda Gebruiksfuncties",
+            items: buildWmsLegendItems(
+                mapConfig.gebruiksfuncties_wms_url,
+                mapConfig.gebruiksfuncties_wms_layer
+            ),
+        };
+    }
+
+    if (mapMode.value === "bestemmingsplannen") {
+        return {
+            title: "Legenda Bestemmingsplannen",
+            items: buildDirectLegendItem(
+                mapConfig.ruimtelijke_plannen_legend_url,
+                mapConfig.ruimtelijke_plannen_wms_layer || "enkelbestemming"
+            ),
+        };
+    }
+
+    return {
+        title: "",
+        items: [],
+    };
+});
+
+const visibleLegendItems = computed(() =>
+    (mapLegend.value.items ?? []).filter(
+        (item) => item?.url && !legendImageErrors.value[item.url]
+    )
+);
+
+const layerLabel = (name) => String(name ?? "").replace(/_/g, " ");
+
+const fallbackLegendItems = computed(() => {
+    if (mapMode.value === "kadaster") {
+        return [
+            {
+                label: "Perceelvlak",
+                style: {
+                    backgroundColor: "rgba(37, 99, 235, 0.10)",
+                    border: "1px solid #2563eb",
+                },
+            },
+            {
+                label: "Kadastrale grens",
+                style: {
+                    backgroundColor: "transparent",
+                    border: "2px solid #1d4ed8",
+                },
+            },
+            {
+                label: "Perceelnummer (label)",
+                style: {
+                    backgroundColor: "#f3f4f6",
+                    border: "1px dashed #6b7280",
+                },
+            },
+        ];
+    }
+
+    if (mapMode.value === "bodemverontreiniging") {
+        return [
+            {
+                label: "Saneringsactiviteit",
+                style: {
+                    backgroundColor: "#e7f8ea",
+                    border: "2px solid #22c55e",
+                },
+            },
+            {
+                label: "Voldoende onderzocht/gesaneerd",
+                style: {
+                    backgroundColor: "#f3e8ff",
+                    border: "2px solid #a855f7",
+                },
+            },
+            {
+                label: "Onderzoek uitvoeren",
+                style: {
+                    backgroundColor: "#fff3e6",
+                    border: "2px solid #f59e0b",
+                },
+            },
+            {
+                label: "Historie bekend",
+                style: {
+                    backgroundColor: "#e0f2fe",
+                    border: "2px solid #06b6d4",
+                },
+            },
+            {
+                label: "Gegevens aanwezig, status onbekend",
+                style: {
+                    backgroundColor: "#e8edff",
+                    border: "2px solid #4f46e5",
+                },
+            },
+        ];
+    }
+
+    if (mapMode.value === "energielabels") {
+        return [
+            { label: "Geen label", style: { backgroundColor: "#f3f4f6", border: "1px solid #9ca3af" } },
+            { label: "Klasse A+++++", style: { backgroundColor: "#14532d", border: "1px solid #14532d" } },
+            { label: "Klasse A++++", style: { backgroundColor: "#166534", border: "1px solid #166534" } },
+            { label: "Klasse A+++", style: { backgroundColor: "#15803d", border: "1px solid #15803d" } },
+            { label: "Klasse A++", style: { backgroundColor: "#16a34a", border: "1px solid #16a34a" } },
+            { label: "Klasse A+", style: { backgroundColor: "#22c55e", border: "1px solid #22c55e" } },
+            { label: "Klasse A", style: { backgroundColor: "#65a30d", border: "1px solid #65a30d" } },
+            { label: "Klasse B", style: { backgroundColor: "#a3e635", border: "1px solid #84cc16" } },
+            { label: "Klasse C", style: { backgroundColor: "#facc15", border: "1px solid #eab308" } },
+            { label: "Klasse D", style: { backgroundColor: "#f59e0b", border: "1px solid #d97706" } },
+            { label: "Klasse E", style: { backgroundColor: "#fb923c", border: "1px solid #ea580c" } },
+            { label: "Klasse F", style: { backgroundColor: "#f97316", border: "1px solid #ea580c" } },
+            { label: "Klasse G", style: { backgroundColor: "#ef4444", border: "1px solid #dc2626" } },
+        ];
+    }
+
+    if (mapMode.value === "bestemmingsplannen") {
+        return [
+            { label: "agrarisch", style: { backgroundColor: "#e8ebcd", border: "1px solid #94a370" } },
+            { label: "agrarisch met waarden", style: { backgroundColor: "#c8d98c", border: "1px solid #8ca35f" } },
+            { label: "bedrijf", style: { backgroundColor: "#a15bc9", border: "1px solid #7e3ba5" } },
+            { label: "bedrijventerrein", style: { backgroundColor: "#a87cc8", border: "1px solid #7e5aa1" } },
+            { label: "bos", style: { backgroundColor: "#4d8e3d", border: "1px solid #3c6f31" } },
+            { label: "centrum", style: { backgroundColor: "#f2c39d", border: "1px solid #d59a70" } },
+            { label: "cultuur en ontspanning", style: { backgroundColor: "#f45b86", border: "1px solid #c94166" } },
+            { label: "detailhandel", style: { backgroundColor: "#ef9c7a", border: "1px solid #cb7c5f" } },
+            { label: "dienstverlening", style: { backgroundColor: "#e090b8", border: "1px solid #ba6e95" } },
+            { label: "gemengd", style: { backgroundColor: "#eeb887", border: "1px solid #cb9a6d" } },
+            { label: "groen", style: { backgroundColor: "#56c861", border: "1px solid #3da34a" } },
+            { label: "horeca", style: { backgroundColor: "#ff7f1a", border: "1px solid #d5670f" } },
+            { label: "infrastructuur", style: { backgroundColor: "#cbcbcb", border: "1px solid #a7a7a7" } },
+            { label: "kantoor", style: { backgroundColor: "#e0b8d3", border: "1px solid #b891ab" } },
+            { label: "maatschappelijk", style: { backgroundColor: "#d8a678", border: "1px solid #b88861" } },
+            { label: "natuur", style: { backgroundColor: "#8a9d79", border: "1px solid #6e7e61" } },
+            { label: "recreatie", style: { backgroundColor: "#c7d43f", border: "1px solid #9faa2f" } },
+            { label: "sport", style: { backgroundColor: "#9ac130", border: "1px solid #799a24" } },
+            { label: "tuin", style: { backgroundColor: "#d5de63", border: "1px solid #b3bd50" } },
+            { label: "verkeer", style: { backgroundColor: "#d9d9d9", border: "1px solid #b8b8b8" } },
+            { label: "ontspanning en vermaak", style: { backgroundColor: "#ef4c93", border: "1px solid #c63b77" } },
+            { label: "water", style: { backgroundColor: "#b8d6e8", border: "1px solid #8db5cd" } },
+            { label: "wonen", style: { backgroundColor: "#f1ee23", border: "1px solid #cecb10" } },
+            { label: "woongebied", style: { backgroundColor: "#e8e8a6", border: "1px solid #c4c47f" } },
+            { label: "overig", style: { backgroundColor: "#e7e1e8", border: "1px solid #c6bfc8" } },
+        ];
+    }
+
+    if (mapMode.value === "gebruiksfuncties") {
+        const names = (mapLegend.value.items ?? []).map((item) => item.layer);
+        return names.map((name) => ({
+            label: layerLabel(name),
+            style: {
+                backgroundColor: "#eef2ff",
+                border: "1px solid #6366f1",
+            },
+        }));
+    }
+
+    return [];
+});
+
+const handleLegendImageError = (url) => {
+    legendImageErrors.value = {
+        ...legendImageErrors.value,
+        [url]: true,
+    };
+};
+
+const clearMapFeatureInfo = () => {
+    mapFeatureInfoItems.value = [];
+    mapFeatureInfoLoading.value = false;
+    mapFeatureInfoMessage.value = "";
+    mapFeatureInfoNotice.value = "";
+};
+
+const fetchMapFeatureInfo = async (lat, lng) => {
+    const interactiveModes = ["kadaster", "bodemverontreiniging", "energielabels", "gebruiksfuncties", "bestemmingsplannen"];
+    if (!interactiveModes.includes(mapMode.value)) {
+        clearMapFeatureInfo();
+        return;
+    }
+
+    mapFeatureInfoLoading.value = true;
+    mapFeatureInfoMessage.value = "";
+    mapFeatureInfoNotice.value = "";
+    mapFeatureInfoItems.value = [];
+
+    try {
+        const params = new URLSearchParams({
+            mode: mapMode.value,
+            lat: String(lat),
+            lng: String(lng),
+        });
+        const response = await fetch(
+            `${route("search-requests.properties.map-feature-info", props.item.id)}?${params.toString()}`,
+            {
+                method: "GET",
+                headers: { Accept: "application/json" },
+            }
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            mapFeatureInfoMessage.value =
+                payload?.message || "Kaartinformatie ophalen is mislukt.";
+            return;
+        }
+
+        mapFeatureInfoNotice.value =
+            typeof payload?.notice === "string" ? payload.notice : "";
+
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        mapFeatureInfoItems.value = items.filter(
+            (item) =>
+                item &&
+                item.title &&
+                (
+                    (item.value !== null && item.value !== "") ||
+                    (typeof item.url === "string" && item.url !== "")
+                )
+        );
+        if (mapFeatureInfoItems.value.length === 0) {
+            mapFeatureInfoMessage.value = "Geen aanvullende kaartinformatie op dit punt.";
+        }
+    } catch {
+        mapFeatureInfoMessage.value = "Kaartinformatie ophalen is mislukt.";
+    } finally {
+        mapFeatureInfoLoading.value = false;
+    }
+};
 
 const safeCreateObjectUrl = (file) => {
     if (!file) return "";
@@ -606,8 +1810,37 @@ onMounted(() => {
     document.addEventListener("paste", handleGlobalPaste);
 });
 
+watch(
+    () => [readonlyEnrichment.value?.map?.google_maps_api_key_available, mapContainer.value],
+    async () => {
+        legendImageErrors.value = {};
+        clearMapFeatureInfo();
+        if (readonlyEnrichment.value?.map?.google_maps_api_key_available) {
+            await setupLazyMapObserver();
+            if (mapShouldRender.value) {
+                await renderMap();
+            }
+        }
+    }
+);
+
+watch(
+    () => mapMode.value,
+    () => {
+        legendImageErrors.value = {};
+        clearMapFeatureInfo();
+        if (mapShouldRender.value && mapInstance.value) {
+            updateMapMode();
+        }
+    }
+);
+
 onBeforeUnmount(() => {
     document.removeEventListener("paste", handleGlobalPaste);
+    disconnectMapObserver();
+    if (mapRenderRetryTimer.value) {
+        clearTimeout(mapRenderRetryTimer.value);
+    }
 });
 </script>
 
@@ -1224,6 +2457,825 @@ onBeforeUnmount(() => {
                                 Annuleren
                             </SecondaryButton>
                         </FormActions>
+
+                        <div
+                            v-if="hasReadonlyEnrichment"
+                            class="space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                        >
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-base font-semibold text-gray-900">Locatie-informatie</h3>
+                            </div>
+
+                            <div class="enrichment-row enrichment-row-auto grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Identificatie</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Geocode</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="geocodeMapsLink && readonlyEnrichment?.geocode?.lat != null && readonlyEnrichment?.geocode?.lng != null"
+                                                    :href="geocodeMapsLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ readonlyEnrichment?.geocode?.lat }}, {{ readonlyEnrichment?.geocode?.lng }}
+                                                </a>
+                                                <span v-else>{{ readonlyEnrichment?.geocode?.lat ?? "-" }}, {{ readonlyEnrichment?.geocode?.lng ?? "-" }}</span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">BAG-ID</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="readonlyEnrichment?.bag?.bag_viewer_url && (readonlyEnrichment?.bag?.bag_id ?? readonlyEnrichment?.bag_id)"
+                                                    :href="readonlyEnrichment.bag.bag_viewer_url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ readonlyEnrichment?.bag?.bag_id ?? readonlyEnrichment?.bag_id }}
+                                                </a>
+                                                <span v-else>{{ readonlyEnrichment?.bag?.bag_id ?? readonlyEnrichment?.bag_id ?? "-" }}</span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Pand-ID</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <template v-if="pandIds.length">
+                                                    <template v-for="(pandId, index) in pandIds" :key="pandId">
+                                                        <a
+                                                            :href="pandIdViewerUrl(pandId)"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="text-blue-700 hover:text-blue-800"
+                                                        >
+                                                            {{ pandId }}
+                                                        </a>
+                                                        <span v-if="index < pandIds.length - 1">, </span>
+                                                    </template>
+                                                </template>
+                                                <span v-else>-</span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Buurtcode</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="readonlyEnrichment?.accessibility?.buurtcode && buurtcodeInfoLink"
+                                                    :href="buurtcodeInfoLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ readonlyEnrichment?.accessibility?.buurtcode }}
+                                                </a>
+                                                <span v-else>-</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Kadaster</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Kadastrale aanduiding</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ readonlyEnrichment?.cadastre?.kadastrale_aanduiding ?? "-" }}</span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Perceelsgrootte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ readonlyEnrichment?.cadastre?.perceelsgrootte_m2 ?? "-" }} m2</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwkundig</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Bouwjaar</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ readonlyEnrichment?.bag?.bouwjaar ?? "-" }}</span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Oppervlakte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ readonlyEnrichment?.bag?.oppervlakte_m2 ?? "-" }} m2</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemming</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Gebruiksfunctie</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="bestemmingSourceLink && readonlyEnrichment?.bag?.gebruiksfunctie"
+                                                    :href="bestemmingSourceLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ readonlyEnrichment?.bag?.gebruiksfunctie }}
+                                                </a>
+                                                <span v-else>{{ readonlyEnrichment?.bag?.gebruiksfunctie ?? "-" }}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Monumentenstatus</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Rijksmonument</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="readonlyEnrichment?.heritage?.is_monument && monumentStatusRijksmonumentLink && monumentStatusRijksmonumentNummer"
+                                                    :href="monumentStatusRijksmonumentLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusRijksmonumentNummer }}
+                                                </a>
+                                                <span v-else-if="readonlyEnrichment?.heritage?.is_monument">Ja</span>
+                                                <span v-else>Nee</span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Gemeentelijk monument</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="readonlyEnrichment?.heritage?.is_gemeentelijk_monument && monumentStatusGemeentelijkLink && monumentStatusGemeentelijkLabel"
+                                                    :href="monumentStatusGemeentelijkLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusGemeentelijkLabel }}
+                                                </a>
+                                                <span v-else-if="readonlyEnrichment?.heritage?.is_gemeentelijk_monument">Ja</span>
+                                                <span v-else>Nee</span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Beschermd gezicht</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="readonlyEnrichment?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtLink && monumentStatusGezichtNaam"
+                                                    :href="monumentStatusGezichtLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
+                                                </a>
+                                                <span v-else-if="readonlyEnrichment?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtNaam">
+                                                    {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
+                                                </span>
+                                                <span v-else>Nee</span>
+                                            </span>
+                                        </div>
+                                </div>
+                            </div>
+                            </div>
+
+                            <div class="enrichment-row grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bereikbaarheid</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Station/metro/tram</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km)"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" />
+                                                    </svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Bushalte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_bushalte_km)"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" />
+                                                    </svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Oprit hoofdweg</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleDrivingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
+                                                    :href="googleDrivingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(readonlyEnrichment?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatDrivingDurationMinutes(
+                                                        readonlyEnrichment?.accessibility?.afstand_tot_oprit_hoofdweg_km,
+                                                        readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg?.duur_min
+                                                    )"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M18.9 6.5c-.3-.9-1.1-1.5-2.1-1.5H7.2c-1 0-1.8.6-2.1 1.5L3 12v7h2v-2h14v2h2v-7l-2.1-5.5ZM7.2 7h9.6l1.4 4H5.8L7.2 7ZM6 15a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm12 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" />
+                                                    </svg>
+                                                    {{
+                                                        formatDrivingDurationMinutes(
+                                                            readonlyEnrichment?.accessibility?.afstand_tot_oprit_hoofdweg_km,
+                                                            readonlyEnrichment?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg?.duur_min
+                                                        )
+                                                    }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Voorzieningen</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Supermarkt</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt, 'supermarkt')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt, 'supermarkt')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_supermarkt_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Sport- en beweegmogelijkheden</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport, 'sportvoorziening')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport, 'sportvoorziening')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_sport_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Groenvoorzieningen</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen, 'groenvoorziening')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen, 'groenvoorziening')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? readonlyEnrichment?.accessibility?.afstand_tot_groen_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Cafe</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.cafe, 'cafe')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.cafe, 'cafe')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_cafe_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Restaurant</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.restaurant, 'restaurant')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.restaurant, 'restaurant')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_restaurant_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Hotel</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km) && googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.hotel, 'hotel')"
+                                                    :href="googleWalkingRouteUrl(readonlyEnrichment?.accessibility?.dichtstbijzijnde?.hotel, 'hotel')"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km) && formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(readonlyEnrichment?.accessibility?.afstand_tot_hotel_km) }}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="enrichment-row grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        Milieu
+                                    </div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Energielabel</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                        <span v-if="hasGraphicalEnergyLabel" class="inline-flex align-middle">
+                                            <span
+                                                class="h-6 text-white"
+                                                :style="{
+                                                    width: '96px',
+                                                    backgroundColor: energyLabelColorMap[selectedEnergyLabel] ?? '#9ca3af',
+                                                    clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)',
+                                                }"
+                                            >
+                                                <span class="flex h-full items-center px-2 text-xs font-bold drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
+                                                    {{ selectedEnergyLabel }}
+                                                </span>
+                                            </span>
+                                        </span>
+                                        <span v-else>Niet beschikbaar</span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Bodemvervuiling</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                        <a
+                                            v-if="readonlyEnrichment?.soil?.bodemloket_url && readonlyEnrichment?.soil?.status"
+                                            :href="readonlyEnrichment.soil.bodemloket_url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="text-blue-700 hover:text-blue-800"
+                                        >
+                                            {{ readonlyEnrichment.soil.status }}
+                                        </a>
+                                        <span v-else>
+                                            {{ readonlyEnrichment?.soil?.status ?? "-" }}
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Fijnstof</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('fijnstof', readonlyEnrichment?.air_quality?.pm25_ug_m3) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('fijnstof', readonlyEnrichment?.air_quality?.pm25_ug_m3).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('fijnstof', readonlyEnrichment?.air_quality?.pm25_ug_m3).helperItems"
+                                                        :key="`fijnstof-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('fijnstof', readonlyEnrichment?.air_quality?.pm25_ug_m3).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Stikstofdioxide</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('stikstofdioxide', readonlyEnrichment?.air_quality?.no2_ug_m3) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('stikstofdioxide', readonlyEnrichment?.air_quality?.no2_ug_m3).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('stikstofdioxide', readonlyEnrichment?.air_quality?.no2_ug_m3).helperItems"
+                                                        :key="`stikstof-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('stikstofdioxide', readonlyEnrichment?.air_quality?.no2_ug_m3).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Geluid in de omgeving</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('geluid', readonlyEnrichment?.air_quality?.geluid_omgeving?.waarde) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('geluid', readonlyEnrichment?.air_quality?.geluid_omgeving?.score ?? readonlyEnrichment?.air_quality?.geluid_omgeving?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('geluid', readonlyEnrichment?.air_quality?.geluid_omgeving?.score ?? readonlyEnrichment?.air_quality?.geluid_omgeving?.waarde).helperItems"
+                                                        :key="`geluid-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('geluid', readonlyEnrichment?.air_quality?.geluid_omgeving?.score ?? readonlyEnrichment?.air_quality?.geluid_omgeving?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Zomerhitte in de stad</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('zomerhitte', readonlyEnrichment?.air_quality?.zomerhitte_stad?.waarde) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('zomerhitte', readonlyEnrichment?.air_quality?.zomerhitte_stad?.score ?? readonlyEnrichment?.air_quality?.zomerhitte_stad?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('zomerhitte', readonlyEnrichment?.air_quality?.zomerhitte_stad?.score ?? readonlyEnrichment?.air_quality?.zomerhitte_stad?.waarde).helperItems"
+                                                        :key="`zomerhitte-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('zomerhitte', readonlyEnrichment?.air_quality?.zomerhitte_stad?.score ?? readonlyEnrichment?.air_quality?.zomerhitte_stad?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Kans op overstroming</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('overstroming', readonlyEnrichment?.air_quality?.kans_op_overstroming?.waarde) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('overstroming', readonlyEnrichment?.air_quality?.kans_op_overstroming?.score ?? readonlyEnrichment?.air_quality?.kans_op_overstroming?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('overstroming', readonlyEnrichment?.air_quality?.kans_op_overstroming?.score ?? readonlyEnrichment?.air_quality?.kans_op_overstroming?.waarde).helperItems"
+                                                        :key="`overstroming-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('overstroming', readonlyEnrichment?.air_quality?.kans_op_overstroming?.score ?? readonlyEnrichment?.air_quality?.kans_op_overstroming?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Gevaarlijke stoffen (binnen 1 km)</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('gevaarlijke_stoffen', readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde) }}
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('gevaarlijke_stoffen', readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('gevaarlijke_stoffen', readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).helperItems"
+                                                        :key="`gevaar-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('gevaarlijke_stoffen', readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? readonlyEnrichment?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            </div>
+
+                            <div class="enrichment-row enrichment-row-auto grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                            <div class="enrichment-card rounded bg-white p-3 md:col-span-2">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        Kaartlagen
+                                    </div>
+                                    <select
+                                        v-model="mapMode"
+                                        class="rounded-base border border-default-medium bg-white px-2 py-1 text-xs text-heading"
+                                        @change="updateMapMode"
+                                    >
+                                        <option value="kaart">Kaart</option>
+                                        <option value="earth">Earth</option>
+                                        <option value="streetview">StreetView</option>
+                                        <option value="kadaster">Kadaster</option>
+                                        <option value="bodemverontreiniging">Bodemverontreiniging en sanering</option>
+                                        <option value="energielabels">Energielabels</option>
+                                        <option value="gebruiksfuncties">Gebruiksfuncties</option>
+                                        <option value="bestemmingsplannen">Bestemmingsplannen</option>
+                                    </select>
+                                </div>
+                                <div
+                                    v-if="readonlyEnrichment?.map?.google_maps_api_key_available"
+                                    class="relative mt-3 aspect-[3/2] w-full overflow-hidden rounded-lg border border-gray-200"
+                                >
+                                    <div ref="mapContainer" class="h-full w-full"></div>
+                                    <div
+                                        v-if="mapLegend.items?.length"
+                                        :class="mapLegendContainerClass"
+                                    >
+                                        <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                                            {{ mapLegend.title }}
+                                        </div>
+                                        <div v-if="visibleLegendItems.length" class="space-y-1">
+                                            <img
+                                                v-for="item in visibleLegendItems"
+                                                :key="item.url"
+                                                :src="item.url"
+                                                :alt="`${mapLegend.title} ${item.layer}`"
+                                                :class="mapLegendImageClass"
+                                                @error="handleLegendImageError(item.url)"
+                                            />
+                                        </div>
+                                        <div v-else-if="fallbackLegendItems.length" class="space-y-1">
+                                            <div
+                                                v-for="item in fallbackLegendItems"
+                                                :key="item.label"
+                                                class="flex items-center gap-2 text-xs text-gray-700"
+                                            >
+                                                <span
+                                                    class="inline-block h-3 w-4 shrink-0 rounded-[2px]"
+                                                    :style="item.style"
+                                                ></span>
+                                                <span>{{ item.label }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-else class="text-xs text-gray-600">
+                                            Geen legenda beschikbaar voor deze laag.
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-if="['kadaster', 'bodemverontreiniging', 'energielabels', 'gebruiksfuncties', 'bestemmingsplannen'].includes(mapMode)"
+                                        class="absolute right-2 top-2 z-[5] max-w-[55%] rounded-md border border-gray-300 bg-white/95 p-2 shadow-sm"
+                                    >
+                                        <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                                            Patroon Uitleg (klik op kaart)
+                                        </div>
+                                        <div v-if="mapFeatureInfoLoading" class="mt-1 text-xs text-gray-600">
+                                            Informatie ophalen...
+                                        </div>
+                                        <div v-else>
+                                            <div
+                                                v-if="mapFeatureInfoNotice"
+                                                class="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800"
+                                            >
+                                                {{ mapFeatureInfoNotice }}
+                                            </div>
+                                            <div
+                                                v-if="mapFeatureInfoItems.length"
+                                                class="mt-1 space-y-1 text-xs text-gray-700"
+                                            >
+                                            <div
+                                                v-for="item in mapFeatureInfoItems"
+                                                :key="`${item.title}:${item.value}`"
+                                                class="flex gap-1"
+                                            >
+                                                <span class="font-semibold">{{ item.title }}:</span>
+                                                <a
+                                                    v-if="item.url"
+                                                    :href="item.url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="break-words text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ item.value || "Open" }}
+                                                </a>
+                                                <span v-else class="break-words">{{ item.value }}</span>
+                                            </div>
+                                            </div>
+                                            <div v-else class="mt-1 text-xs text-gray-600">
+                                                {{ mapFeatureInfoMessage || "Klik op een vlak/patroon voor detailuitleg." }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="mapLoadError" class="mt-2 text-sm text-red-700">
+                                    {{ mapLoadError }}
+                                </div>
+                                <div
+                                    v-if="!readonlyEnrichment?.map?.google_maps_api_key_available"
+                                    class="mt-3 text-sm text-gray-600"
+                                >
+                                    Google Maps API-key ontbreekt; kaart kan niet geladen worden.
+                                </div>
+                            </div>
+
+                            <div class="enrichment-card rounded bg-white p-3 md:col-span-2">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemmingsplan / WKBP</div>
+                                <div class="mt-1 text-sm text-gray-700">{{ readonlyEnrichment?.zoning?.toelichting }}</div>
+                                <div
+                                    v-if="readonlyEnrichment?.zoning?.planobjecten?.length"
+                                    class="mt-3 space-y-2"
+                                >
+                                    <div
+                                        v-for="plan in readonlyEnrichment.zoning.planobjecten"
+                                        :key="plan.identificatie || plan.naam"
+                                        class="rounded border border-gray-200 bg-gray-50 p-2"
+                                    >
+                                        <div class="text-sm font-semibold text-gray-900">
+                                            {{ plan.naam || plan.identificatie || "Planobject" }}
+                                        </div>
+                                        <div class="mt-1 text-xs text-gray-700">
+                                            {{ plan.typeplan || "Onbekend type" }} | {{ plan.planstatus || "Onbekende status" }}
+                                        </div>
+                                        <div class="mt-1 text-xs text-gray-700">
+                                            {{ plan.naamoverheid || "Onbekende overheid" }}
+                                        </div>
+                                        <a
+                                            v-if="plan.verwijzing_tekst_urls?.[0]"
+                                            :href="plan.verwijzing_tekst_urls[0]"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                        >
+                                            Open plantekst
+                                        </a>
+                                        <a
+                                            v-if="plan.verwijzing_vaststellingsbesluit_urls?.[0]"
+                                            :href="plan.verwijzing_vaststellingsbesluit_urls[0]"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="ml-2 mt-1 inline-block text-xs font-semibold text-blue-700 hover:text-blue-800"
+                                        >
+                                            Open vaststellingsbesluit
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        
                     </form>
                 </FormSection>
             </PageContainer>
@@ -1289,4 +3341,94 @@ onBeforeUnmount(() => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+.enrichment-row {
+}
+
+.enrichment-card {
+    min-height: 100%;
+}
+
+.enrichment-row-auto {
+    grid-auto-rows: auto !important;
+}
+
+.enrichment-row-auto .enrichment-card {
+    min-height: 0;
+}
+
+@media (min-width: 768px) {
+    .enrichment-row {
+        grid-auto-rows: 1fr;
+    }
+}
+
+.detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.detail-list-two-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem 1rem;
+}
+
+.detail-row {
+    display: grid;
+    grid-template-columns: max-content minmax(1.25rem, 1fr) minmax(0, 14rem);
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.detail-label {
+    white-space: nowrap;
+}
+
+.detail-dots {
+    min-width: 0.75rem;
+    color: rgb(209 213 219);
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1.2px);
+    background-size: 6px 2px;
+    background-repeat: repeat-x;
+    background-position: left calc(100% - 1px);
+}
+
+.detail-value {
+    min-width: 0;
+    justify-self: start;
+    text-align: left;
+    font-weight: 600;
+    color: rgb(17 24 39);
+}
+
+@media (min-width: 768px) {
+    .detail-list-two-cols {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    }
+
+    .detail-list-two-cols .detail-row {
+        grid-template-columns: max-content minmax(1rem, 1fr) minmax(0, 12rem);
+    }
+}
+
+@media (max-width: 640px) {
+    .detail-row {
+        grid-template-columns: 1fr;
+        gap: 0.125rem;
+    }
+
+    .detail-label {
+        white-space: normal;
+    }
+
+    .detail-dots {
+        display: none;
+    }
+}
+</style>
+
 

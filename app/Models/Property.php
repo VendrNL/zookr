@@ -30,6 +30,7 @@ class Property extends Model
         'images',
         'brochure_path',
         'drawings',
+        'enrichment_data',
         'notes',
         'url',
     ];
@@ -37,6 +38,7 @@ class Property extends Model
     protected $casts = [
         'images' => 'array',
         'drawings' => 'array',
+        'enrichment_data' => 'array',
     ];
 
     public function organization(): BelongsTo

@@ -494,6 +494,8 @@ class PropertyController extends Controller
             $response['soil'] = $soil;
         }
 
+        $response = $this->hydrateStoredEnrichmentPoiCoordinates($response);
+
         return response()->json($response);
     }
 
@@ -745,12 +747,15 @@ class PropertyController extends Controller
             'cached_images.*' => ['string'],
             'brochure' => ['nullable', 'file', 'max:10240'],
             'drawings' => ['nullable', 'file', 'max:10240'],
+            'enrichment_data_json' => ['nullable', 'string', 'max:1048576'],
             'contact_user_id' => [
                 'required',
                 'integer',
                 Rule::exists('users', 'id')->where('organization_id', $organizationId),
             ],
         ]);
+
+        $enrichmentData = $this->parseEnrichmentPayload($data['enrichment_data_json'] ?? null);
 
         $bagAddress = $this->fetchAddressByIdentifier($data['bag_address_id']);
         if (! $bagAddress) {
@@ -815,6 +820,7 @@ class PropertyController extends Controller
             'images' => $images,
             'brochure_path' => $brochurePath,
             'drawings' => $drawingsPath ? [$drawingsPath] : null,
+            'enrichment_data' => $enrichmentData,
         ]);
 
         return redirect()
@@ -926,6 +932,40 @@ class PropertyController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $enrichmentData = is_array($property->enrichment_data)
+            ? $property->enrichment_data
+            : null;
+
+        if (is_array($enrichmentData)) {
+            $enrichmentData = $this->hydrateStoredEnrichmentPoiCoordinates($enrichmentData);
+
+            $storedMap = is_array($enrichmentData['map'] ?? null)
+                ? $enrichmentData['map']
+                : [];
+
+            $enrichmentData['map'] = array_merge(
+                $storedMap,
+                [
+                    'google_maps_api_key_available' => (string) config('services.google_maps.api_key') !== '',
+                    'google_maps_api_key' => (string) config('services.google_maps.api_key'),
+                    'kadastraal_wms_url' => (string) config('services.pdok.kadastraal_wms_url'),
+                    'kadastraal_wms_layer' => (string) config('services.pdok.kadastraal_wms_layer'),
+                    'wegenkaart_grijs_wmts_url' => (string) config('services.pdok.wegenkaart_grijs_wmts_url'),
+                    'wegenkaart_grijs_wmts_layer' => (string) config('services.pdok.wegenkaart_grijs_wmts_layer'),
+                    'wegenkaart_grijs_wmts_matrixset' => (string) config('services.pdok.wegenkaart_grijs_wmts_matrixset'),
+                    'bodemverontreiniging_wms_url' => (string) config('services.pdok.bodemverontreiniging_wms_url'),
+                    'bodemverontreiniging_wms_layer' => (string) config('services.pdok.bodemverontreiniging_wms_layer'),
+                    'energielabel_wms_url' => (string) config('services.pdok.energielabel_wms_url'),
+                    'energielabel_wms_layer' => (string) config('services.pdok.energielabel_wms_layer'),
+                    'gebruiksfuncties_wms_url' => (string) config('services.pdok.gebruiksfuncties_wms_url', 'https://data.rivm.nl/geo/alo/wms'),
+                    'gebruiksfuncties_wms_layer' => (string) config('services.pdok.gebruiksfuncties_wms_layer', 'rivm_bag_pandfuncties_actueel,rivm_bag_adresfuncties_actueel'),
+                    'ruimtelijke_plannen_wms_url' => (string) config('services.pdok.ruimtelijke_plannen_wms_url'),
+                    'ruimtelijke_plannen_wms_layer' => (string) config('services.pdok.ruimtelijke_plannen_wms_layer'),
+                    'ruimtelijke_plannen_legend_url' => (string) config('services.pdok.ruimtelijke_plannen_legend_url'),
+                ]
+            );
+        }
+
         return Inertia::render('SearchRequests/EditProperty', [
             'item' => $search_request->load('organization:id,name'),
             'property' => $property->only([
@@ -942,7 +982,9 @@ class PropertyController extends Controller
                 'notes',
                 'url',
                 'contact_user_id',
-            ]),
+            ]) + [
+                'enrichment_data' => $enrichmentData,
+            ],
             'propertyMedia' => [
                 'images' => collect($property->images ?? [])
                     ->map(fn ($path) => [
@@ -965,10 +1007,75 @@ class PropertyController extends Controller
             ],
             'users' => $users,
             'currentUserId' => $request->user()->id,
+            'enrichmentData' => $enrichmentData,
             'options' => [
                 'acquisitions' => self::ACQUISITIONS,
             ],
         ]);
+    }
+
+    private function hydrateStoredEnrichmentPoiCoordinates(array $enrichmentData): array
+    {
+        $accessibility = is_array($enrichmentData['accessibility'] ?? null)
+            ? $enrichmentData['accessibility']
+            : null;
+        if (! is_array($accessibility)) {
+            return $enrichmentData;
+        }
+
+        $lat = $this->nullableFloat(
+            data_get($enrichmentData, 'map.marker.lat')
+            ?? data_get($enrichmentData, 'geocode.lat')
+        );
+        $lng = $this->nullableFloat(
+            data_get($enrichmentData, 'map.marker.lng')
+            ?? data_get($enrichmentData, 'geocode.lng')
+        );
+        if ($lat === null || $lng === null) {
+            return $enrichmentData;
+        }
+
+        $distanceFields = [
+            'supermarkt' => 'afstand_tot_supermarkt_km',
+            'sport' => 'afstand_tot_sport_km',
+            'groen' => 'afstand_tot_groen_km',
+            'cafe' => 'afstand_tot_cafe_km',
+            'restaurant' => 'afstand_tot_restaurant_km',
+            'hotel' => 'afstand_tot_hotel_km',
+        ];
+
+        $existingNearest = is_array($accessibility['dichtstbijzijnde'] ?? null)
+            ? $accessibility['dichtstbijzijnde']
+            : [];
+
+        $nearest = [];
+        foreach ($distanceFields as $category => $distanceField) {
+            $item = is_array($existingNearest[$category] ?? null) ? $existingNearest[$category] : [];
+            $distance = is_numeric($item['afstand_km'] ?? null)
+                ? (float) $item['afstand_km']
+                : (is_numeric($accessibility[$distanceField] ?? null) ? (float) $accessibility[$distanceField] : null);
+
+            $nearest[$category] = [
+                'afstand_km' => $distance,
+                'naam' => $this->nullableString($item['naam'] ?? null),
+                'osm_url' => $this->nullableString($item['osm_url'] ?? null),
+                'lat' => $this->nullableFloat($item['lat'] ?? null),
+                'lng' => $this->nullableFloat($item['lng'] ?? null),
+            ];
+        }
+
+        $nearest = $this->fillMissingPoiDistancesFromGooglePlaces($lat, $lng, $nearest);
+        $accessibility['dichtstbijzijnde'] = $nearest;
+
+        foreach ($distanceFields as $category => $distanceField) {
+            if (! is_numeric($accessibility[$distanceField] ?? null) && is_numeric(data_get($nearest, "{$category}.afstand_km"))) {
+                $accessibility[$distanceField] = (float) data_get($nearest, "{$category}.afstand_km");
+            }
+        }
+
+        $enrichmentData['accessibility'] = $accessibility;
+
+        return $enrichmentData;
     }
 
     public function update(Request $request, SearchRequest $search_request, Property $property)
@@ -2672,8 +2779,14 @@ OVERPASS;
             return $result;
         }
 
-        $categoriesToFill = collect(['sport', 'groen', 'cafe', 'restaurant', 'hotel'])
-            ->filter(fn (string $category) => ! is_numeric(data_get($result, "{$category}.afstand_km")))
+        $categoriesToFill = collect(['supermarkt', 'sport', 'groen', 'cafe', 'restaurant', 'hotel'])
+            ->filter(function (string $category) use ($result): bool {
+                $distance = data_get($result, "{$category}.afstand_km");
+                $lat = data_get($result, "{$category}.lat");
+                $lng = data_get($result, "{$category}.lng");
+
+                return ! is_numeric($distance) || ! is_numeric($lat) || ! is_numeric($lng);
+            })
             ->values()
             ->all();
 
@@ -2683,10 +2796,15 @@ OVERPASS;
                 continue;
             }
 
+            $existingDistance = data_get($result, "{$category}.afstand_km");
+
             $result[$category] = [
-                'afstand_km' => $this->roundDistanceKm((float) $candidate['distance_m']),
-                'naam' => $this->nullableString($candidate['name'] ?? null),
-                'osm_url' => null,
+                'afstand_km' => is_numeric($existingDistance)
+                    ? (float) $existingDistance
+                    : $this->roundDistanceKm((float) $candidate['distance_m']),
+                'naam' => $this->nullableString(data_get($result, "{$category}.naam"))
+                    ?? $this->nullableString($candidate['name'] ?? null),
+                'osm_url' => data_get($result, "{$category}.osm_url"),
                 'lat' => is_numeric($candidate['lat'] ?? null) ? (float) $candidate['lat'] : null,
                 'lng' => is_numeric($candidate['lng'] ?? null) ? (float) $candidate['lng'] : null,
             ];
@@ -2698,6 +2816,11 @@ OVERPASS;
     private function fetchNearestGooglePlaceCandidate(float $lat, float $lng, string $category, string $apiKey): ?array
     {
         $querySets = match ($category) {
+            'supermarkt' => [
+                ['type' => 'supermarket'],
+                ['keyword' => 'supermarkt'],
+                ['keyword' => 'grocery'],
+            ],
             'sport' => [
                 ['type' => 'gym'],
                 ['keyword' => 'sport'],
@@ -3898,6 +4021,20 @@ SPARQL;
         return $normalized !== '' ? $normalized : null;
     }
 
+    private function nullableFloat(mixed $value): ?float
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $normalized = str_replace(',', '.', trim((string) $value));
+        if ($normalized === '' || ! is_numeric($normalized)) {
+            return null;
+        }
+
+        return (float) $normalized;
+    }
+
     private function bagRequestErrorMessage(?Response $response, string $default): string
     {
         if (! $response) {
@@ -4467,6 +4604,30 @@ SPARQL;
             ->map(fn (string $value) => trim($value))
             ->values()
             ->all();
+    }
+
+    private function parseEnrichmentPayload(?string $json): ?array
+    {
+        $payload = $this->nullableString($json);
+        if ($payload === null) {
+            return null;
+        }
+
+        try {
+            $decoded = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        if (isset($decoded['map']) && is_array($decoded['map'])) {
+            unset($decoded['map']['google_maps_api_key']);
+        }
+
+        return $decoded;
     }
 
     private function normalizeToStringList(mixed $value): array

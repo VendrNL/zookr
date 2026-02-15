@@ -46,6 +46,7 @@ const form = useForm({
     url: "",
     brochure: null,
     drawings: null,
+    enrichment_data_json: "",
     contact_user_id: props.currentUserId ?? null,
 });
 
@@ -1199,9 +1200,9 @@ const fetchMapFeatureInfo = async (lat, lng) => {
 const getEnrichmentCoordinates = () => {
     const markerData = enrichmentData.value?.map?.marker;
     const fallbackGeocode = enrichmentData.value?.geocode;
-    const lat = Number.parseFloat(String(markerData?.lat ?? fallbackGeocode?.lat ?? ""));
-    const lng = Number.parseFloat(String(markerData?.lng ?? fallbackGeocode?.lng ?? ""));
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const lat = parseCoordinate(markerData?.lat ?? fallbackGeocode?.lat);
+    const lng = parseCoordinate(markerData?.lng ?? fallbackGeocode?.lng);
+    if (lat === null || lng === null) {
         return null;
     }
     return { lat, lng };
@@ -1209,6 +1210,12 @@ const getEnrichmentCoordinates = () => {
 
 const parseDistanceKm = (value) => {
     const parsed = Number.parseFloat(String(value ?? ""));
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseCoordinate = (value) => {
+    const normalized = String(value ?? "").trim().replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
     return Number.isFinite(parsed) ? parsed : null;
 };
 
@@ -1271,7 +1278,7 @@ const googleRouteUrl = (destination, travelMode = "walking", fallbackQuery = nul
         if (query === "") {
             return null;
         }
-        destinationParam = query;
+        destinationParam = `${query}, ${originParam}`;
     }
 
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originParam)}&destination=${encodeURIComponent(destinationParam)}&travelmode=${mode}`;
@@ -2306,17 +2313,36 @@ const submit = (onSuccess) => {
     const options = {
         preserveScroll: true,
         forceFormData: true,
+        onFinish: () => {
+            form.transform((data) => data);
+        },
         onError: (errors) => {
             const messages = Object.values(errors ?? {}).flat();
             submitError.value = messages.length
-                ? `Opslaan mislukt: ${messages.join(" ")}`
+                ? `Opslaan mislukt: ${messages.join(" ")}` 
                 : "Opslaan mislukt.";
         },
     };
     if (typeof onSuccess === "function") {
         options.onSuccess = onSuccess;
     }
-    form.post(route("search-requests.properties.store", props.item.id), options);
+    const buildStorableEnrichmentPayload = () => {
+        if (!enrichmentData.value || typeof enrichmentData.value !== "object") {
+            return null;
+        }
+        const payload = JSON.parse(JSON.stringify(enrichmentData.value));
+        if (payload?.map && typeof payload.map === "object") {
+            delete payload.map.google_maps_api_key;
+        }
+        return payload;
+    };
+
+    form
+        .transform((data) => ({
+            ...data,
+            enrichment_data_json: JSON.stringify(buildStorableEnrichmentPayload()),
+        }))
+        .post(route("search-requests.properties.store", props.item.id), options);
 };
 
 const { confirmLeave } = useDirtyConfirm(form, undefined, {
@@ -2531,8 +2557,8 @@ onBeforeUnmount(() => {
                                 <h3 class="text-base font-semibold text-gray-900">Locatie-informatie</h3>
                             </div>
 
-                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                                <div class="h-full rounded bg-white p-3">
+                            <div class="enrichment-row enrichment-row-auto grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Identificatie</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2605,7 +2631,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-full rounded bg-white p-3">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Kadaster</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2620,7 +2646,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-full rounded bg-white p-3">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwkundig</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2635,7 +2661,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-full rounded bg-white p-3">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemming</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2656,7 +2682,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-full rounded bg-white p-3">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Monumentenstatus</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2716,8 +2742,8 @@ onBeforeUnmount(() => {
                             </div>
                             </div>
 
-                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                                <div class="h-full rounded bg-white p-3">
+                            <div class="enrichment-row grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bereikbaarheid</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
@@ -2811,15 +2837,15 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-full rounded bg-white p-3">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Voorzieningen</div>
                                     <div class="mt-2 detail-list text-sm text-gray-700">
                                         <div class="detail-row">
                                             <span class="detail-label">Supermarkt</span><span class="detail-dots" aria-hidden="true"></span>
                                             <span class="detail-value">
                                                 <a
-                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
-                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt, 'supermarkt')"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt, 'supermarkt')"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     class="text-blue-700 hover:text-blue-800"
@@ -2950,8 +2976,8 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                                <div class="h-full rounded bg-white p-3">
+                            <div class="enrichment-row grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                                <div class="enrichment-card h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                         Milieu
                                     </div>
@@ -3179,7 +3205,8 @@ onBeforeUnmount(() => {
                             </div>
                             </div>
 
-                            <div class="rounded bg-white p-3">
+                            <div class="enrichment-row enrichment-row-auto grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+                            <div class="enrichment-card rounded bg-white p-3 md:col-span-2">
                                 <div class="flex items-center justify-between gap-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                         Kaartlagen
@@ -3294,7 +3321,7 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div class="rounded bg-white p-3">
+                            <div class="enrichment-card rounded bg-white p-3 md:col-span-2">
                                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemmingsplan / WKBP</div>
                                 <div class="mt-1 text-sm text-gray-700">{{ enrichmentData?.zoning?.toelichting }}</div>
                                 <div
@@ -3335,6 +3362,7 @@ onBeforeUnmount(() => {
                                         </a>
                                     </div>
                                 </div>
+                            </div>
                             </div>
                         </div>
 
@@ -3955,6 +3983,27 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.enrichment-row {
+}
+
+.enrichment-card {
+    min-height: 100%;
+}
+
+.enrichment-row-auto {
+    grid-auto-rows: auto !important;
+}
+
+.enrichment-row-auto .enrichment-card {
+    min-height: 0;
+}
+
+@media (min-width: 768px) {
+    .enrichment-row {
+        grid-auto-rows: 1fr;
+    }
+}
+
 .detail-list {
     display: flex;
     flex-direction: column;
@@ -4021,4 +4070,5 @@ onBeforeUnmount(() => {
     }
 }
 </style>
+
 
