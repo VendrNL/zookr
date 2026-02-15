@@ -320,8 +320,17 @@ class PropertyController extends Controller
             $geocode['lat'] ?? null,
             $geocode['lng'] ?? null
         );
+        $soil = $this->fetchSoilStatusByPoint(
+            $geocode['lat'] ?? null,
+            $geocode['lng'] ?? null,
+            $bag['geometry_rd'] ?? null
+        );
         $hasAirData = $this->hasFilledValue($airQuality['pm25_ug_m3'] ?? null)
-            || $this->hasFilledValue($airQuality['no2_ug_m3'] ?? null);
+            || $this->hasFilledValue($airQuality['no2_ug_m3'] ?? null)
+            || $this->hasFilledValue($airQuality['geluid_omgeving']['waarde'] ?? null)
+            || $this->hasFilledValue($airQuality['zomerhitte_stad']['waarde'] ?? null)
+            || $this->hasFilledValue($airQuality['kans_op_overstroming']['waarde'] ?? null)
+            || $this->hasFilledValue($airQuality['gevaarlijke_stoffen_binnen_1km']['waarde'] ?? null);
         $diagnostics['rivm_air_quality'] = [
             'status' => $hasAirData ? 'ok' : 'no_data',
             'detail' => $hasAirData
@@ -357,10 +366,7 @@ class PropertyController extends Controller
                     : 'Geen planobject gevonden op exact punt. Controleer de kaartlink voor omliggende plannen.',
             ],
             'heritage' => $heritage,
-            'soil' => [
-                'bodemloket_url' => 'https://www.bodemloket.nl/kaart',
-                'status' => null,
-            ],
+            'soil' => $soil,
             'accessibility' => [
                 'ov' => null,
                 'auto' => null,
@@ -1553,12 +1559,12 @@ class PropertyController extends Controller
         }
 
         if (str_contains($contentType, 'text/html')) {
-            $text = trim(strip_tags($body));
-            if ($text === '') {
-                return [];
+            $items = $this->parseFeatureInfoHtml($body);
+            if (count($items) > 0) {
+                return $items;
             }
 
-            // Try to parse simple "key: value" lines after stripping tags.
+            $text = trim(strip_tags($body));
             return $this->parseFeatureInfoPlainText($text);
         }
 
@@ -1623,9 +1629,73 @@ class PropertyController extends Controller
                 continue;
             }
 
+            $keyLower = Str::lower($key);
+            if (str_contains($keyLower, 'font') || str_contains($keyLower, 'padding') || str_contains($keyLower, 'border')) {
+                continue;
+            }
+
             if ($key !== '' && $value !== '') {
                 $pairs[$key] = $value;
             }
+        }
+
+        return $this->mapPropertiesToInfoItems($pairs);
+    }
+
+    private function parseFeatureInfoHtml(string $html): array
+    {
+        if (trim($html) === '') {
+            return [];
+        }
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        if (! @ $doc->loadHTML($html)) {
+            return [];
+        }
+
+        $xpath = new \DOMXPath($doc);
+        $tables = $xpath->query('//table[contains(@class, "featureInfo")]');
+        if (! $tables || $tables->length === 0) {
+            return [];
+        }
+
+        $firstTable = $tables->item(0);
+        if (! $firstTable) {
+            return [];
+        }
+
+        $headerCells = $xpath->query('.//tr[1]/th', $firstTable);
+        $dataRows = $xpath->query('.//tr[position()>1]', $firstTable);
+        if (! $headerCells || ! $dataRows || $headerCells->length === 0 || $dataRows->length === 0) {
+            return [];
+        }
+
+        $headers = [];
+        foreach ($headerCells as $cell) {
+            $text = trim((string) $cell->textContent);
+            $headers[] = $text;
+        }
+
+        $row = $dataRows->item(0);
+        if (! $row) {
+            return [];
+        }
+
+        $dataCells = $xpath->query('./td', $row);
+        if (! $dataCells || $dataCells->length === 0) {
+            return [];
+        }
+
+        $pairs = [];
+        $count = min($headers ? count($headers) : 0, $dataCells->length);
+        for ($i = 0; $i < $count; $i++) {
+            $header = trim((string) ($headers[$i] ?? ''));
+            $value = trim((string) $dataCells->item($i)->textContent);
+            if ($header === '' || $value === '' || Str::lower($header) === 'fid') {
+                continue;
+            }
+            $pairs[$header] = $value;
         }
 
         return $this->mapPropertiesToInfoItems($pairs);
@@ -1709,6 +1779,91 @@ class PropertyController extends Controller
                 'url' => $bodemloketUrl,
             ],
         ];
+    }
+
+    private function fetchSoilStatusByPoint(?float $lat, ?float $lng, mixed $geometryRd): array
+    {
+        $url = $this->buildBodemloketLocationUrl($geometryRd);
+
+        if (! is_numeric($lat) || ! is_numeric($lng)) {
+            return [
+                'bodemloket_url' => $url,
+                'status' => 'Geen gegevens in bodemloket',
+            ];
+        }
+
+        $endpoint = 'https://gis.gdngeoservices.nl/standalone/rest/services/blk_gdn/lks_blk_rd_v1/MapServer/0/query';
+        $response = Http::timeout(10)
+            ->retry(1, 250)
+            ->get($endpoint, [
+                'f' => 'json',
+                'where' => '1=1',
+                'geometry' => $lng.','.$lat,
+                'geometryType' => 'esriGeometryPoint',
+                'inSR' => 4326,
+                'spatialRel' => 'esriSpatialRelIntersects',
+                'outFields' => 'TYPE_CD,STATUS_OORD,STATUSVER',
+                'returnGeometry' => 'false',
+                'resultRecordCount' => 1,
+            ]);
+
+        if (! $response->successful()) {
+            return [
+                'bodemloket_url' => $url,
+                'status' => 'Geen gegevens in bodemloket',
+            ];
+        }
+
+        $attributes = data_get($response->json(), 'features.0.attributes');
+        if (! is_array($attributes)) {
+            return [
+                'bodemloket_url' => $url,
+                'status' => 'Geen gegevens in bodemloket',
+            ];
+        }
+
+        $typeCode = $this->nullableString($attributes['TYPE_CD'] ?? null);
+        $typeDescriptionMap = $this->fetchBodemverontreinigingTypeDescriptionMap();
+        $typeDescription = $typeCode !== null
+            ? ($typeDescriptionMap[$typeCode] ?? null)
+            : null;
+
+        $severity = $this->nullableString($attributes['STATUS_OORD'] ?? null);
+        $status = $this->nullableString($attributes['STATUSVER'] ?? null);
+
+        $label = collect([$severity, $status, $typeDescription])
+            ->filter(fn ($value) => is_string($value) && $value !== '')
+            ->first();
+
+        return [
+            'bodemloket_url' => $url,
+            'status' => $label ?? 'Geen gegevens in bodemloket',
+        ];
+    }
+
+    private function buildBodemloketLocationUrl(mixed $geometryRd): string
+    {
+        $baseUrl = 'https://www.bodemloket.nl/kaart';
+        if (! is_array($geometryRd) || count($geometryRd) < 2) {
+            return $baseUrl;
+        }
+
+        $x = $geometryRd[0] ?? null;
+        $y = $geometryRd[1] ?? null;
+        if (! is_numeric($x) || ! is_numeric($y)) {
+            return $baseUrl;
+        }
+
+        $x = (float) $x;
+        $y = (float) $y;
+
+        // Compacte viewport rond het pand in RD-coordinaten (EPSG:28992).
+        $minX = (int) round($x - 314);
+        $maxX = (int) round($x + 314);
+        $minY = (int) round($y - 170);
+        $maxY = (int) round($y + 170);
+
+        return sprintf('%s#%d,%d,%d,%d', $baseUrl, $minX, $minY, $maxX, $maxY);
     }
 
     private function fetchBodemverontreinigingTypeDescriptionMap(): array
@@ -2427,9 +2582,26 @@ OVERPASS;
             'pm25_ug_m3' => null,
             'no2_ug_m3' => null,
             'jaar' => '2023',
+            'geluid_omgeving' => [
+                'waarde' => null,
+                'score' => null,
+            ],
+            'zomerhitte_stad' => [
+                'waarde' => null,
+                'score' => null,
+            ],
+            'kans_op_overstroming' => [
+                'waarde' => null,
+                'score' => null,
+            ],
+            'gevaarlijke_stoffen_binnen_1km' => [
+                'waarde' => null,
+                'score' => null,
+            ],
             'bronnen' => [
                 'https://data.overheid.nl/dataset/68115-fijnstof-pm2-5--2023-',
                 'https://data.overheid.nl/dataset/68112-stikstofdioxide---no----2023-',
+                'https://www.atlasleefomgeving.nl/',
             ],
         ];
 
@@ -2449,7 +2621,185 @@ OVERPASS;
         $result['pm25_ug_m3'] = $this->extractGrayIndexFromWmsItems($pmItems);
         $result['no2_ug_m3'] = $this->extractGrayIndexFromWmsItems($no2Items);
 
+        $geluidLayer = trim((string) config('services.rivm.alo_geluid_layer'));
+        $zomerhitteLayer = trim((string) config('services.rivm.alo_zomerhitte_layer'));
+        $overstromingLayer = trim((string) config('services.rivm.alo_overstroming_layer'));
+        $gevaarLayer = trim((string) config('services.rivm.alo_gevaarlijke_stoffen_layer'));
+
+        if ($geluidLayer !== '') {
+            $metric = $this->extractGeluidMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $geluidLayer, $lat, $lng));
+            $result['geluid_omgeving']['waarde'] = $metric['waarde'];
+            $result['geluid_omgeving']['score'] = $metric['score'];
+        }
+        if ($zomerhitteLayer !== '') {
+            $metric = $this->extractZomerhitteMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $zomerhitteLayer, $lat, $lng));
+            $result['zomerhitte_stad']['waarde'] = $metric['waarde'];
+            $result['zomerhitte_stad']['score'] = $metric['score'];
+        }
+        if ($overstromingLayer !== '') {
+            $metric = $this->extractOverstromingMetric($this->fetchWmsFeatureInfoAtPoint($wmsUrl, $overstromingLayer, $lat, $lng));
+            $result['kans_op_overstroming']['waarde'] = $metric['waarde'];
+            $result['kans_op_overstroming']['score'] = $metric['score'];
+        }
+        if ($gevaarLayer !== '') {
+            $items = $this->fetchWmsFeatureInfoAtPoint($wmsUrl, $gevaarLayer, $lat, $lng);
+            $metric = $this->extractGevaarlijkeStoffenMetric($items);
+            $result['gevaarlijke_stoffen_binnen_1km']['waarde'] = $metric['waarde'] ?? 'Geen';
+            $result['gevaarlijke_stoffen_binnen_1km']['score'] = $metric['score'] ?? 1.0;
+        }
+
         return $result;
+    }
+
+    private function extractMetricFromWmsItems(array $items): array
+    {
+        $grayIndex = $this->extractGrayIndexFromWmsItems($items);
+        if (is_numeric($grayIndex)) {
+            return [
+                'waarde' => round((float) $grayIndex, 2),
+                'score' => round((float) $grayIndex, 2),
+            ];
+        }
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $value = $this->nullableString($item['value'] ?? null);
+            if ($value === null) {
+                continue;
+            }
+            $valueLower = Str::lower($value);
+            if (in_array($valueLower, ['n.v.t.', 'niet beschikbaar', 'geen data', 'null'], true)) {
+                continue;
+            }
+
+            if (is_numeric($value)) {
+                return [
+                    'waarde' => round((float) $value, 2),
+                    'score' => round((float) $value, 2),
+                ];
+            }
+
+            return [
+                'waarde' => $value,
+                'score' => null,
+            ];
+        }
+
+        return [
+            'waarde' => null,
+            'score' => null,
+        ];
+    }
+
+    private function extractGeluidMetric(array $items): array
+    {
+        $metric = $this->extractMetricFromWmsItems($items);
+        $score = is_numeric($metric['score'] ?? null) ? round((float) $metric['score'], 1) : null;
+        $waarde = is_numeric($metric['waarde'] ?? null) ? round((float) $metric['waarde'], 1) : $metric['waarde'];
+
+        return [
+            'waarde' => $waarde,
+            'score' => $score,
+        ];
+    }
+
+    private function extractZomerhitteMetric(array $items): array
+    {
+        $stressValue = null;
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $title = Str::lower(str_replace([' ', '_'], '', (string) ($item['title'] ?? '')));
+            $value = $item['value'] ?? null;
+            if ($title === 'stress' && is_numeric($value)) {
+                $stressValue = (float) $value;
+                break;
+            }
+        }
+
+        if ($stressValue !== null) {
+            $uhi = round($stressValue / 10.0, 1);
+            return [
+                'waarde' => $uhi,
+                'score' => $uhi,
+            ];
+        }
+
+        return $this->extractMetricFromWmsItems($items);
+    }
+
+    private function extractOverstromingMetric(array $items): array
+    {
+        $grayIndex = $this->extractGrayIndexFromWmsItems($items);
+        if (is_numeric($grayIndex)) {
+            $index = (int) round((float) $grayIndex);
+            return [
+                'waarde' => $this->overstromingLabelForIndex($index),
+                'score' => $index,
+            ];
+        }
+
+        $metric = $this->extractMetricFromWmsItems($items);
+        if (is_numeric($metric['waarde'] ?? null)) {
+            $index = (int) round((float) $metric['waarde']);
+            $metric['waarde'] = $this->overstromingLabelForIndex($index);
+            $metric['score'] = $index;
+        }
+
+        return $metric;
+    }
+
+    private function overstromingLabelForIndex(int $index): string
+    {
+        return match ($index) {
+            1, 2 => 'Overstroomt niet / Oppervlaktewater',
+            3 => 'Zeer kleine kans',
+            4 => 'Kleine kans',
+            5 => 'Middelgrote kans',
+            default => 'Grote kans',
+        };
+    }
+
+    private function extractGevaarlijkeStoffenMetric(array $items): array
+    {
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $title = Str::lower(str_replace([' ', '_'], '', (string) ($item['title'] ?? '')));
+            $value = $this->nullableString($item['value'] ?? null);
+            if ($value === null) {
+                continue;
+            }
+
+            if (in_array($title, ['activiteit', 'activiteiten'], true)) {
+                $normalized = trim($value);
+                if ($normalized === '') {
+                    continue;
+                }
+
+                return [
+                    'waarde' => $normalized,
+                    'score' => 4.0,
+                ];
+            }
+        }
+
+        if (count($items) === 0) {
+            return [
+                'waarde' => 'Geen',
+                'score' => 1.0,
+            ];
+        }
+
+        return [
+            'waarde' => 'Geen',
+            'score' => 1.0,
+        ];
     }
 
     private function extractGrayIndexFromWmsItems(array $items): ?float

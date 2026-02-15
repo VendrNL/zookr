@@ -78,6 +78,10 @@ return [
         'air_wms_url' => env('RIVM_AIR_WMS_URL', 'https://data.rivm.nl/geo/alo/wms'),
         'air_pm25_layer' => env('RIVM_AIR_PM25_LAYER', 'rivm_jaargemiddeld_PM25_actueel'),
         'air_no2_layer' => env('RIVM_AIR_NO2_LAYER', 'rivm_jaargemiddeld_NO2_actueel'),
+        'alo_geluid_layer' => env('RIVM_ALO_GELUID_LAYER', 'rivm_20180205_g_geluidkaart_lden_alle_bronnen'),
+        'alo_zomerhitte_layer' => env('RIVM_ALO_ZOMERHITTE_LAYER', 'rivm_20230301_stress_wijk_2020'),
+        'alo_overstroming_layer' => env('RIVM_ALO_OVERSTROMING_LAYER', '20231201_kans_overstroming'),
+        'alo_gevaarlijke_stoffen_layer' => env('RIVM_ALO_GEVAARLIJKE_STOFFEN_LAYER', 'rivm_rev_activiteit_1km_20240501'),
     ],
 
 ];

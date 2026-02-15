@@ -12,7 +12,7 @@ import SecondaryButton from "@/Components/SecondaryButton.vue";
 import TextInput from "@/Components/TextInput.vue";
 import TokenDropdown from "@/Components/TokenDropdown.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import useDirtyConfirm from "@/Composables/useDirtyConfirm";
 import useImageDrop from "@/Composables/useImageDrop";
 
@@ -1199,6 +1199,196 @@ const googleRouteUrl = (destination, travelMode = "walking") => {
 const googleWalkingRouteUrl = (destination) => googleRouteUrl(destination, "walking");
 const googleDrivingRouteUrl = (destination) => googleRouteUrl(destination, "driving");
 
+const milieuInfoLinks = {
+    fijnstof: "https://www.atlasleefomgeving.nl/thema/schone-lucht/fijnstof",
+    stikstofdioxide: "https://www.atlasleefomgeving.nl/thema/schone-lucht/stikstofdioxide",
+    geluid: "https://www.atlasleefomgeving.nl/thema/geluid",
+    zomerhitte: "https://www.atlasnatuurlijkkapitaal.nl/stedelijk-hitte-eiland-effect-uhi-in-nederland",
+    overstroming: "https://www.atlasleefomgeving.nl/thema/klimaatverandering/overstroming",
+    gevaarlijke_stoffen: "https://www.atlasleefomgeving.nl/thema/veilige-omgeving/externe-veiligheid",
+};
+
+const toMilieuNumber = (value) => {
+    const num = Number.parseFloat(String(value ?? "").replace(",", "."));
+    return Number.isFinite(num) ? num : null;
+};
+
+const formatMilieuValue = (value, unit = "") => {
+    if (value === null || value === undefined || String(value).trim() === "") return "-";
+    const num = toMilieuNumber(value);
+    if (num === null) return String(value);
+    const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100);
+    return unit ? `${rounded} ${unit}` : rounded;
+};
+
+const formatMilieuDisplayValue = (kind, value) => {
+    if (value === null || value === undefined || String(value).trim() === "") return "-";
+    const num = toMilieuNumber(value);
+
+    if (kind === "fijnstof") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} μg PM2,5 / m3`;
+    }
+
+    if (kind === "stikstofdioxide") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} μg NO2 / m3`;
+    }
+
+    if (kind === "geluid") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        return `${rounded} dB`;
+    }
+
+    if (kind === "zomerhitte") {
+        if (num === null) return String(value);
+        const rounded = Number.isInteger(num) ? String(num) : String(Math.round(num * 10) / 10);
+        const signed = num > 0 ? `+ ${rounded}` : rounded;
+        return `${signed} °C t.o.v. landelijk gebied`;
+    }
+
+    return String(value);
+};
+
+const milieuSmileyByLevel = {
+    donkergroen: {
+        icon: "/smileys/smiley-donkergroen.svg",
+    },
+    lichtgroen: {
+        icon: "/smileys/smiley-lichtgroen.svg",
+    },
+    geel: {
+        icon: "/smileys/smiley-geel.svg",
+    },
+    oranje: {
+        icon: "/smileys/smiley-oranje.svg",
+    },
+    rood: {
+        icon: "/smileys/smiley-rood.svg",
+    },
+};
+
+const milieuHelperItemsByKind = {
+    fijnstof: [
+        { level: "lichtgroen", text: "De fijnstofconcentratie is onder de WHO advieswaarde (5 ug/ m3)." },
+        { level: "geel", text: "De fijnstofconcentratie is tussen de WHO advieswaarde (5 ug/ m3) en WHO Interim target 4 (10 ug/ m3)." },
+        { level: "oranje", text: "De fijnstofconcentratie is tussen WHO Interim target 4 (10 ug/ m3) en WHO Interim target 2 (25 ug/ m3)." },
+        { level: "rood", text: "De fijnstofconcentratie is boven WHO Interim target 2 (25 ug/ m3)." },
+    ],
+    stikstofdioxide: [
+        { level: "lichtgroen", text: "Onder WHO advieswaarde (10 ug/ m3)." },
+        { level: "geel", text: "Tussen WHO advieswaarde (10 ug/ m3) en WHO Interim target 3 (20 ug/ m3)." },
+        { level: "oranje", text: "Tussen WHO Interim target 3 (20 ug/ m3) en WHO Interim target 2 (30 ug/ m3)." },
+        { level: "rood", text: "Boven WHO Interim target 2 (30 ug/ m3)." },
+    ],
+    geluid: [
+        { level: "donkergroen", text: "De geluidsbelasting is minder dan 46 decibel (dB)." },
+        { level: "lichtgroen", text: "De geluidsbelasting is tussen 46 dB en 50 dB." },
+        { level: "geel", text: "De geluidsbelasting is tussen 51 dB en 55 dB." },
+        { level: "oranje", text: "De geluidsbelasting is tussen 56dB en 60 dB." },
+        { level: "rood", text: "De geluidsbelasting is meer dan 60 dB." },
+    ],
+    zomerhitte: [
+        { level: "donkergroen", text: "Zeer goed, de temperatuur is minder dan 0,5 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "lichtgroen", text: "Goed, de temperatuur is tussen de 0,5 en 1 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "geel", text: "Redelijk, de temperatuur is tussen de 1 en 1,5 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "oranje", text: "Matig, de temperatuur is tussen de 1,5 en 2 °C hoger dan in omliggende landelijke gebieden." },
+        { level: "rood", text: "Slecht, de temperatuur is 2 °C of meer hoger dan in omliggende landelijke gebieden." },
+    ],
+    overstroming: [
+        { level: "donkergroen", text: "Overstroomt niet of is oppervlaktewater." },
+        { level: "lichtgroen", text: "Zeer kleine kans." },
+        { level: "geel", text: "Kleine kans." },
+        { level: "oranje", text: "Middelgrote kans." },
+        { level: "rood", text: "Grote kans." },
+    ],
+    gevaarlijke_stoffen: [
+        { level: "donkergroen", text: "Geen activiteiten bekend binnen 1 km." },
+        { level: "geel", text: "Mogelijke of beperkte activiteiten in de omgeving." },
+        { level: "rood", text: "Meerdere of relevante risicobronnen binnen 1 km." },
+    ],
+};
+
+const MilieuSmileyIcon = (props, { attrs }) => {
+    const icon = props.icon ?? milieuSmileyByLevel.geel.icon;
+    const iconClass = attrs?.class ?? "h-4 w-4";
+
+    return h("img", {
+        class: iconClass,
+        src: icon,
+        alt: "",
+        draggable: "false",
+    });
+};
+MilieuSmileyIcon.props = {
+    icon: String,
+};
+
+const milieuAssessment = (kind, rawValue) => {
+    const num = toMilieuNumber(rawValue);
+    const text = String(rawValue ?? "").toLowerCase();
+    let level = "geel";
+
+    if (kind === "fijnstof") {
+        if (num !== null) {
+            level = num <= 5 ? "lichtgroen" : num <= 10 ? "geel" : num <= 25 ? "oranje" : "rood";
+        }
+    } else if (kind === "stikstofdioxide") {
+        if (num !== null) {
+            level = num <= 10 ? "lichtgroen" : num <= 20 ? "geel" : num <= 30 ? "oranje" : "rood";
+        }
+    } else if (kind === "geluid") {
+        if (num !== null) {
+            level = num < 46 ? "donkergroen" : num <= 50 ? "lichtgroen" : num <= 55 ? "geel" : num <= 60 ? "oranje" : "rood";
+        }
+    } else if (kind === "zomerhitte") {
+        if (num !== null) {
+            level = num < 0.5 ? "donkergroen" : num <= 1 ? "lichtgroen" : num <= 1.5 ? "geel" : num <= 2 ? "oranje" : "rood";
+        }
+    } else if (kind === "overstroming") {
+        if (text.includes("overstroomt niet") || text.includes("oppervlaktewater")) {
+            level = "donkergroen";
+        } else if (text.includes("zeer kleine kans")) {
+            level = "lichtgroen";
+        } else if (text.includes("middelgrote kans")) {
+            level = "oranje";
+        } else if (text.includes("grote kans")) {
+            level = "rood";
+        } else if (text.includes("kleine kans")) {
+            level = "geel";
+        } else if (num !== null) {
+            level = num <= 2 ? "donkergroen" : num <= 3 ? "lichtgroen" : num <= 4 ? "geel" : num <= 5 ? "oranje" : "rood";
+        }
+    } else if (kind === "gevaarlijke_stoffen") {
+        if (text.includes("geen activiteiten bekend") || text === "geen" || text.includes("geen")) {
+            level = "donkergroen";
+        } else if (text === "-" || text === "") {
+            level = "geel";
+        } else if (text.includes("beperkt") || text.includes("laag") || text.includes("mogelijk") || text.includes("enkele")) {
+            level = "geel";
+        } else if (text.includes("meerdere") || text.includes("relevant")) {
+            level = "rood";
+        } else if (num !== null) {
+            level = num <= 1 ? "donkergroen" : num <= 3 ? "geel" : "rood";
+        } else {
+            level = "rood";
+        }
+    }
+
+    const smiley = milieuSmileyByLevel[level] ?? milieuSmileyByLevel.geel;
+    const helperItems = milieuHelperItemsByKind[kind] ?? [];
+
+    return {
+        smileyLevel: level,
+        smileyIcon: smiley.icon,
+        helperItems,
+        link: milieuInfoLinks[kind] ?? "https://www.atlasleefomgeving.nl/",
+    };
+};
+
 const calculateHeading = (from, to) => {
     const toRad = (deg) => (deg * Math.PI) / 180;
     const toDeg = (rad) => (rad * 180) / Math.PI;
@@ -1506,15 +1696,6 @@ const fetchAddressEnrichment = async () => {
 
         enrichmentData.value = payload;
         await playEnrichmentProgress(payload?.diagnostics ?? {});
-
-        const bagArea = payload?.bag?.oppervlakte_m2;
-        if (
-            (form.surface_area === "" || form.surface_area === null) &&
-            Number.isFinite(Number(bagArea))
-        ) {
-            form.surface_area = Number(bagArea);
-            surfaceAreaInput.value = formatNumberValue(form.surface_area);
-        }
 
         await nextTick();
         await renderMap();
@@ -2445,7 +2626,9 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div class="rounded bg-white p-3">
-                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Milieu</div>
+                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Milieu
+                                </div>
                                 <div class="mt-2 space-y-2 text-sm text-gray-700">
                                     <div>
                                         Energielabel:
@@ -2463,31 +2646,195 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                        <span v-else class="font-semibold text-gray-900">Niet automatisch beschikbaar</span>
+                                        <span v-else class="font-semibold text-gray-900">Niet beschikbaar</span>
                                     </div>
                                     <div>
                                         Bodemvervuiling:
                                         <a
-                                            v-if="enrichmentData?.soil?.bodemloket_url"
+                                            v-if="enrichmentData?.soil?.bodemloket_url && enrichmentData?.soil?.status"
                                             :href="enrichmentData.soil.bodemloket_url"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="font-semibold text-blue-700 hover:text-blue-800"
                                         >
-                                            Bodemloket
+                                            {{ enrichmentData.soil.status }}
                                         </a>
-                                        <span v-else class="font-semibold text-gray-900">-</span>
-                                    </div>
-                                    <div>
-                                        Luchtkwaliteit ({{ enrichmentData?.air_quality?.jaar ?? "2023" }}) PM2.5:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ enrichmentData?.air_quality?.pm25_ug_m3 ?? "-" }} ug/m3
+                                        <span v-else class="font-semibold text-gray-900">
+                                            {{ enrichmentData?.soil?.status ?? "-" }}
                                         </span>
                                     </div>
                                     <div>
-                                        Luchtkwaliteit ({{ enrichmentData?.air_quality?.jaar ?? "2023" }}) NO2:
+                                        Fijnstof:
                                         <span class="font-semibold text-gray-900">
-                                            {{ enrichmentData?.air_quality?.no2_ug_m3 ?? "-" }} ug/m3
+                                            {{ formatMilieuDisplayValue('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3).helperItems"
+                                                        :key="`fijnstof-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        Stikstofdioxide:
+                                        <span class="font-semibold text-gray-900">
+                                            {{ formatMilieuDisplayValue('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3).helperItems"
+                                                        :key="`stikstof-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        Geluid in de omgeving:
+                                        <span class="font-semibold text-gray-900">
+                                            {{ formatMilieuDisplayValue('geluid', enrichmentData?.air_quality?.geluid_omgeving?.waarde) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('geluid', enrichmentData?.air_quality?.geluid_omgeving?.score ?? enrichmentData?.air_quality?.geluid_omgeving?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('geluid', enrichmentData?.air_quality?.geluid_omgeving?.score ?? enrichmentData?.air_quality?.geluid_omgeving?.waarde).helperItems"
+                                                        :key="`geluid-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('geluid', enrichmentData?.air_quality?.geluid_omgeving?.score ?? enrichmentData?.air_quality?.geluid_omgeving?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        Zomerhitte in de stad:
+                                        <span class="font-semibold text-gray-900">
+                                            {{ formatMilieuDisplayValue('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.waarde) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.score ?? enrichmentData?.air_quality?.zomerhitte_stad?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.score ?? enrichmentData?.air_quality?.zomerhitte_stad?.waarde).helperItems"
+                                                        :key="`zomerhitte-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.score ?? enrichmentData?.air_quality?.zomerhitte_stad?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        Kans op overstroming:
+                                        <span class="font-semibold text-gray-900">
+                                            {{ formatMilieuDisplayValue('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.waarde) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.score ?? enrichmentData?.air_quality?.kans_op_overstroming?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.score ?? enrichmentData?.air_quality?.kans_op_overstroming?.waarde).helperItems"
+                                                        :key="`overstroming-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.score ?? enrichmentData?.air_quality?.kans_op_overstroming?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        Gevaarlijke stoffen (binnen 1 km):
+                                        <span class="font-semibold text-gray-900">
+                                            {{ formatMilieuDisplayValue('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde) }}
+                                        </span>
+                                        <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
+                                            <span class="group inline-flex items-center">
+                                                <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).smileyIcon" />
+                                                <span class="invisible absolute left-0 top-full z-20 mt-1 w-72 rounded border border-gray-200 bg-white p-2 text-xs text-gray-700 shadow-lg group-hover:visible">
+                                                    <div
+                                                        v-for="(item, idx) in milieuAssessment('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).helperItems"
+                                                        :key="`gevaar-${idx}`"
+                                                        class="mb-1 flex items-start gap-1.5 last:mb-0"
+                                                    >
+                                                        <MilieuSmileyIcon class="mt-0.5 h-3.5 w-3.5 shrink-0" :icon="milieuSmileyByLevel[item.level]?.icon ?? milieuSmileyByLevel.geel.icon" />
+                                                        <span>{{ item.text }}</span>
+                                                    </div>
+                                                    <a
+                                                        :href="milieuAssessment('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).link"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+                                                    >
+                                                        Meer uitleg
+                                                    </a>
+                                                </span>
+                                            </span>
                                         </span>
                                     </div>
                                 </div>
