@@ -147,7 +147,9 @@ img {
 }
 
 .inner-body a {
-    word-break: break-all;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
 }
 
 /* Subcopy */
@@ -235,6 +237,10 @@ img {
     overflow: hidden;
     text-decoration: none;
     font-weight: 600;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    hyphens: none !important;
+    white-space: normal !important;
 }
 
 .button-blue,

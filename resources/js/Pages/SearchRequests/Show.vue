@@ -54,6 +54,8 @@ const hasMailingTab = computed(() => mailings.value.length > 0);
 const statusFilter = ref("all");
 const sortKey = ref("created_at");
 const sortDirection = ref("desc");
+const mailingSortKey = ref("name");
+const mailingSortDirection = ref("asc");
 
 const setActiveTab = (tab) => {
     activeTab.value = tab;
@@ -169,6 +171,35 @@ const sortedOfferedProperties = computed(() => {
             right = b?.created_at ?? "";
         }
         return String(left).localeCompare(String(right), "nl", { sensitivity: "base" }) * factor;
+    });
+});
+
+const setMailingSort = (key) => {
+    if (mailingSortKey.value === key) {
+        mailingSortDirection.value = mailingSortDirection.value === "asc" ? "desc" : "asc";
+        return;
+    }
+    mailingSortKey.value = key;
+    mailingSortDirection.value = "asc";
+};
+
+const sortedMailings = computed(() => {
+    const items = [...mailings.value];
+    const factor = mailingSortDirection.value === "asc" ? 1 : -1;
+
+    return items.sort((a, b) => {
+        const left = String(
+            mailingSortKey.value === "office_name"
+                ? (a?.office_name ?? "")
+                : (a?.name ?? "")
+        );
+        const right = String(
+            mailingSortKey.value === "office_name"
+                ? (b?.office_name ?? "")
+                : (b?.name ?? "")
+        );
+
+        return left.localeCompare(right, "nl", { sensitivity: "base" }) * factor;
     });
 });
 const avatarErrors = ref({});
@@ -330,7 +361,19 @@ function formatDateTime(value) {
     if (!value) return "-";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "-";
-    return date.toLocaleString("nl-NL");
+    const day = new Intl.DateTimeFormat("nl-NL", { day: "numeric" }).format(date);
+    const month = new Intl.DateTimeFormat("nl-NL", { month: "short" })
+        .format(date)
+        .replace(".", "")
+        .toLowerCase();
+    const year = new Intl.DateTimeFormat("nl-NL", { year: "numeric" }).format(date);
+    const time = new Intl.DateTimeFormat("nl-NL", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    }).format(date);
+
+    return `${day} ${month} ${year}; ${time}`;
 }
 
 function goToProperty(propertyId) {
@@ -858,12 +901,68 @@ watch(
                     <TableCard>
                         <thead class="bg-gray-50">
                             <tr>
-                                <TableHeaderCell class="w-[20%]">Naam</TableHeaderCell>
-                                <TableHeaderCell class="w-[18%]">Kantoor</TableHeaderCell>
+                                <TableHeaderCell class="w-[20%]">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                        @click="setMailingSort('name')"
+                                    >
+                                        Naam
+                                        <svg
+                                            v-if="mailingSortKey === 'name'"
+                                            class="h-3.5 w-3.5 text-gray-400"
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor"
+                                            aria-hidden="true"
+                                        >
+                                            <path
+                                                v-if="mailingSortDirection === 'asc'"
+                                                fill-rule="evenodd"
+                                                d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L10 5.414 5.707 9.707A1 1 0 014.293 8.293l5-5A1 1 0 0110 3z"
+                                                clip-rule="evenodd"
+                                            />
+                                            <path
+                                                v-else
+                                                fill-rule="evenodd"
+                                                d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L10 14.586l4.293-4.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                    </button>
+                                </TableHeaderCell>
+                                <TableHeaderCell class="w-[18%]">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-2 text-gray-600 uppercase"
+                                        @click="setMailingSort('office_name')"
+                                    >
+                                        Kantoor
+                                        <svg
+                                            v-if="mailingSortKey === 'office_name'"
+                                            class="h-3.5 w-3.5 text-gray-400"
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor"
+                                            aria-hidden="true"
+                                        >
+                                            <path
+                                                v-if="mailingSortDirection === 'asc'"
+                                                fill-rule="evenodd"
+                                                d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L10 5.414 5.707 9.707A1 1 0 014.293 8.293l5-5A1 1 0 0110 3z"
+                                                clip-rule="evenodd"
+                                            />
+                                            <path
+                                                v-else
+                                                fill-rule="evenodd"
+                                                d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L10 14.586l4.293-4.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z"
+                                                clip-rule="evenodd"
+                                            />
+                                        </svg>
+                                    </button>
+                                </TableHeaderCell>
                                 <TableHeaderCell class="w-[14%]">Telefoonnummer</TableHeaderCell>
-                                <TableHeaderCell class="w-[16%]">Verzonden (datum/tijd)</TableHeaderCell>
-                                <TableHeaderCell class="w-[16%]">Ontvangen (datum/tijd)</TableHeaderCell>
-                                <TableHeaderCell class="w-[16%]">Gelezen (datum/tijd)</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Verzonden</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Ontvangen</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Gelezen</TableHeaderCell>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
@@ -872,7 +971,7 @@ watch(
                                 :colspan="6"
                                 message="Nog geen mailinggegevens beschikbaar."
                             />
-                            <tr v-for="mailing in mailings" :key="mailing.id">
+                            <tr v-for="mailing in sortedMailings" :key="mailing.id">
                                 <TableCell>{{ mailing.name || "-" }}</TableCell>
                                 <TableCell>{{ mailing.office_name || "-" }}</TableCell>
                                 <TableCell>{{ mailing.phone || "-" }}</TableCell>

@@ -31,7 +31,7 @@ class SearchRequestSharedMail extends Mailable
             subject: 'Nieuwe zoekvraag: '.$this->searchRequest->title,
             from: new Address(
                 config('mail.from.address'),
-                trim($this->sender->name.', '.$officeName, ' ,')
+                'Zookr namens '.$officeName
             )
         );
     }
@@ -41,6 +41,7 @@ class SearchRequestSharedMail extends Mailable
         $officeName = $this->sender->organization?->name ?: '-';
         $senderName = $this->sender->name ?: '-';
         $logoUrl = $this->sender->organization?->logo_url;
+        $officeWebsiteUrl = $this->sender->organization?->website;
         $senderAvatarUrl = $this->sender->avatar_url;
         $senderPhone = $this->sender->phone ?: ($this->sender->organization?->phone ?: '-');
         $senderEmail = $this->sender->email ?: ($this->sender->organization?->email ?: '-');
@@ -48,8 +49,17 @@ class SearchRequestSharedMail extends Mailable
         if ($logoUrl && ! str_starts_with($logoUrl, 'http://') && ! str_starts_with($logoUrl, 'https://')) {
             $logoUrl = url($logoUrl);
         }
+        if ($officeWebsiteUrl && ! str_starts_with($officeWebsiteUrl, 'http://') && ! str_starts_with($officeWebsiteUrl, 'https://')) {
+            $officeWebsiteUrl = 'https://'.ltrim($officeWebsiteUrl, '/');
+        }
         if ($senderAvatarUrl && ! str_starts_with($senderAvatarUrl, 'http://') && ! str_starts_with($senderAvatarUrl, 'https://')) {
             $senderAvatarUrl = url($senderAvatarUrl);
+        }
+
+        $officeWebsiteLabel = null;
+        if (is_string($officeWebsiteUrl) && trim($officeWebsiteUrl) !== '') {
+            $officeWebsiteLabel = preg_replace('#^https?://#i', '', trim($officeWebsiteUrl));
+            $officeWebsiteLabel = rtrim((string) $officeWebsiteLabel, '/');
         }
 
         return new Content(
@@ -59,6 +69,8 @@ class SearchRequestSharedMail extends Mailable
                 'senderName' => $senderName,
                 'mailHeaderLogoUrl' => $logoUrl,
                 'mailHeaderLogoAlt' => $officeName,
+                'mailHeaderWebsiteUrl' => $officeWebsiteUrl,
+                'mailHeaderWebsiteLabel' => $officeWebsiteLabel,
                 'senderAvatarUrl' => $senderAvatarUrl,
                 'senderPhone' => $senderPhone,
                 'senderEmail' => $senderEmail,
