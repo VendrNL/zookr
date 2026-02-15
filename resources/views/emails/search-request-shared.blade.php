@@ -61,18 +61,18 @@ Met vriendelijke groet,
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 10px;">
     <tr>
-        <td valign="top" style="width: 56px; padding-right: 12px;">
+        <td valign="middle" style="width: 84px; padding-right: 14px;">
             @if(!empty($senderAvatarUrl))
                 <img
                     src="{{ $senderAvatarUrl }}"
                     alt="{{ $senderName }}"
-                    width="48"
-                    height="48"
-                    style="display:block; width:48px; height:48px; border-radius:9999px;"
+                    width="72"
+                    height="72"
+                    style="display:block; width:72px; height:72px; border-radius:9999px;"
                 />
             @endif
         </td>
-        <td valign="top" style="font-size: 14px; line-height: 1.45; color: #111827;">
+        <td valign="middle" style="font-size: 14px; line-height: 1.45; color: #111827;">
             <strong>{{ $senderName }}</strong><br>
             {{ $officeName }}<br>
             {{ $senderPhone ?? '-' }}<br>

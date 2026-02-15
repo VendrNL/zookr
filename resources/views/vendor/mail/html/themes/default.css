@@ -112,9 +112,9 @@ img {
 /* Logo */
 
 .logo {
-    height: 32px;
-    max-height: 32px;
-    max-width: 140px;
+    height: auto;
+    max-height: 110px;
+    max-width: 50%;
     vertical-align: middle;
 }
 
