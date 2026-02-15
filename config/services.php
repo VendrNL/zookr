@@ -69,6 +69,10 @@ return [
         'url' => env('OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter'),
     ],
 
+    'osrm' => [
+        'base_url' => env('OSRM_BASE_URL', 'https://router.project-osrm.org'),
+    ],
+
     'cbs' => [
         'odata_base_url' => env('CBS_ODATA_BASE_URL', 'https://datasets.cbs.nl/odata/v1/CBS'),
         'neighborhood_table' => env('CBS_NEIGHBORHOOD_TABLE', '85830NED'),

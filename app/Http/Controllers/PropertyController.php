@@ -251,7 +251,9 @@ class PropertyController extends Controller
 
         $heritage = $this->fetchHeritageByPoint(
             $geocode['lat'] ?? null,
-            $geocode['lng'] ?? null
+            $geocode['lng'] ?? null,
+            $bag['address'] ?? null,
+            $parcel['kadastrale_aanduiding'] ?? null
         );
         if (! $geocode) {
             $diagnostics['rce_heritage'] = [
@@ -2452,7 +2454,174 @@ OVERPASS;
             ];
         }
 
+        $result = $this->fillMissingPoiDistancesFromGooglePlaces($lat, $lng, $result);
+
         return $result;
+    }
+
+    private function fillMissingPoiDistancesFromGooglePlaces(float $lat, float $lng, array $result): array
+    {
+        $apiKey = trim((string) config('services.google_maps.api_key'));
+        if ($apiKey === '') {
+            return $result;
+        }
+
+        $categoriesToFill = collect(['sport', 'groen', 'cafe', 'restaurant', 'hotel'])
+            ->filter(fn (string $category) => ! is_numeric(data_get($result, "{$category}.afstand_km")))
+            ->values()
+            ->all();
+
+        foreach ($categoriesToFill as $category) {
+            $candidate = $this->fetchNearestGooglePlaceCandidate($lat, $lng, $category, $apiKey);
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            $result[$category] = [
+                'afstand_km' => $this->roundDistanceKm((float) $candidate['distance_m']),
+                'naam' => $this->nullableString($candidate['name'] ?? null),
+                'osm_url' => null,
+                'lat' => is_numeric($candidate['lat'] ?? null) ? (float) $candidate['lat'] : null,
+                'lng' => is_numeric($candidate['lng'] ?? null) ? (float) $candidate['lng'] : null,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function fetchNearestGooglePlaceCandidate(float $lat, float $lng, string $category, string $apiKey): ?array
+    {
+        $querySets = match ($category) {
+            'sport' => [
+                ['type' => 'gym'],
+                ['keyword' => 'sport'],
+            ],
+            'groen' => [
+                ['type' => 'park'],
+                ['keyword' => 'groen'],
+            ],
+            'cafe' => [
+                ['type' => 'cafe'],
+            ],
+            'restaurant' => [
+                ['type' => 'restaurant'],
+            ],
+            'hotel' => [
+                ['type' => 'lodging', 'keyword' => 'hotel'],
+                ['keyword' => 'hotel'],
+                ['type' => 'lodging'],
+            ],
+            default => [],
+        };
+
+        foreach ($querySets as $querySet) {
+            $candidate = $this->fetchNearestGooglePlaceByQuerySet($lat, $lng, $category, $apiKey, $querySet);
+            if (is_array($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function fetchNearestGooglePlaceByQuerySet(float $lat, float $lng, string $category, string $apiKey, array $querySet): ?array
+    {
+        $params = array_filter([
+            'location' => number_format($lat, 7, '.', '').','.number_format($lng, 7, '.', ''),
+            'rankby' => 'distance',
+            'type' => $this->nullableString($querySet['type'] ?? null),
+            'keyword' => $this->nullableString($querySet['keyword'] ?? null),
+            'key' => $apiKey,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        try {
+            $response = Http::timeout(10)
+                ->retry(1, 250)
+                ->get('https://maps.googleapis.com/maps/api/place/nearbysearch/json', $params);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $status = strtoupper((string) data_get($response->json(), 'status', ''));
+        if (! in_array($status, ['OK', 'ZERO_RESULTS'], true)) {
+            return null;
+        }
+        if ($status === 'ZERO_RESULTS') {
+            return null;
+        }
+
+        $candidate = collect(data_get($response->json(), 'results', []))
+            ->filter(fn ($row) => is_array($row))
+            ->filter(fn (array $row) => $this->isGooglePlaceMatchForCategory($category, $row))
+            ->map(function (array $row) use ($lat, $lng) {
+                $candidateLat = data_get($row, 'geometry.location.lat');
+                $candidateLng = data_get($row, 'geometry.location.lng');
+                if (! is_numeric($candidateLat) || ! is_numeric($candidateLng)) {
+                    return null;
+                }
+
+                $distanceMeters = $this->haversineDistanceMeters($lat, $lng, (float) $candidateLat, (float) $candidateLng);
+                if (! is_finite($distanceMeters)) {
+                    return null;
+                }
+
+                return [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString($row['name'] ?? null),
+                    'lat' => (float) $candidateLat,
+                    'lng' => (float) $candidateLng,
+                ];
+            })
+            ->filter(fn ($row) => is_array($row))
+            ->sortBy('distance_m')
+            ->first();
+
+        return is_array($candidate) ? $candidate : null;
+    }
+
+    private function isGooglePlaceMatchForCategory(string $category, array $place): bool
+    {
+        $types = collect($place['types'] ?? [])
+            ->filter(fn ($value) => is_string($value))
+            ->map(fn (string $value) => strtolower($value))
+            ->values()
+            ->all();
+        $name = strtolower((string) ($place['name'] ?? ''));
+
+        if ($category === 'hotel') {
+            $looksLikeHotel = in_array('lodging', $types, true) || str_contains($name, 'hotel');
+            $excluded = str_contains($name, 'hostel')
+                || str_contains($name, 'camping')
+                || str_contains($name, 'campground')
+                || str_contains($name, 'vakantiepark')
+                || str_contains($name, 'bed and breakfast')
+                || str_contains($name, 'b&b');
+
+            return $looksLikeHotel && ! $excluded;
+        }
+
+        if ($category === 'restaurant') {
+            $looksLikeRestaurant = in_array('restaurant', $types, true);
+            $excludedType = in_array('meal_takeaway', $types, true)
+                || in_array('meal_delivery', $types, true)
+                || in_array('fast_food', $types, true);
+            $excludedName = str_contains($name, 'snackbar')
+                || str_contains($name, 'snack bar')
+                || str_contains($name, 'shoarma')
+                || str_contains($name, 'doner')
+                || str_contains($name, 'kebab')
+                || str_contains($name, 'friet')
+                || str_contains($name, 'pizza to go')
+                || str_contains($name, 'afhaal');
+
+            return $looksLikeRestaurant && ! $excludedType && ! $excludedName;
+        }
+
+        return true;
     }
 
     private function fetchNeighborhoodCode(
@@ -2896,9 +3065,9 @@ OVERPASS;
     private function fetchNearestTransitDistances(?float $lat, ?float $lng): array
     {
         $result = [
-            'bushalte' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'station_metro_tram' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
-            'oprit_hoofdweg' => ['afstand_km' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'bushalte' => ['afstand_km' => null, 'duur_min' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'station_metro_tram' => ['afstand_km' => null, 'duur_min' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
+            'oprit_hoofdweg' => ['afstand_km' => null, 'duur_min' => null, 'naam' => null, 'osm_url' => null, 'lat' => null, 'lng' => null],
         ];
 
         if ($lat === null || $lng === null) {
@@ -2927,6 +3096,7 @@ OVERPASS;
   nwr["railway"="tram_stop"](around:10000,{$latStr},{$lngStr});
   nwr["station"="subway"](around:10000,{$latStr},{$lngStr});
   nwr["highway"="motorway_junction"](around:10000,{$latStr},{$lngStr});
+  nwr["highway"="motorway_link"](around:10000,{$latStr},{$lngStr});
 );
 out center tags;
 OVERPASS;
@@ -2959,6 +3129,7 @@ OVERPASS;
         $nearestBus = null;
         $nearestRail = null;
         $nearestRamp = null;
+        $rampCandidates = [];
 
         foreach ($elements as $element) {
             if (! is_array($element)) {
@@ -2984,7 +3155,8 @@ OVERPASS;
             $isRail = strtolower((string) data_get($element, 'tags.railway', '')) === 'station'
                 || strtolower((string) data_get($element, 'tags.railway', '')) === 'tram_stop'
                 || strtolower((string) data_get($element, 'tags.station', '')) === 'subway';
-            $isRamp = strtolower((string) data_get($element, 'tags.highway', '')) === 'motorway_junction';
+            $highwayTag = strtolower((string) data_get($element, 'tags.highway', ''));
+            $isRamp = in_array($highwayTag, ['motorway_junction', 'motorway_link'], true);
 
             if ($isBus && ($nearestBus === null || $distanceMeters < ($nearestBus['distance_m'] ?? INF))) {
                 $nearestBus = [
@@ -3018,11 +3190,22 @@ OVERPASS;
                     'lng' => (float) $poiLng,
                 ];
             }
+            if ($isRamp) {
+                $rampCandidates[] = [
+                    'distance_m' => $distanceMeters,
+                    'name' => $this->nullableString(data_get($element, 'tags.name')),
+                    'type' => (string) data_get($element, 'type', ''),
+                    'id' => data_get($element, 'id'),
+                    'lat' => (float) $poiLat,
+                    'lng' => (float) $poiLng,
+                ];
+            }
         }
 
         if (is_array($nearestBus) && is_numeric($nearestBus['distance_m'] ?? null)) {
             $result['bushalte'] = [
                 'afstand_km' => $this->roundDistanceKm((float) $nearestBus['distance_m']),
+                'duur_min' => null,
                 'naam' => $nearestBus['name'],
                 'osm_url' => $this->buildOsmObjectUrl($nearestBus['type'], $nearestBus['id']),
                 'lat' => is_numeric($nearestBus['lat'] ?? null) ? (float) $nearestBus['lat'] : null,
@@ -3032,15 +3215,30 @@ OVERPASS;
         if (is_array($nearestRail) && is_numeric($nearestRail['distance_m'] ?? null)) {
             $result['station_metro_tram'] = [
                 'afstand_km' => $this->roundDistanceKm((float) $nearestRail['distance_m']),
+                'duur_min' => null,
                 'naam' => $nearestRail['name'],
                 'osm_url' => $this->buildOsmObjectUrl($nearestRail['type'], $nearestRail['id']),
                 'lat' => is_numeric($nearestRail['lat'] ?? null) ? (float) $nearestRail['lat'] : null,
                 'lng' => is_numeric($nearestRail['lng'] ?? null) ? (float) $nearestRail['lng'] : null,
             ];
         }
+        if (count($rampCandidates) > 0) {
+            usort($rampCandidates, fn (array $a, array $b) => ($a['distance_m'] <=> $b['distance_m']));
+            $candidateSubset = array_slice($rampCandidates, 0, 12);
+            $bestByDriving = $this->findBestDrivingRampCandidate($lat, $lng, $candidateSubset);
+            if (is_array($bestByDriving)) {
+                $nearestRamp = $bestByDriving;
+            }
+        }
         if (is_array($nearestRamp) && is_numeric($nearestRamp['distance_m'] ?? null)) {
+            $distanceMeters = is_numeric($nearestRamp['route_distance_m'] ?? null)
+                ? (float) $nearestRamp['route_distance_m']
+                : (float) $nearestRamp['distance_m'];
             $result['oprit_hoofdweg'] = [
-                'afstand_km' => $this->roundDistanceKm((float) $nearestRamp['distance_m']),
+                'afstand_km' => $this->roundDistanceKm($distanceMeters),
+                'duur_min' => is_numeric($nearestRamp['route_duration_min'] ?? null)
+                    ? (int) max(1, round((float) $nearestRamp['route_duration_min']))
+                    : null,
                 'naam' => $nearestRamp['name'],
                 'osm_url' => $this->buildOsmObjectUrl($nearestRamp['type'], $nearestRamp['id']),
                 'lat' => is_numeric($nearestRamp['lat'] ?? null) ? (float) $nearestRamp['lat'] : null,
@@ -3051,7 +3249,113 @@ OVERPASS;
         return $result;
     }
 
-    private function fetchHeritageByPoint(?float $lat, ?float $lng): array
+    private function findBestDrivingRampCandidate(float $fromLat, float $fromLng, array $candidates): ?array
+    {
+        if (count($candidates) === 0) {
+            return null;
+        }
+
+        $coords = [sprintf('%.7f,%.7f', $fromLng, $fromLat)];
+        $normalized = [];
+        foreach ($candidates as $candidate) {
+            if (! is_array($candidate)) {
+                continue;
+            }
+            $lat = $candidate['lat'] ?? null;
+            $lng = $candidate['lng'] ?? null;
+            if (! is_numeric($lat) || ! is_numeric($lng)) {
+                continue;
+            }
+            $normalized[] = $candidate;
+            $coords[] = sprintf('%.7f,%.7f', (float) $lng, (float) $lat);
+        }
+
+        if (count($normalized) === 0) {
+            return null;
+        }
+
+        $baseUrls = collect([
+            trim((string) config('services.osrm.base_url')),
+            'https://router.project-osrm.org',
+        ])
+            ->filter(fn ($url) => is_string($url) && trim($url) !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        $distances = null;
+        $durations = null;
+        foreach ($baseUrls as $baseUrl) {
+            try {
+                $response = Http::timeout(10)
+                    ->retry(1, 250)
+                    ->get(
+                        rtrim($baseUrl, '/').'/table/v1/driving/'.implode(';', $coords),
+                        [
+                            'sources' => 0,
+                            'annotations' => 'distance,duration',
+                        ]
+                    );
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (! $response->successful()) {
+                continue;
+            }
+
+            $candidateDistances = data_get($response->json(), 'distances.0');
+            $candidateDurations = data_get($response->json(), 'durations.0');
+            if (
+                is_array($candidateDistances) && count($candidateDistances) === count($coords)
+                && is_array($candidateDurations) && count($candidateDurations) === count($coords)
+            ) {
+                $distances = $candidateDistances;
+                $durations = $candidateDurations;
+                break;
+            }
+        }
+
+        if (! is_array($distances) || ! is_array($durations)) {
+            return null;
+        }
+
+        $bestIndex = null;
+        $bestDistance = INF;
+        for ($i = 1; $i < count($distances); $i++) {
+            $distance = $distances[$i] ?? null;
+            if (! is_numeric($distance)) {
+                continue;
+            }
+            $distance = (float) $distance;
+            if (! is_finite($distance) || $distance < 0) {
+                continue;
+            }
+            if ($distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestIndex = $i - 1;
+            }
+        }
+
+        if ($bestIndex === null || ! isset($normalized[$bestIndex])) {
+            return null;
+        }
+
+        $selected = $normalized[$bestIndex];
+        $selected['route_distance_m'] = $bestDistance;
+        $selected['route_duration_min'] = is_numeric($durations[$bestIndex + 1] ?? null)
+            ? ((float) $durations[$bestIndex + 1] / 60.0)
+            : null;
+
+        return $selected;
+    }
+
+    private function fetchHeritageByPoint(
+        ?float $lat,
+        ?float $lng,
+        ?string $bagAddress = null,
+        ?string $kadastraleAanduiding = null
+    ): array
     {
         $base = [
             'monumentenregister_url' => 'https://monumentenregister.cultureelerfgoed.nl/',
@@ -3180,6 +3484,7 @@ SPARQL;
         if (count($rijksmonumenten) === 0) {
             $rijksmonumenten = collect($this->runRceSparql($rijksmonumentNearestQuery))
                 ->map($mapRijksmonument)
+                ->filter(fn (array $row) => $this->monumentCandidateMatchesBuilding($row, $bagAddress, $kadastraleAanduiding))
                 ->filter(fn (array $row) => $row['resource'] !== null || $row['nummer'] !== null)
                 ->unique(fn (array $row) => ($row['resource'] ?? '').'|'.($row['nummer'] ?? ''))
                 ->values()
@@ -3239,6 +3544,86 @@ SPARQL;
         $base['beschermd_stads_dorpsgezicht'] = count($gezichten) > 0;
 
         return $base;
+    }
+
+    private function monumentCandidateMatchesBuilding(
+        array $candidate,
+        ?string $bagAddress,
+        ?string $kadastraleAanduiding
+    ): bool {
+        $name = $this->nullableString($candidate['naam'] ?? null);
+        $detailUrl = $this->nullableString($candidate['detail_url'] ?? null);
+        $resource = $this->nullableString($candidate['resource'] ?? null);
+        $nummer = $this->nullableString($candidate['nummer'] ?? null);
+
+        $haystacks = collect([$name, $detailUrl, $resource, $nummer])
+            ->filter(fn ($value) => is_string($value) && trim($value) !== '')
+            ->map(fn (string $value) => $this->normalizeMonumentMatchText($value))
+            ->filter(fn (string $value) => $value !== '')
+            ->values()
+            ->all();
+
+        if ($haystacks === []) {
+            return false;
+        }
+
+        $addressMatches = false;
+        $address = $this->nullableString($bagAddress);
+        if ($address !== null) {
+            $addressMatches = $this->monumentAddressMatchesHaystacks($address, $haystacks);
+        }
+
+        $cadastreMatches = false;
+        $cadastre = $this->nullableString($kadastraleAanduiding);
+        if ($cadastre !== null) {
+            $needle = $this->normalizeMonumentMatchText($cadastre);
+            if ($needle !== '') {
+                foreach ($haystacks as $haystack) {
+                    if (str_contains($haystack, $needle)) {
+                        $cadastreMatches = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $addressMatches || $cadastreMatches;
+    }
+
+    private function monumentAddressMatchesHaystacks(string $bagAddress, array $haystacks): bool
+    {
+        $normalizedAddress = $this->normalizeMonumentMatchText($bagAddress);
+        if ($normalizedAddress === '') {
+            return false;
+        }
+
+        preg_match('/^\s*(.+?)\s+(\d+[a-zA-Z0-9\-\/]*)\b/u', $bagAddress, $parts);
+        $street = isset($parts[1]) ? $this->normalizeMonumentMatchText((string) $parts[1]) : '';
+        $houseNumber = isset($parts[2]) ? $this->normalizeMonumentMatchText((string) $parts[2]) : '';
+
+        foreach ($haystacks as $haystack) {
+            if ($street !== '' && $houseNumber !== '') {
+                if (str_contains($haystack, $street) && str_contains($haystack, $houseNumber)) {
+                    return true;
+                }
+            }
+
+            if (str_contains($haystack, $normalizedAddress)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizeMonumentMatchText(string $value): string
+    {
+        $value = Str::lower(trim($value));
+        if ($value === '') {
+            return '';
+        }
+
+        return preg_replace('/[^a-z0-9]+/u', '', $value) ?? '';
     }
 
     private function runRceSparql(string $query): array

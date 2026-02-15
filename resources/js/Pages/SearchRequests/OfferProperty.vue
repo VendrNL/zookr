@@ -1179,7 +1179,37 @@ const parseDistanceKm = (value) => {
 const formatDistanceMeters = (valueKm) => {
     const km = parseDistanceKm(valueKm);
     if (km === null) return "-";
-    return `${Math.round(km * 1000)} m`;
+    const meters = Math.round(km * 1000);
+    return `${new Intl.NumberFormat("nl-NL").format(meters)} m`;
+};
+
+const hasDistanceWithinFiveKm = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    return km !== null && km <= 5;
+};
+
+const formatVoorzieningDistance = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    if (km === null || km > 5) return "Niet binnen 5.000 m";
+    return formatDistanceMeters(km);
+};
+
+const formatWalkingDurationMinutes = (valueKm) => {
+    const km = parseDistanceKm(valueKm);
+    if (km === null) return null;
+    const minutes = Math.max(1, Math.round((km / 5) * 60));
+    return `${minutes} min`;
+};
+
+const formatDrivingDurationMinutes = (valueKm, explicitMinutes = null) => {
+    const explicit = Number.parseFloat(String(explicitMinutes ?? ""));
+    if (Number.isFinite(explicit) && explicit > 0) {
+        return `${Math.max(1, Math.round(explicit))} min`;
+    }
+    const km = parseDistanceKm(valueKm);
+    if (km === null) return null;
+    const minutes = Math.max(1, Math.round((km / 50) * 60));
+    return `${minutes} min`;
 };
 
 const googleRouteUrl = (destination, travelMode = "walking") => {
@@ -2298,340 +2328,435 @@ onBeforeUnmount(() => {
                                 <h3 class="text-base font-semibold text-gray-900">Locatie-informatie</h3>
                             </div>
 
-                            <div class="grid items-stretch gap-3 md:grid-cols-2">
+                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                                 <div class="h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Identificatie</div>
-                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>Geocode</span>
-                                            <a
-                                                v-if="geocodeMapsLink && enrichmentData?.geocode?.lat != null && enrichmentData?.geocode?.lng != null"
-                                                :href="geocodeMapsLink"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ enrichmentData?.geocode?.lat }}, {{ enrichmentData?.geocode?.lng }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ enrichmentData?.geocode?.lat ?? "-" }}, {{ enrichmentData?.geocode?.lng ?? "-" }}
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Geocode</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="geocodeMapsLink && enrichmentData?.geocode?.lat != null && enrichmentData?.geocode?.lng != null"
+                                                    :href="geocodeMapsLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ enrichmentData?.geocode?.lat }}, {{ enrichmentData?.geocode?.lng }}
+                                                </a>
+                                                <span v-else>{{ enrichmentData?.geocode?.lat ?? "-" }}, {{ enrichmentData?.geocode?.lng ?? "-" }}</span>
                                             </span>
                                         </div>
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>BAG-ID</span>
-                                            <a
-                                                v-if="enrichmentData?.bag?.bag_viewer_url && (enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id)"
-                                                :href="enrichmentData.bag.bag_viewer_url"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id ?? "-" }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">BAG-ID</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="enrichmentData?.bag?.bag_viewer_url && (enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id)"
+                                                    :href="enrichmentData.bag.bag_viewer_url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id }}
+                                                </a>
+                                                <span v-else>{{ enrichmentData?.bag?.bag_id ?? enrichmentData?.bag_id ?? "-" }}</span>
                                             </span>
                                         </div>
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>Pand-ID</span>
-                                            <span v-if="pandIds.length" class="font-semibold text-gray-900">
-                                                <template v-for="(pandId, index) in pandIds" :key="pandId">
-                                                    <a
-                                                        :href="pandIdViewerUrl(pandId)"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="text-blue-700 hover:text-blue-800"
-                                                    >
-                                                        {{ pandId }}
-                                                    </a>
-                                                    <span v-if="index < pandIds.length - 1">, </span>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Pand-ID</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <template v-if="pandIds.length">
+                                                    <template v-for="(pandId, index) in pandIds" :key="pandId">
+                                                        <a
+                                                            :href="pandIdViewerUrl(pandId)"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="text-blue-700 hover:text-blue-800"
+                                                        >
+                                                            {{ pandId }}
+                                                        </a>
+                                                        <span v-if="index < pandIds.length - 1">, </span>
+                                                    </template>
                                                 </template>
+                                                <span v-else>-</span>
                                             </span>
-                                            <span v-else class="font-semibold text-gray-900">-</span>
                                         </div>
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>Buurtcode</span>
-                                            <a
-                                                v-if="enrichmentData?.accessibility?.buurtcode && buurtcodeInfoLink"
-                                                :href="buurtcodeInfoLink"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ enrichmentData?.accessibility?.buurtcode }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">-</span>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Buurtcode</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="enrichmentData?.accessibility?.buurtcode && buurtcodeInfoLink"
+                                                    :href="buurtcodeInfoLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ enrichmentData?.accessibility?.buurtcode }}
+                                                </a>
+                                                <span v-else>-</span>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Kadaster</div>
-                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>Kadastrale aanduiding</span>
-                                            <span class="font-semibold text-gray-900">
-                                                {{ enrichmentData?.cadastre?.kadastrale_aanduiding ?? "-" }}
-                                            </span>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Kadastrale aanduiding</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ enrichmentData?.cadastre?.kadastrale_aanduiding ?? "-" }}</span>
                                         </div>
-                                        <div class="flex items-start justify-between gap-3">
-                                            <span>Perceelsgrootte</span>
-                                            <span class="font-semibold text-gray-900">
-                                                {{ enrichmentData?.cadastre?.perceelsgrootte_m2 ?? "-" }} m2
-                                            </span>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Perceelsgrootte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ enrichmentData?.cadastre?.perceelsgrootte_m2 ?? "-" }} m2</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="h-full rounded bg-white p-3">
-                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwjaar</div>
-                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.bouwjaar ?? "-" }}</div>
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bouwkundig</div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Bouwjaar</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ enrichmentData?.bag?.bouwjaar ?? "-" }}</span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Oppervlakte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">{{ enrichmentData?.bag?.oppervlakte_m2 ?? "-" }} m2</span>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bestemming</div>
-                                    <div class="mt-2 text-sm text-gray-700">
-                                        Gebruiksfunctie:
-                                        <a
-                                            v-if="bestemmingSourceLink && enrichmentData?.bag?.gebruiksfunctie"
-                                            :href="bestemmingSourceLink"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="font-semibold text-blue-700 hover:text-blue-800"
-                                        >
-                                            {{ enrichmentData?.bag?.gebruiksfunctie }}
-                                        </a>
-                                        <span v-else class="font-semibold text-gray-900">
-                                            {{ enrichmentData?.bag?.gebruiksfunctie ?? "-" }}
-                                        </span>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Gebruiksfunctie</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="bestemmingSourceLink && enrichmentData?.bag?.gebruiksfunctie"
+                                                    :href="bestemmingSourceLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ enrichmentData?.bag?.gebruiksfunctie }}
+                                                </a>
+                                                <span v-else>{{ enrichmentData?.bag?.gebruiksfunctie ?? "-" }}</span>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="h-full rounded bg-white p-3">
-                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Oppervlakte</div>
-                                    <div class="mt-1 text-sm text-gray-800">{{ enrichmentData?.bag?.oppervlakte_m2 ?? "-" }} m2</div>
-                                </div>
-                                <div class="h-full rounded bg-white p-3">
                                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Monumentenstatus</div>
-                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                        <div>
-                                            Rijksmonument:
-                                        <a
-                                            v-if="enrichmentData?.heritage?.is_monument && monumentStatusRijksmonumentLink && monumentStatusRijksmonumentNummer"
-                                            :href="monumentStatusRijksmonumentLink"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="font-semibold text-blue-700 hover:text-blue-800"
-                                        >
-                                            {{ monumentStatusRijksmonumentNummer }}
-                                        </a>
-                                        <span
-                                            v-else-if="enrichmentData?.heritage?.is_monument"
-                                            class="font-semibold text-gray-900"
-                                        >
-                                            Ja
-                                        </span>
-                                        <span v-else class="font-semibold text-gray-900">
-                                            Nee
-                                        </span>
-                                        </div>
-                                        <div>
-                                            Gemeentelijk monument:
-                                            <a
-                                                v-if="enrichmentData?.heritage?.is_gemeentelijk_monument && monumentStatusGemeentelijkLink && monumentStatusGemeentelijkLabel"
-                                                :href="monumentStatusGemeentelijkLink"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ monumentStatusGemeentelijkLabel }}
-                                            </a>
-                                            <span
-                                                v-else-if="enrichmentData?.heritage?.is_gemeentelijk_monument"
-                                                class="font-semibold text-gray-900"
-                                            >
-                                                Ja
-                                            </span>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                Nee
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Rijksmonument</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="enrichmentData?.heritage?.is_monument && monumentStatusRijksmonumentLink && monumentStatusRijksmonumentNummer"
+                                                    :href="monumentStatusRijksmonumentLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusRijksmonumentNummer }}
+                                                </a>
+                                                <span v-else-if="enrichmentData?.heritage?.is_monument">Ja</span>
+                                                <span v-else>Nee</span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Beschermd gezicht:
-                                            <a
-                                                v-if="enrichmentData?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtLink && monumentStatusGezichtNaam"
-                                                :href="monumentStatusGezichtLink"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
-                                            </a>
-                                            <span
-                                                v-else-if="enrichmentData?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtNaam"
-                                                class="font-semibold text-gray-900"
-                                            >
-                                                {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Gemeentelijk monument</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="enrichmentData?.heritage?.is_gemeentelijk_monument && monumentStatusGemeentelijkLink && monumentStatusGemeentelijkLabel"
+                                                    :href="monumentStatusGemeentelijkLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusGemeentelijkLabel }}
+                                                </a>
+                                                <span v-else-if="enrichmentData?.heritage?.is_gemeentelijk_monument">Ja</span>
+                                                <span v-else>Nee</span>
                                             </span>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                Nee
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Beschermd gezicht</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="enrichmentData?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtLink && monumentStatusGezichtNaam"
+                                                    :href="monumentStatusGezichtLink"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
+                                                </a>
+                                                <span v-else-if="enrichmentData?.heritage?.beschermd_stads_dorpsgezicht && monumentStatusGezichtNaam">
+                                                    {{ monumentStatusGezichtType }} - {{ monumentStatusGezichtNaam }}
+                                                </span>
+                                                <span v-else>Nee</span>
                                             </span>
                                         </div>
                                 </div>
                             </div>
                             </div>
 
-                            <div class="grid items-stretch gap-3 md:grid-cols-2">
+                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                                 <div class="h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Bereikbaarheid</div>
-                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                        <div>
-                                            Afstand tot station/metro/tram:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Station/metro/tram</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.station_metro_tram)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km)"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" />
+                                                    </svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_treinstation_ov_knooppunt_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Afstand tot bushalte:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_bushalte_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_bushalte_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Bushalte</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.bushalte)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_bushalte_km)"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" />
+                                                    </svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_bushalte_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Afstand tot oprit hoofdweg:
-                                            <a
-                                                v-if="googleDrivingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
-                                                :href="googleDrivingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Oprit hoofdweg</span>
+                                            <span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value inline-flex items-baseline gap-1 whitespace-nowrap">
+                                                <a
+                                                    v-if="googleDrivingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
+                                                    :href="googleDrivingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
+                                                </a>
+                                                <span v-else>
+                                                    {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km) }}
+                                                </span>
+                                                <span
+                                                    v-if="formatDrivingDurationMinutes(
+                                                        enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km,
+                                                        enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg?.duur_min
+                                                    )"
+                                                    class="inline-flex items-center gap-0.5 text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                                                        <path d="M18.9 6.5c-.3-.9-1.1-1.5-2.1-1.5H7.2c-1 0-1.8.6-2.1 1.5L3 12v7h2v-2h14v2h2v-7l-2.1-5.5ZM7.2 7h9.6l1.4 4H5.8L7.2 7ZM6 15a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm12 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" />
+                                                    </svg>
+                                                    {{
+                                                        formatDrivingDurationMinutes(
+                                                            enrichmentData?.accessibility?.afstand_tot_oprit_hoofdweg_km,
+                                                            enrichmentData?.accessibility?.dichtstbijzijnde_ov?.oprit_hoofdweg?.duur_min
+                                                        )
+                                                    }}
+                                                </span>
                                             </span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="h-full rounded bg-white p-3">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Voorzieningen</div>
-                                    <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                        <div>
-                                            Supermarkt:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) }}
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Supermarkt</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.supermarkt?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_supermarkt_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Sport- en beweegmogelijkheden:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Sport- en beweegmogelijkheden</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.sport)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.sport?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_sport_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Groenvoorzieningen:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Groenvoorzieningen</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.groen)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.dichtstbijzijnde?.groen?.afstand_km ?? enrichmentData?.accessibility?.afstand_tot_groen_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Cafe:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_cafe_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_cafe_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Cafe</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_cafe_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.cafe)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_cafe_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_cafe_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_cafe_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_cafe_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_cafe_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Restaurant:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_restaurant_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_restaurant_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Restaurant</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_restaurant_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.restaurant)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_restaurant_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_restaurant_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_restaurant_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_restaurant_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_restaurant_km) }}
+                                                </span>
                                             </span>
                                         </div>
-                                        <div>
-                                            Hotel:
-                                            <a
-                                                v-if="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
-                                                :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="font-semibold text-blue-700 hover:text-blue-800"
-                                            >
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_hotel_km) }}
-                                            </a>
-                                            <span v-else class="font-semibold text-gray-900">
-                                                {{ formatDistanceMeters(enrichmentData?.accessibility?.afstand_tot_hotel_km) }}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Hotel</span><span class="detail-dots" aria-hidden="true"></span>
+                                            <span class="detail-value">
+                                                <a
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_hotel_km) && googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
+                                                    :href="googleWalkingRouteUrl(enrichmentData?.accessibility?.dichtstbijzijnde?.hotel)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-blue-700 hover:text-blue-800"
+                                                >
+                                                    {{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_hotel_km) }}
+                                                </a>
+                                                <span v-else>{{ formatVoorzieningDistance(enrichmentData?.accessibility?.afstand_tot_hotel_km) }}</span>
+                                                <span
+                                                    v-if="hasDistanceWithinFiveKm(enrichmentData?.accessibility?.afstand_tot_hotel_km) && formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_hotel_km)"
+                                                    class="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap text-gray-600"
+                                                >
+                                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M13.5 5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9.8 8.9l-2.3 11H9l1.4-6.3 2.2 2.1v6.2h1.5V14.7l-2.3-2.2.7-3.5c1.1 1.3 2.7 2.1 4.5 2.1V9.6c-1.5 0-2.8-.8-3.5-2l-.8-1.3c-.3-.5-.9-.8-1.5-.8-.7 0-1.3.4-1.6 1l-1.2 2.4c-.2.4-.3.8-.3 1.2V14h1.5V10.2l1.4-2.3Zm-2.9 12.5a1.5 1.5 0 0 0 1.5 1.8h2.1v-1.5H8.8l1.8-8H9.1l-2.2 7.7Z" /></svg>
+                                                    {{ formatWalkingDurationMinutes(enrichmentData?.accessibility?.afstand_tot_hotel_km) }}
+                                                </span>
                                             </span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="rounded bg-white p-3">
-                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                    Milieu
-                                </div>
-                                <div class="mt-2 space-y-2 text-sm text-gray-700">
-                                    <div>
-                                        Energielabel:
+                            <div class="grid items-stretch gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                <div class="h-full rounded bg-white p-3">
+                                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        Milieu
+                                    </div>
+                                    <div class="mt-2 detail-list text-sm text-gray-700">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Energielabel</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
                                         <span v-if="hasGraphicalEnergyLabel" class="inline-flex align-middle">
                                             <span
                                                 class="h-6 text-white"
@@ -2646,28 +2771,32 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                        <span v-else class="font-semibold text-gray-900">Niet beschikbaar</span>
+                                        <span v-else>Niet beschikbaar</span>
+                                        </span>
                                     </div>
-                                    <div>
-                                        Bodemvervuiling:
+                                    <div class="detail-row">
+                                        <span class="detail-label">Bodemvervuiling</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
                                         <a
                                             v-if="enrichmentData?.soil?.bodemloket_url && enrichmentData?.soil?.status"
                                             :href="enrichmentData.soil.bodemloket_url"
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            class="font-semibold text-blue-700 hover:text-blue-800"
+                                            class="text-blue-700 hover:text-blue-800"
                                         >
                                             {{ enrichmentData.soil.status }}
                                         </a>
-                                        <span v-else class="font-semibold text-gray-900">
+                                        <span v-else>
                                             {{ enrichmentData?.soil?.status ?? "-" }}
                                         </span>
-                                    </div>
-                                    <div>
-                                        Fijnstof:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Fijnstof</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('fijnstof', enrichmentData?.air_quality?.pm25_ug_m3).smileyIcon" />
@@ -2691,12 +2820,13 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                    </div>
-                                    <div>
-                                        Stikstofdioxide:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Stikstofdioxide</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('stikstofdioxide', enrichmentData?.air_quality?.no2_ug_m3).smileyIcon" />
@@ -2720,12 +2850,13 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                    </div>
-                                    <div>
-                                        Geluid in de omgeving:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('geluid', enrichmentData?.air_quality?.geluid_omgeving?.waarde) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Geluid in de omgeving</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('geluid', enrichmentData?.air_quality?.geluid_omgeving?.waarde) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('geluid', enrichmentData?.air_quality?.geluid_omgeving?.score ?? enrichmentData?.air_quality?.geluid_omgeving?.waarde).smileyIcon" />
@@ -2749,12 +2880,13 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                    </div>
-                                    <div>
-                                        Zomerhitte in de stad:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.waarde) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Zomerhitte in de stad</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.waarde) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('zomerhitte', enrichmentData?.air_quality?.zomerhitte_stad?.score ?? enrichmentData?.air_quality?.zomerhitte_stad?.waarde).smileyIcon" />
@@ -2778,12 +2910,13 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                    </div>
-                                    <div>
-                                        Kans op overstroming:
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.waarde) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Kans op overstroming</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.waarde) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('overstroming', enrichmentData?.air_quality?.kans_op_overstroming?.score ?? enrichmentData?.air_quality?.kans_op_overstroming?.waarde).smileyIcon" />
@@ -2807,12 +2940,13 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
-                                    </div>
-                                    <div>
-                                        Gevaarlijke stoffen (binnen 1 km):
-                                        <span class="font-semibold text-gray-900">
-                                            {{ formatMilieuDisplayValue('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde) }}
                                         </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Gevaarlijke stoffen (binnen 1 km)</span>
+                                        <span class="detail-dots" aria-hidden="true"></span>
+                                        <span class="detail-value">
+                                            {{ formatMilieuDisplayValue('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde) }}
                                         <span class="relative ml-1 inline-flex cursor-help items-center align-middle">
                                             <span class="group inline-flex items-center">
                                                 <MilieuSmileyIcon class="h-4 w-4" :icon="milieuAssessment('gevaarlijke_stoffen', enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.score ?? enrichmentData?.air_quality?.gevaarlijke_stoffen_binnen_1km?.waarde).smileyIcon" />
@@ -2836,8 +2970,10 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </span>
                                         </span>
+                                        </span>
                                     </div>
                                 </div>
+                            </div>
                             </div>
 
                             <div class="rounded bg-white p-3">
@@ -3157,24 +3293,6 @@ onBeforeUnmount(() => {
                                         autocomplete="off"
                                         @blur="handleUrlBlur"
                                     />
-                                </div>
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                    <PrimaryButton
-                                        type="button"
-                                        class="h-11 justify-center sm:w-36"
-                                        :disabled="isScraping"
-                                        @click="handleScrapeClick"
-                                    >
-                                        {{ isScraping ? "Ophalen..." : "Ophalen" }}
-                                    </PrimaryButton>
-                                    <SecondaryButton
-                                        type="button"
-                                        class="h-11 justify-center sm:w-48"
-                                        :disabled="isScraping"
-                                        @click="openManualImport"
-                                    >
-                                        Handmatig importeren
-                                    </SecondaryButton>
                                 </div>
                             </div>
                             <InputError class="mt-2" :message="form.errors.url" />
@@ -3632,4 +3750,72 @@ onBeforeUnmount(() => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+.detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.detail-list-two-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem 1rem;
+}
+
+.detail-row {
+    display: grid;
+    grid-template-columns: max-content minmax(1.25rem, 1fr) minmax(0, 14rem);
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.detail-label {
+    white-space: nowrap;
+}
+
+.detail-dots {
+    min-width: 0.75rem;
+    color: rgb(209 213 219);
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1.2px);
+    background-size: 6px 2px;
+    background-repeat: repeat-x;
+    background-position: left calc(100% - 1px);
+}
+
+.detail-value {
+    min-width: 0;
+    justify-self: start;
+    text-align: left;
+    font-weight: 600;
+    color: rgb(17 24 39);
+}
+
+@media (min-width: 768px) {
+    .detail-list-two-cols {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    }
+
+    .detail-list-two-cols .detail-row {
+        grid-template-columns: max-content minmax(1rem, 1fr) minmax(0, 12rem);
+    }
+}
+
+@media (max-width: 640px) {
+    .detail-row {
+        grid-template-columns: 1fr;
+        gap: 0.125rem;
+    }
+
+    .detail-label {
+        white-space: normal;
+    }
+
+    .detail-dots {
+        display: none;
+    }
+}
+</style>
 
