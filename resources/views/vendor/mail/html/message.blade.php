@@ -1,7 +1,15 @@
 <x-mail::layout>
+@php
+    $headerLogoFromAttributes = $attributes->get('mail-header-logo-url');
+    $headerLogoAltFromAttributes = $attributes->get('mail-header-logo-alt');
+@endphp
 {{-- Header --}}
 <x-slot:header>
-<x-mail::header :url="config('app.url')">
+<x-mail::header
+    :url="config('app.url')"
+    :mail-header-logo-url="$headerLogoFromAttributes ?? ($mailHeaderLogoUrl ?? null)"
+    :mail-header-logo-alt="$headerLogoAltFromAttributes ?? ($mailHeaderLogoAlt ?? null)"
+>
 {{ config('app.name') }}
 </x-mail::header>
 </x-slot:header>

@@ -145,6 +145,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('search-requests.recipients')
         ->middleware('can:view,search_request');
 
+    Route::post(
+        'search-requests/{search_request}/recipients',
+        [SearchRequestController::class, 'sendRecipients']
+    )
+        ->name('search-requests.recipients.send')
+        ->middleware('can:update,search_request');
+
     // Extra domeinacties (policy-first)
     Route::patch(
         'search-requests/{search_request}/assign',

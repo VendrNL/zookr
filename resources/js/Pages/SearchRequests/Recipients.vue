@@ -6,8 +6,11 @@ import TableCard from "@/Components/TableCard.vue";
 import TableCell from "@/Components/TableCell.vue";
 import TableEmptyState from "@/Components/TableEmptyState.vue";
 import TableHeaderCell from "@/Components/TableHeaderCell.vue";
-import { Head, Link } from "@inertiajs/vue3";
-import { reactive } from "vue";
+import PrimaryButton from "@/Components/PrimaryButton.vue";
+import SecondaryButton from "@/Components/SecondaryButton.vue";
+import InputError from "@/Components/InputError.vue";
+import { Head, Link, useForm } from "@inertiajs/vue3";
+import { computed, reactive } from "vue";
 
 const props = defineProps({
     item: {
@@ -23,6 +26,21 @@ const props = defineProps({
 const selected = reactive(
     Object.fromEntries(props.users.map((user) => [user.id, true]))
 );
+
+const form = useForm({
+    selected_user_ids: [],
+});
+
+const selectedIds = computed(() =>
+    props.users
+        .filter((user) => selected[user.id])
+        .map((user) => user.id)
+);
+
+const submit = () => {
+    form.selected_user_ids = selectedIds.value;
+    form.post(route("search-requests.recipients.send", props.item.id));
+};
 </script>
 
 <template>
@@ -45,6 +63,7 @@ const selected = reactive(
 
         <div class="py-8">
             <PageContainer>
+                <form class="space-y-4" @submit.prevent="submit">
                 <div class="hidden sm:block">
                     <TableCard>
                         <thead class="bg-gray-50">
@@ -111,8 +130,24 @@ const selected = reactive(
                         </div>
                     </FormSection>
                 </div>
+
+                <InputError
+                    v-if="form.errors.selected_user_ids"
+                    :message="form.errors.selected_user_ids"
+                />
+
+                <div class="flex items-center justify-end gap-3">
+                    <Link :href="route('search-requests.show', item.id)">
+                        <SecondaryButton type="button" :disabled="form.processing">
+                            Annuleren
+                        </SecondaryButton>
+                    </Link>
+                    <PrimaryButton :disabled="form.processing || selectedIds.length === 0">
+                        Verzenden
+                    </PrimaryButton>
+                </div>
+                </form>
             </PageContainer>
         </div>
     </AuthenticatedLayout>
 </template>
-

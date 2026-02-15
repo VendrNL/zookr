@@ -28,6 +28,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    mailings: {
+        type: Array,
+        default: () => [],
+    },
     viewAllOffers: {
         type: Boolean,
         default: false,
@@ -45,6 +49,8 @@ const props = defineProps({
 
 const canViewAllOffers = computed(() => props.can?.viewAllOffers || props.viewAllOffers);
 const offeredProperties = computed(() => props.offeredProperties ?? []);
+const mailings = computed(() => props.mailings ?? []);
+const hasMailingTab = computed(() => mailings.value.length > 0);
 const statusFilter = ref("all");
 const sortKey = ref("created_at");
 const sortDirection = ref("desc");
@@ -53,8 +59,8 @@ const setActiveTab = (tab) => {
     activeTab.value = tab;
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (tab === "offers") {
-        url.searchParams.set("tab", "offers");
+    if (tab === "offers" || tab === "mailing") {
+        url.searchParams.set("tab", tab);
     } else {
         url.searchParams.delete("tab");
     }
@@ -320,6 +326,13 @@ function formatCurrency(value) {
     }).format(value);
 }
 
+function formatDateTime(value) {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleString("nl-NL");
+}
+
 function goToProperty(propertyId) {
     const property = offeredProperties.value.find((item) => item.id === propertyId);
     if (property && property.can_update) {
@@ -344,7 +357,13 @@ const applyTabFromQuery = () => {
     const tab = params.get("tab") || activeTabParam.value;
     if (tab === "offers") {
         activeTab.value = "offers";
+        return;
     }
+    if (tab === "mailing" && hasMailingTab.value) {
+        activeTab.value = "mailing";
+        return;
+    }
+    activeTab.value = "search-request";
 };
 
 onMounted(applyTabFromQuery);
@@ -409,6 +428,18 @@ watch(
                                 @click="setActiveTab('offers')"
                             >
                                 Aangeboden panden
+                            </button>
+                        </li>
+                        <li v-if="hasMailingTab" class="me-2">
+                            <button
+                                type="button"
+                                class="inline-block p-4 border-b-2 rounded-t-lg"
+                                :class="activeTab === 'mailing'
+                                    ? 'text-fg-brand border-brand'
+                                    : 'border-transparent hover:text-gray-600 hover:border-gray-300'"
+                                @click="setActiveTab('mailing')"
+                            >
+                                Mailing
                             </button>
                         </li>
                     </ul>
@@ -643,7 +674,7 @@ watch(
                     </div>
                 </div>
 
-                <div v-else class="space-y-4">
+                <div v-else-if="activeTab === 'offers'" class="space-y-4">
                     <TableCard>
                         <thead class="bg-gray-50">
                             <tr>
@@ -818,6 +849,36 @@ watch(
                                             {{ offerStatusLabel(property.status) }}
                                         </span>
                                     </TableCell>
+                            </tr>
+                        </tbody>
+                    </TableCard>
+                </div>
+
+                <div v-else-if="activeTab === 'mailing'" class="space-y-4">
+                    <TableCard>
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <TableHeaderCell class="w-[20%]">Naam</TableHeaderCell>
+                                <TableHeaderCell class="w-[18%]">Kantoor</TableHeaderCell>
+                                <TableHeaderCell class="w-[14%]">Telefoonnummer</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Verzonden (datum/tijd)</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Ontvangen (datum/tijd)</TableHeaderCell>
+                                <TableHeaderCell class="w-[16%]">Gelezen (datum/tijd)</TableHeaderCell>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <TableEmptyState
+                                v-if="mailings.length === 0"
+                                :colspan="6"
+                                message="Nog geen mailinggegevens beschikbaar."
+                            />
+                            <tr v-for="mailing in mailings" :key="mailing.id">
+                                <TableCell>{{ mailing.name || "-" }}</TableCell>
+                                <TableCell>{{ mailing.office_name || "-" }}</TableCell>
+                                <TableCell>{{ mailing.phone || "-" }}</TableCell>
+                                <TableCell>{{ formatDateTime(mailing.sent_at) }}</TableCell>
+                                <TableCell>{{ formatDateTime(mailing.received_at) }}</TableCell>
+                                <TableCell>{{ formatDateTime(mailing.read_at) }}</TableCell>
                             </tr>
                         </tbody>
                     </TableCard>

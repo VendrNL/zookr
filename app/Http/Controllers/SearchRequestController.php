@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\SearchRequest;
+use App\Mail\SearchRequestSharedMail;
 use App\Models\Property;
+use App\Models\SearchRequest;
+use App\Models\SearchRequestMailing;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -40,6 +46,7 @@ class SearchRequestController extends Controller
         'huur',
         'koop',
     ];
+
     public function index(Request $request)
     {
         $this->authorize('viewAny', SearchRequest::class);
@@ -51,7 +58,6 @@ class SearchRequestController extends Controller
                 'assignee:id,name,email',
             ]);
 
-        // Filters
         $status = array_values(array_filter((array) $request->input('status', [])));
         $status = array_values(array_intersect($status, ['concept', 'open', 'afgerond', 'geannuleerd']));
         if ($status !== []) {
@@ -181,13 +187,38 @@ class SearchRequestController extends Controller
             'assignee:id,name,email',
         ]);
 
+        $mailings = collect();
+        if (Schema::hasTable('search_request_mailings')) {
+            $mailings = $search_request->mailings()
+                ->orderBy('name')
+                ->get([
+                    'id',
+                    'name',
+                    'office_name',
+                    'phone',
+                    'sent_at',
+                    'received_at',
+                    'read_at',
+                ])
+                ->map(fn (SearchRequestMailing $mailing) => [
+                    'id' => $mailing->id,
+                    'name' => $mailing->name,
+                    'office_name' => $mailing->office_name,
+                    'phone' => $mailing->phone,
+                    'sent_at' => $mailing->sent_at?->toIso8601String(),
+                    'received_at' => $mailing->received_at?->toIso8601String(),
+                    'read_at' => $mailing->read_at?->toIso8601String(),
+                ])
+                ->values();
+        }
+
         $organizationId = $request->user()->organization_id;
         $canViewAllOffers = $request->user()->is_admin
             || ($organizationId && (int) $organizationId === (int) $search_request->organization_id);
         $offeredProperties = collect();
+
         if ($organizationId) {
-            $query = Property::query()
-                ->where('search_request_id', $search_request->id);
+            $query = Property::query()->where('search_request_id', $search_request->id);
 
             if (! $canViewAllOffers) {
                 $query->where('organization_id', $organizationId);
@@ -231,6 +262,7 @@ class SearchRequestController extends Controller
         return Inertia::render('SearchRequests/Show', [
             'item' => $search_request,
             'offeredProperties' => $offeredProperties,
+            'mailings' => $mailings,
             'tab' => $request->string('tab')->toString(),
             'viewAllOffers' => $canViewAllOffers,
             'can' => [
@@ -249,27 +281,94 @@ class SearchRequestController extends Controller
 
         $search_request->load('organization:id,name');
 
-        $provinces = $search_request->provinces ?? [];
-        $propertyType = $search_request->property_type;
-
-        $users = User::query()
-            ->with(['organization:id,name'])
-            ->when($propertyType, function ($query) use ($propertyType) {
-                $query->whereJsonContains('specialism_types', $propertyType);
-            })
-            ->when(! empty($provinces), function ($query) use ($provinces) {
-                $query->where(function ($sub) use ($provinces) {
-                    foreach ($provinces as $province) {
-                        $sub->orWhereJsonContains('specialism_provinces', $province);
-                    }
-                });
-            })
+        $users = $this->mailingRecipientsQuery($search_request)
             ->orderBy('name')
             ->get(['id', 'name', 'organization_id']);
 
         return Inertia::render('SearchRequests/Recipients', [
             'item' => $search_request,
             'users' => $users,
+        ]);
+    }
+
+    public function sendRecipients(Request $request, SearchRequest $search_request)
+    {
+        $this->authorize('update', $search_request);
+
+        $data = $request->validate([
+            'selected_user_ids' => ['required', 'array', 'min:1'],
+            'selected_user_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $selectedUserIds = collect($data['selected_user_ids'])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $allowedRecipientIds = $this->mailingRecipientsQuery($search_request)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id);
+
+        $finalRecipientIds = $selectedUserIds->intersect($allowedRecipientIds)->values();
+
+        if ($finalRecipientIds->isEmpty()) {
+            return back()->withErrors([
+                'selected_user_ids' => 'Selecteer minimaal één geldige ontvanger.',
+            ]);
+        }
+
+        $recipients = $this->mailingRecipientsQuery($search_request)
+            ->whereIn('users.id', $finalRecipientIds->all())
+            ->get(['users.id', 'users.name', 'users.email', 'users.phone', 'users.organization_id']);
+
+        $sender = $request->user()->loadMissing('organization:id,name,logo_path');
+        $successfulRecipientIds = collect();
+        $failedRecipients = [];
+
+        foreach ($recipients as $recipient) {
+            $email = trim((string) ($recipient->email ?? ''));
+            if ($email === '') {
+                $failedRecipients[] = [
+                    'name' => $recipient->name,
+                    'reason' => 'Geen e-mailadres',
+                ];
+                continue;
+            }
+
+            try {
+                Mail::to($email)->send(new SearchRequestSharedMail($search_request, $recipient, $sender));
+                $successfulRecipientIds->push((int) $recipient->id);
+            } catch (\Throwable $exception) {
+                $failedRecipients[] = [
+                    'name' => $recipient->name,
+                    'reason' => $exception->getMessage(),
+                ];
+                Log::error('Search request mailing failed', [
+                    'search_request_id' => $search_request->id,
+                    'recipient_user_id' => $recipient->id,
+                    'recipient_email' => $email,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        if ($successfulRecipientIds->isEmpty()) {
+            return back()->withErrors([
+                'selected_user_ids' => 'Er zijn geen e-mails verzonden. Controleer e-mailadressen en mailconfiguratie (Mailpit).',
+            ]);
+        }
+
+        $this->syncSearchRequestMailings($search_request, $successfulRecipientIds->all());
+
+        return redirect()->route('search-requests.show', [
+            'search_request' => $search_request,
+            'tab' => 'mailing',
+        ])->with('flash', [
+            'success' => sprintf(
+                '%d e-mail(s) verzonden%s.',
+                $successfulRecipientIds->count(),
+                count($failedRecipients) > 0 ? sprintf(' (%d mislukt)', count($failedRecipients)) : ''
+            ),
         ]);
     }
 
@@ -329,7 +428,6 @@ class SearchRequestController extends Controller
         return redirect()->route('search-requests.index');
     }
 
-    // Optioneel (admin): assign endpoint via aparte route
     public function assign(Request $request, SearchRequest $search_request)
     {
         $this->authorize('assign', $search_request);
@@ -345,7 +443,6 @@ class SearchRequestController extends Controller
         return redirect()->route('search-requests.show', $search_request);
     }
 
-    // Optioneel: status quick action
     public function setStatus(Request $request, SearchRequest $search_request)
     {
         $this->authorize('update', $search_request);
@@ -358,5 +455,53 @@ class SearchRequestController extends Controller
 
         return redirect()->route('search-requests.show', $search_request);
     }
-}
 
+    private function mailingRecipientsQuery(SearchRequest $search_request): Builder
+    {
+        $provinces = $search_request->provinces ?? [];
+        $propertyType = $search_request->property_type;
+
+        return User::query()
+            ->with(['organization:id,name'])
+            ->when($propertyType, function ($query) use ($propertyType) {
+                $query->whereJsonContains('specialism_types', $propertyType);
+            })
+            ->when(! empty($provinces), function ($query) use ($provinces) {
+                $query->where(function ($sub) use ($provinces) {
+                    foreach ($provinces as $province) {
+                        $sub->orWhereJsonContains('specialism_provinces', $province);
+                    }
+                });
+            });
+    }
+
+    private function syncSearchRequestMailings(SearchRequest $search_request, ?array $onlyUserIds = null): void
+    {
+        if (! Schema::hasTable('search_request_mailings')) {
+            return;
+        }
+
+        $recipientsQuery = $this->mailingRecipientsQuery($search_request);
+        if (is_array($onlyUserIds)) {
+            $recipientsQuery->whereIn('id', $onlyUserIds);
+        }
+
+        $recipients = $recipientsQuery->get(['id', 'name', 'phone', 'organization_id']);
+        $sentAt = now();
+
+        foreach ($recipients as $recipient) {
+            SearchRequestMailing::query()->updateOrCreate(
+                [
+                    'search_request_id' => $search_request->id,
+                    'user_id' => $recipient->id,
+                ],
+                [
+                    'name' => $recipient->name,
+                    'office_name' => $recipient->organization?->name,
+                    'phone' => $recipient->phone,
+                    'sent_at' => $sentAt,
+                ]
+            );
+        }
+    }
+}
